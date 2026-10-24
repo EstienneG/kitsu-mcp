@@ -13,7 +13,7 @@ mcp = FastMCP(
         "(done, omitted, on hold, waiting review, ...), which every count and filter follows. Durations "
         'and estimates are in minutes. List tools return compact rows by default (detail="full" for '
         "more). Use kitsu_get for any read the other tools don't cover. Write tools "
-        "(comments, status changes, assignments, schedule, time logs) only exist when the server "
+        "(comments, status changes, assignments, schedule, time logs, playlists) only exist when the server "
         "runs with KITSU_ALLOW_WRITE=true; confirm with the user before calling them."
     ),
 )

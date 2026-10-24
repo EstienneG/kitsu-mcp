@@ -25,7 +25,7 @@ async def call(fake):
     """Call a tool through the MCP protocol and return its JSON result (or raise on tool error)."""
     async with Client(mcp) as mcp_client:
 
-        async def _call(name: str, **args):
+        async def _call(name: str, /, **args):
             result = await mcp_client.call_tool(name, args)
             if result.structured_content is not None:
                 content = result.structured_content
