@@ -12,8 +12,9 @@ class Settings(BaseSettings):
 
     host: str
     """Zou API URL, e.g. https://example.cg-wire.com/api."""
-    user: str
-    password: SecretStr
+    user: str | None = None
+    """Kitsu login for stdio. Over HTTP each caller sends their own, and these are not used."""
+    password: SecretStr | None = None
     allow_write: bool = False
     """Register tools that modify Kitsu (comments, status changes, assignments, ...)."""
     cache_ttl: float = Field(300, ge=0)
@@ -54,3 +55,12 @@ def get_settings() -> Settings:
         if missing:
             raise RuntimeError(f"Missing configuration: {', '.join(missing)}") from error
         raise
+
+
+def require_login(settings: Settings) -> None:
+    """Over stdio the server logs in as KITSU_USER; fail at startup, not on the first tool call."""
+    missing = [
+        name for name, value in (("KITSU_USER", settings.user), ("KITSU_PASSWORD", settings.password)) if not value
+    ]
+    if missing:
+        raise RuntimeError(f"Missing configuration: {', '.join(missing)}")

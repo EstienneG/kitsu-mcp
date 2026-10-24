@@ -21,6 +21,7 @@ from gazu.exception import (
     ValidationException,
 )
 
+from kitsu_mcp.auth import Credentials, TTLCache, request_credentials
 from kitsu_mcp.config import Settings, get_settings
 
 # requests.JSONDecodeError: a proxy answered 503/504 with an HTML page (gazu only raises on 500/502).
@@ -46,8 +47,10 @@ def size_guard(path: str, max_bytes: int | None):
 
 
 class KitsuClient:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, credentials: Credentials | None = None) -> None:
+        """`credentials`: log in as this person instead of KITSU_USER / KITSU_PASSWORD (HTTP callers)."""
         self.settings = settings
+        self.credentials = credentials
         self._raw: raw.KitsuClient | None = None
         self._lock = threading.Lock()
         self._relogging = threading.local()
@@ -71,6 +74,11 @@ class KitsuClient:
             return self._raw
 
     def _log_in(self, client: raw.KitsuClient) -> None:
+        if self.credentials is not None:
+            gazu.log_in(self.credentials.user, self.credentials.password, client=client)
+            return
+        if not self.settings.user or self.settings.password is None:
+            raise RuntimeError("Missing configuration: KITSU_USER, KITSU_PASSWORD")
         gazu.log_in(self.settings.user, self.settings.password.get_secret_value(), client=client)
 
     def _relogin(self, client: raw.KitsuClient, _path: str) -> bool:
@@ -143,7 +151,7 @@ def _tool_error(error: Exception, method: str, path: str) -> ToolError:
     if isinstance(error, NotAllowedException):
         return ToolError(f"Permission denied for {method} {path}")
     if isinstance(error, (NotAuthenticatedException, AuthFailedException)):
-        return ToolError("Kitsu rejected the credentials; check KITSU_USER / KITSU_PASSWORD")
+        return ToolError("Kitsu rejected the credentials; check the Kitsu email and password")
     if isinstance(error, (ParameterException, ValidationException)):
         return ToolError(f"Kitsu rejected {method} {path}: {error}")
     if isinstance(error, requests.JSONDecodeError | requests.ConnectionError | requests.Timeout) and method != "GET":
@@ -159,17 +167,32 @@ def _tool_error(error: Exception, method: str, path: str) -> ToolError:
     return ToolError(f"Kitsu error on {method} {path}: {error.__class__.__name__} {error}")
 
 
-_client: KitsuClient | None = None
+_override: KitsuClient | None = None
+_server_client: KitsuClient | None = None
+_server_lock = threading.Lock()
+_user_clients: TTLCache[KitsuClient] = TTLCache(ttl=3600, max_size=256)
 
 
 def get_client() -> KitsuClient:
-    global _client
-    if _client is None:
-        _client = KitsuClient(get_settings())
-    return _client
+    """The Kitsu client for the current call.
+
+    Over HTTP: the caller's own, from their `Authorization` header (never the server's login). Over stdio:
+    the server's, logged in as KITSU_USER.
+    """
+    global _server_client
+    if _override is not None:
+        return _override
+    credentials = request_credentials()
+    if credentials is not None:
+        settings = get_settings()
+        return _user_clients.get_or_create(credentials.key, lambda: KitsuClient(settings, credentials))
+    with _server_lock:
+        if _server_client is None:
+            _server_client = KitsuClient(get_settings())
+        return _server_client
 
 
 def set_client(client: KitsuClient | None) -> None:
-    """Swap the shared client (used by tests)."""
-    global _client
-    _client = client
+    """Swap the shared client (used by tests); None goes back to the normal per-call choice."""
+    global _override
+    _override = client

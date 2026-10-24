@@ -200,7 +200,7 @@ def recent_previews(
 _MAX_FEED_PAGES = 5
 
 
-@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews"})
+@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews", "local"})
 def download_previews(
     project: str,
     dest_dir: str,
@@ -212,7 +212,7 @@ def download_previews(
 
     Writes local files only; Kitsu is not modified. Files are named <entity name>_<entity id>.png.
     Existing files are left alone (counted as skipped) unless overwrite=True. Canceled entities are skipped.
-    Preview metadata (get_preview with show=False) carries a `download_url` to hand a file to someone.
+    Only on a local server; preview metadata (get_preview with show=False) carries a `download_url` instead.
     """
     client = get_client()
     project_id = get_lookups().project(project)["id"]

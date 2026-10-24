@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from fastmcp.exceptions import ToolError
 
+from kitsu_mcp.auth import TTLCache, request_credentials
 from kitsu_mcp.client import KitsuClient, get_client
 from kitsu_mcp.config import get_settings
 
@@ -186,17 +187,27 @@ def check_names(label: str, given: list[str] | None, known: set[str]) -> None:
             raise ToolError(unknown_message(label, name, list(lowered.values())))
 
 
-_lookups: Lookups | None = None
+_override: Lookups | None = None
+_server_lookups: Lookups | None = None
+_server_lock = threading.Lock()
+# Reference data is per person over HTTP: Kitsu shows each user only the projects (and people) they can see.
+_user_lookups: TTLCache[Lookups] = TTLCache(ttl=3600, max_size=256)
 
 
 def get_lookups() -> Lookups:
-    global _lookups
-    if _lookups is None:
-        _lookups = Lookups(get_client(), get_settings().cache_ttl)
-    return _lookups
+    global _server_lookups
+    if _override is not None:
+        return _override
+    credentials = request_credentials()
+    if credentials is not None:
+        return _user_lookups.get_or_create(credentials.key, lambda: Lookups(get_client(), get_settings().cache_ttl))
+    with _server_lock:
+        if _server_lookups is None:
+            _server_lookups = Lookups(get_client(), get_settings().cache_ttl)
+        return _server_lookups
 
 
 def set_lookups(lookups: Lookups | None) -> None:
-    """Swap the shared lookups (used by tests)."""
-    global _lookups
-    _lookups = lookups
+    """Swap the shared lookups (used by tests); None goes back to the normal per-call choice."""
+    global _override
+    _override = lookups
