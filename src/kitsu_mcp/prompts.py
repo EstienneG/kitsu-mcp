@@ -34,9 +34,10 @@ def review_queue(project: str) -> str:
 def my_day() -> str:
     """Plan the logged-in artist's day."""
     return (
-        "Call my_tasks, then get_task on each task that is in retake or has a due date within the next week. "
-        "Summarize what changed (latest supervisor comments), and propose an order to work in, most urgent first, "
-        "with one line of reasoning per task."
+        "Call my_notifications for what is new (comments, replies, mentions, assignments), then my_tasks, then "
+        "get_task on each task that is in retake, was mentioned in a notification, or has a due date within the next "
+        "week. Summarize what changed (latest supervisor comments), and propose an order to work in, most urgent "
+        "first, with one line of reasoning per task."
     )
 
 

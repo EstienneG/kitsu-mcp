@@ -2,7 +2,7 @@
 
 from kitsu_mcp import links
 from kitsu_mcp.lookups import Lookups
-from kitsu_mcp.models import Comment, TaskDetail, TaskSummary
+from kitsu_mcp.models import Comment, Reply, TaskDetail, TaskSummary
 
 
 def day(value: str | None) -> str | None:
@@ -22,15 +22,28 @@ def task_summary(task: dict, lookups: Lookups) -> TaskSummary:
     )
 
 
-def comment(raw: dict) -> Comment:
+def _author(raw: dict) -> str | None:
     person = raw.get("person") or {}
     author = person.get("full_name") or " ".join(p for p in (person.get("first_name"), person.get("last_name")) if p)
+    return author or None
+
+
+def comment(raw: dict, lookups: Lookups | None = None) -> Comment:
+    """`lookups` names the people who acknowledged the comment (Zou only gives their IDs)."""
+    acknowledged = raw.get("acknowledgements") or []
     return Comment(
+        id=raw.get("id"),
         date=raw.get("created_at"),
-        author=author or None,
+        author=_author(raw),
         status=(raw.get("task_status") or {}).get("short_name"),
         text=raw.get("text"),
         preview_ids=[p["id"] for p in raw.get("previews") or [] if isinstance(p, dict) and "id" in p],
+        replies=[
+            Reply(date=r.get("created_at") or r.get("date"), author=_author(r), text=r.get("text"))
+            for r in raw.get("replies") or []
+            if isinstance(r, dict)
+        ],
+        acknowledged_by=[(lookups.person_name(a) if lookups else None) or a for a in acknowledged],
     )
 
 
