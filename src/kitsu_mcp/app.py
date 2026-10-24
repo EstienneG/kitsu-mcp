@@ -14,7 +14,8 @@ mcp = FastMCP(
         'and estimates are in minutes. List tools return compact rows by default (detail="full" for '
         "more). Use kitsu_get for any read the other tools don't cover. Write tools "
         "(comments, status changes, assignments, schedule, time logs, playlists) only exist when the server "
-        "runs with KITSU_ALLOW_WRITE=true; confirm with the user before calling them."
+        "runs with KITSU_ALLOW_WRITE=true. For write tools, call with dry_run=True first and show the user the "
+        "plan before writing; then confirm with the user before calling them for real."
     ),
 )
 
