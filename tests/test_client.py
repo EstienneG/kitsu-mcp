@@ -138,3 +138,30 @@ def test_network_error_after_retries_is_a_tool_error(kitsu, monkeypatch):
 def test_max_retries_must_be_positive():
     with pytest.raises(ValidationError):
         Settings(host="h", user="u", password="p", max_retries=0)  # type: ignore[arg-type]
+
+
+def test_failed_first_login_is_attempted_once_and_readable(monkeypatch):
+    """With a wrong password, the initial login must not be retried through the re-login callback."""
+    client = KitsuClient(Settings(host="http://kitsu.test/api", user="u", password="bad"))  # type: ignore[arg-type]
+    attempts = []
+
+    def log_in(user, password, client):
+        attempts.append(user)
+        # gazu calls the not-authenticated callback when auth/login answers 401
+        assert client.callback_not_authenticated(client, "auth/login") is False
+        raise client_module.AuthFailedException("auth/login")
+
+    monkeypatch.setattr(client_module.gazu, "log_in", log_in)
+    with pytest.raises(ToolError, match="rejected the credentials"):
+        client.get("data/x")
+    assert attempts == ["u"]
+
+
+@pytest.mark.parametrize("error", [requests.Timeout("slow"), requests.JSONDecodeError("x", "<html>", 0)])
+def test_write_without_answer_says_it_may_have_landed(kitsu, monkeypatch, error):
+    def post(path, data, client=None):
+        raise error
+
+    monkeypatch.setattr(raw, "post", post)
+    with pytest.raises(ToolError, match="MAY have been applied"):
+        kitsu.post("actions/tasks/t/comment", {})

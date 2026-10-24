@@ -1,3 +1,5 @@
+import contextlib
+
 import pytest
 from fastmcp.exceptions import ToolError
 
@@ -89,7 +91,7 @@ async def test_refresh_cache(call, fake):
     "path", ["auth/logout", "data/playlists/pl-1/build/mp4", "data/../auth/logout", "actions/tasks/t/comment"]
 )
 async def test_kitsu_get_refuses_non_data_or_side_effect_routes(call, fake, path):
-    with pytest.raises(ToolError, match="only allows read routes"):
+    with pytest.raises(ToolError, match="kitsu_get (only allows|refuses)"):
         await call("kitsu_get", path=path)
     assert all(p != path for _, p, _ in fake.calls)
 
@@ -99,3 +101,33 @@ async def test_list_assets_skips_canceled_and_sorts(call, fake):
     fake.data["assets"].append({**fake.data["assets"][0], "id": "a-aaa", "name": "Archer"})
     names = [a["name"] for a in (await call("list_assets", project="p-1"))["assets"]]
     assert names == ["Archer", "Hero", "Forest"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "data/%2e%2e/auth/logout",
+        "data/.%2e/auth/logout",
+        "data/%2E%2E/auth/logout",
+        "data/playlists/X/%62uild/mp4",
+        "data/playlists/X/bui%6cd/mp4",
+        "data/playlists/X/build%2fmp4",
+        "data\\..\\auth/logout",
+        "data/./../auth/logout",
+        "data/x?y=1",
+        "data//build",
+        "data/x#frag",
+    ],
+)
+async def test_kitsu_get_refuses_encoded_and_escaped_routes(call, fake, path):
+    with pytest.raises(ToolError, match="kitsu_get"):
+        await call("kitsu_get", path=path)
+    assert all(method != "GET" or p != path for method, p, _ in fake.calls)
+    assert not any(p.startswith(("auth", "data/playlists/X")) for _, p, _ in fake.calls)
+
+
+@pytest.mark.parametrize("path", ["data/task-types", "/api/data/task-types", "data/task-types/", "data/user.context"])
+async def test_kitsu_get_allows_plain_data_routes(call, fake, path):
+    with contextlib.suppress(ToolError):  # unknown fake routes are fine, only the filter matters
+        await call("kitsu_get", path=path)
+    assert fake.calls[-1][1] == path.lstrip("/").removeprefix("api/")

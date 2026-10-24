@@ -43,3 +43,10 @@ async def test_list_sequences_by_episode(call, fake):
 async def test_frame_range_falls_back_to_data(call):
     shot = await call("get_shot", shot_id="s-2")
     assert (shot["frame_in"], shot["frame_out"], shot["nb_frames"]) == (101, 172, 72)
+
+
+def test_frames_tolerates_odd_values():
+    from kitsu_mcp.tools.shots import _frames
+
+    values = ["12", "12.0", " 7 ", "²", "--5", "abc", "inf", True, None, 3.9]
+    assert [_frames({"f": v}, "f") for v in values] == [12, 12, 7, None, None, None, None, None, None, 3]
