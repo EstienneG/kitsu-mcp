@@ -155,6 +155,7 @@ async def test_get_video_info(call, served):
     assert info["preview_file_id"] == "pf-sh010"
     assert (info["codec"], info["width"], info["height"], info["fps"]) == ("h264", 160, 90, FPS)
     assert (info["frame_count"], info["duration"]) == (72, 3.0)
+    # Zou's file_size is the uploaded file; data.original_file_size is not trusted.
     assert (info["kitsu_width"], info["kitsu_duration"], info["original_file_size"]) == (1920, 3.0, 9000)
     assert info["quality"] == "low" and info["file_bytes"] == len(served.movies[LOW_V2])
 
@@ -225,11 +226,26 @@ async def test_compare_revisions_of_a_task(served):
     assert (summary["a"]["duration"], summary["b"]["duration"]) == (2.0, 3.0)
     sheet = pictures[0]
     assert max(sheet.size) <= video.MAX_SHEET_SIDE
-    # Two columns (A, B). Moments are 0.75 s and 2.25 s on the longest timeline; A (2 s) is clamped to its end.
+    # Two columns (A, B). Moments are 0.75 s and 2.25 s on the longest timeline; 2.25 s is past A's 2 s end,
+    # so that cell is left empty ("past end") instead of repeating A's last frame.
     header, height = video._bar_height(160), 120  # tiles keep the taller aspect (v1 is 4:3)
     rows = [header + 4 + r * (height + video._bar_height(160) + 4) for r in range(2)]
-    assert [frame_shown(sheet, (4, y, 160, height)) for y in rows] == [19, 48]
+    assert frame_shown(sheet, (4, rows[0], 160, height)) == 19
     assert [frame_shown(sheet, (168, y, 160, height)) for y in rows] == [19, 55]
+    assert summary["a"]["moments_past_end"] == 1 and "moments_past_end" not in summary["b"]
+
+
+async def test_compare_revisions_uses_main_file_of_distinct_revisions(served):
+    """Revision 2 has two uploads (positions 1 and 2) and revision 3 is broken: compare v1 with v2's main file."""
+    texts, _ = await images("compare_revisions", task_id="t-sh010-anim", n=1)
+    summary = json.loads(texts[0])
+    assert (summary["a"]["preview_file_id"], summary["b"]["preview_file_id"]) == ("pf-sh010-v1", "pf-sh010")
+
+
+async def test_compare_revisions_explicit_frame_past_end(served):
+    texts, _ = await images("compare_revisions", preview_file_a="pf-sh010", preview_file_b="pf-sh010-v1", frames=[60])
+    summary = json.loads(texts[0])
+    assert summary["b"]["moments_past_end"] == 1 and "moments_past_end" not in summary["a"]
 
 
 async def test_compare_revisions_explicit_frames(served):
@@ -257,21 +273,47 @@ async def test_review_video(served):
     approved = by_id["Approved, the v1 00:00:01:12 (37) fix works."]
     # Its tag points at revision 1's timeline, so it is not mapped onto revision 2.
     assert approved["frames"] == [] and approved["refers_to_other_revisions"] == [1]
-    assert by_id["v2: fixed the arm at frame 30"]["frames"] == [{"frame": 30, "timecode": "00:00:01:05"}]
-    assert by_id["v2: fixed the arm at frame 30"]["on_this_movie"] is True
+    assert approved["about_revision"] == 2
+    fixed = by_id["v2: fixed the arm at frame 30"]
+    assert fixed["frames"] == [{"frame": 30, "timecode": "00:00:01:05"}] and fixed["about_revision"] == 2
+    # Posted about revision 1: its frame references belong to v1's timeline and are not placed on v2.
     first = by_id["Arm pops at 00:00:01:00 and again around 2.5s; see drawing."]
+    assert first["about_revision"] == 1 and first["frames"] == [] and first["refers_to_other_revisions"] == [1]
+    assert summary["frames_shown"] == [30]
+    assert [frame_shown(p) for p in pictures] == [30]
+
+
+async def test_review_video_can_include_other_revisions(served):
+    texts, _ = await images("review_video", task_id="t-sh010-anim", include_other_revisions=True)
+    summary = json.loads(texts[0])
+    first = next(c for c in summary["comments"] if c["text"].startswith("Arm pops"))
     assert [f["frame"] for f in first["frames"]] == [25, 61]
-    assert first["on_this_movie"] is False
+    # A Kitsu tag names its revision explicitly, so it stays off other revisions' timelines.
+    approved = next(c for c in summary["comments"] if c["text"].startswith("Approved"))
+    assert approved["frames"] == []
     assert summary["frames_shown"] == [30, 25, 61]
-    assert [frame_shown(p) for p in pictures] == [30, 25, 61]
+
+
+async def test_review_video_ignores_image_mentions(served):
+    served.data["comments"]["t-sh010-anim"] = [
+        {
+            "id": "c",
+            "created_at": "2026-09-01T00:00:00",
+            "text": "See the reference (image 1) for frame 40",
+            "previews": [],
+        }
+    ]
+    texts, _ = await images("review_video", task_id="t-sh010-anim")
+    assert json.loads(texts[0])["frames_shown"] == [40]
 
 
 async def test_review_video_of_older_revision_uses_its_annotations(served):
     texts, pictures = await images("review_video", task_id="t-sh010-anim", preview_file_id="pf-sh010-v1", max_frames=2)
     summary = json.loads(texts[0])
     assert summary["annotated_frames"] == [25]
-    # v1 tag (37) + frame 30 + 00:00:01:00 (25) + 2.5s is past v1's 48 frames.
-    assert summary["frames_shown"] == [37, 30] and summary["frames_omitted"] == [25]
+    # On v1's timeline: the v1 tag (37) and the comment posted about v1 (00:00:01:00 = 25; 2.5s is past
+    # v1's 48 frames). "frame 30" was posted about v2, so it is not placed on v1.
+    assert summary["frames_shown"] == [37, 25] and "frames_omitted" not in summary
     assert len(pictures) == 2
 
 
@@ -284,7 +326,7 @@ async def test_review_video_without_references(served):
 
 
 async def test_review_video_errors(call):
-    with pytest.raises(ToolError, match="no movie preview"):
+    with pytest.raises(ToolError, match="no playable movie preview"):
         await call("review_video", task_id="t-hero-mod")
     with pytest.raises(ToolError, match="max_frames"):
         await call("review_video", task_id="t-sh010-anim", max_frames=0)
@@ -356,9 +398,12 @@ async def test_size_cap(call, served):
     with pytest.raises(ToolError, match="download cap"):
         await call("get_video_info", preview_file_id="pf-sh010")
     assert list(served.settings.video_cache_dir.iterdir()) == []  # no partial file left behind
-    served.data["preview_files"]["pf-sh010"]["data"]["original_file_size"] = 10 * 2**20
+    # The original is refused from Kitsu's file_size before any download starts.
+    served.data["preview_files"]["pf-sh010"]["file_size"] = 10 * 2**20
+    served.calls.clear()
     with pytest.raises(ToolError, match="over the"):
         await call("get_video_info", preview_file_id="pf-sh010", quality="original")
+    assert not any(path.startswith("movies/") for _, path, _ in served.calls)
 
 
 async def test_missing_low_movie_suggests_original(call, served):
@@ -406,3 +451,19 @@ async def test_without_extra_tools_stay_listed_and_previews_say_so(call, without
     assert "kitsu-mcp[video]" in meta["note"]
     saved = await call("download_video", dest_dir=str(tmp_path), preview_file_id="pf-sh010")
     assert Path(saved["path"]).exists()
+
+
+async def test_broken_preview(call, served):
+    with pytest.raises(ToolError, match="marked broken"):
+        await call("get_video_info", preview_file_id="pf-sh010-broken")
+    meta = await call("get_preview_file", preview_file_id="pf-sh010-broken")
+    assert meta["status"] == "broken" and "Broken" in meta["note"] and "get_video" not in meta["note"]
+    served.calls.clear()
+    with pytest.raises(ToolError, match="marked broken"):
+        await call("get_preview_file", preview_file_id="pf-sh010-broken", show=True)
+    assert not any(path.startswith("pictures/") for _, path, _ in served.calls)
+
+
+async def test_get_video_frames_merges_duplicates(served):
+    _, pictures = await images("get_video_frames", preview_file_id="pf-sh010", frames=[25, "00:00:01:00", 25.0])
+    assert len(pictures) == 1

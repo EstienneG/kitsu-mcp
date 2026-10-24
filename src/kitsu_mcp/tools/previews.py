@@ -41,6 +41,7 @@ def _preview_file(p: dict) -> PreviewFile:
     return PreviewFile(
         id=p["id"],
         revision=p.get("revision"),
+        position=p.get("position"),
         extension=p.get("extension"),
         is_movie=p.get("is_movie"),
         original_name=p.get("original_name"),
@@ -51,8 +52,14 @@ def _preview_file(p: dict) -> PreviewFile:
         created_at=p.get("created_at"),
         is_video=video.is_video(p),
         duration=p.get("duration") if video.is_video(p) else None,
-        note=_video_note() if video.is_video(p) else None,
+        note=_note(p),
     )
+
+
+def _note(p: dict) -> str | None:
+    if video.is_broken(p):
+        return "Broken: Kitsu could not process this upload, so there is no image or movie to show."
+    return _video_note() if video.is_video(p) else None
 
 
 def _video_note() -> str:
@@ -91,16 +98,22 @@ def get_preview_file(
     Preview file IDs appear in comments (get_task) and playlists. is_video tells whether it is a
     movie; for movies show=True gives the poster frame, and the video tools show the rest.
     """
-    if show:
-        return _with_video_hint(Image(data=_preview_bytes(preview_file_id, size), format="png"), preview_file_id)
-    return _preview_file(get_client().get(f"data/preview-files/{preview_file_id}"))
+    record = get_client().get(f"data/preview-files/{preview_file_id}")
+    if not show:
+        return _preview_file(record)
+    if video.is_broken(record):
+        raise ToolError(f"Preview file {preview_file_id} is marked broken in Kitsu (its processing failed)")
+    image = Image(data=_preview_bytes(preview_file_id, size), format="png")
+    return [image, VIDEO_HINT] if video.is_video(record) else image
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"previews", "tasks"})
 def list_task_previews(task_id: str) -> list[PreviewFile]:
-    """All preview revisions uploaded on a task, newest first."""
-    previews = [_preview_file(p) for p in get_client().get(f"data/tasks/{task_id}/previews")]
-    return sorted(previews, key=lambda p: (p.revision or 0, p.created_at or ""), reverse=True)
+    """All preview files uploaded on a task, newest revision first. A revision can hold several files;
+    `position` 1 is its main one."""
+    raw = get_client().get(f"data/tasks/{task_id}/previews")
+    raw.sort(key=lambda p: (-(p.get("revision") or 0), p.get("position") or 1, p.get("created_at") or ""))
+    return [_preview_file(p) for p in raw]
 
 
 @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews"})

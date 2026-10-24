@@ -265,6 +265,7 @@ class ProjectOverview(BaseModel):
 class PreviewFile(BaseModel):
     id: str
     revision: int | None
+    position: int | None = Field(None, description="Order within the revision; 1 is the main file")
     extension: str | None
     is_movie: bool | None
     original_name: str | None
