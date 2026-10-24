@@ -136,17 +136,24 @@ class TTLCache[T]:
 class LoginThrottle:
     """Slows down repeated failed logins per user, so the server is not an unthrottled password relay to Kitsu.
 
-    The first `free` failures in a row cost nothing; after that, the next attempt must wait
-    2**(failures - free) seconds (capped) since the last failure. A success resets the count. Bounded: the
-    oldest users are forgotten past `max_users`.
+    Only rejected credentials count (an unreachable Kitsu does not). A login Kitsu accepted in the last
+    `remember` seconds skips the check, so guessing at someone's email cannot lock them out. Spraying many
+    emails from one address is not throttled here. The first `free` failures in a row cost nothing; after
+    that, the next attempt must wait 2**(failures - free) seconds (capped) since the last failure. A success
+    resets the count. Bounded: the oldest users are forgotten past `max_users`.
     """
 
-    def __init__(self, free: int = 5, cap: float = 60, max_users: int = 4096) -> None:
+    def __init__(self, free: int = 5, cap: float = 60, max_users: int = 4096, remember: float = 24 * 3600) -> None:
         self.free = free
         self.cap = cap
         self.max_users = max_users
         self._failures: OrderedDict[str, tuple[int, float]] = OrderedDict()
+        # Keys (HMACs) of logins Kitsu accepted in the last `remember` seconds: they bypass the throttle.
+        self._good: TTLCache[bool] = TTLCache(ttl=remember, max_size=max_users)
         self._lock = threading.Lock()
+
+    def known_good(self, login_key: str) -> bool:
+        return self._good.get(login_key) is not None
 
     def check(self, user_key: str) -> None:
         with self._lock:
@@ -164,6 +171,7 @@ class LoginThrottle:
             while len(self._failures) > self.max_users:
                 self._failures.popitem(last=False)
 
-    def succeeded(self, user_key: str) -> None:
+    def succeeded(self, user_key: str, login_key: str) -> None:
         with self._lock:
             self._failures.pop(user_key, None)
+        self._good.put(login_key, True)
