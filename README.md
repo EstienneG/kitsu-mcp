@@ -38,8 +38,10 @@ with their Kitsu permissions.
 **Run it.** Only `KITSU_HOST` is needed (no shared login). Deploy the image on a host that terminates HTTPS
 (Fly.io, Render, a reverse proxy) and confirm it with `KITSU_BEHIND_TLS=true`:
 
-    docker build -t kitsu-mcp .
-    docker run -p 8000:8000 -e KITSU_HOST=https://your-studio.cg-wire.com/api -e KITSU_BEHIND_TLS=true kitsu-mcp
+    docker run -p 8000:8000 -e KITSU_HOST=https://your-studio.cg-wire.com/api -e KITSU_BEHIND_TLS=true \
+      ghcr.io/estienneg/kitsu-mcp:latest
+
+(or build it yourself with `docker build -t kitsu-mcp .`). Pin a version tag such as `:0.2.0` in production.
 
 To try it locally without a proxy, run `KITSU_HOST=... kitsu-mcp --http`, which listens on 127.0.0.1:8000.
 
@@ -119,7 +121,10 @@ error mapping), `lookups.py` cached reference data and name resolution, `models.
 `resources.py`, `prompts.py`, `auth.py` per-caller credentials, `http.py` HTTP mode (hidden local tools,
 `/health`, TLS guard), `links.py` Kitsu web links.
 
-Release: bump `version` in `pyproject.toml`, then `uv build && uv publish`.
+Release: bump `version` in `pyproject.toml`, merge, then tag it (`git tag v0.2.0 && git push origin v0.2.0`).
+The Release workflow checks the tag matches the version, runs the checks, and publishes the Docker image to
+`ghcr.io/estienneg/kitsu-mcp` (tags `0.2.0`, `0.2` and `latest`). Publishing the Python package to PyPI
+is a separate, manual `uv build && uv publish`.
 
 ## Tools
 
@@ -180,3 +185,8 @@ preview is a video.
 - Limits: at most 16 frames per call, grids at most 1568 px on a side, single frames at most
   1280 px. The agent only sees sampled still frames: no motion in between and no audio. Every image
   costs context, so start with `get_video_contact_sheet` and zoom in with `get_video_frames`.
+
+## License
+
+MIT: see [LICENSE](LICENSE). Free to use, modify and distribute, including commercially, provided the
+copyright notice is kept; no warranty.
