@@ -120,7 +120,10 @@ Release: bump `version` in `pyproject.toml`, then `uv build && uv publish`.
 
 ## Tools
 
-Project, task type, status and person arguments take names (case-insensitive) or IDs.
+Project, task type, department, status and person arguments take names (case-insensitive) or IDs.
+`departments` filters (`search_tasks`, `workload`, `project_overview`) keep tasks whose task type belongs to
+one of the departments, so the three tools agree; people's own departments are not used (`list_people` shows
+them).
 
 | Area | Tools |
 |---|---|
@@ -129,7 +132,7 @@ Project, task type, status and person arguments take names (case-insensitive) or
 | Assets | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `get_asset`, `get_casting` (either way) |
 | Shots | `list_episodes`, `list_sequences`, `list_shots`, `get_shot`, `get_casting` |
 | Custom fields | `list_custom_fields` (a project's custom columns: type, choices, departments); values show up by display name in `get_asset` / `get_shot` (and `detail="full"` lists), and `list_assets` / `list_shots` filter on them with `custom_field_filters` |
-| Tasks | `search_tasks` (type, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
+| Tasks | `search_tasks` (type, department, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
 | People | `list_people`, `get_person_tasks`, `workload` |
 | Previews | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
 | Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
