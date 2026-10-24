@@ -1,8 +1,20 @@
 from kitsu_mcp.app import READ_ONLY, mcp
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
-from kitsu_mcp.lookups import get_lookups
+from kitsu_mcp.lookups import Lookups, check_names, get_lookups
 from kitsu_mcp.models import AssetDetail, AssetList, AssetSummary
+from kitsu_mcp.validation import Limit, Offset, object_id
+
+
+def check_status_filters(status_filters: dict[str, list[str]] | None, lookups: Lookups) -> None:
+    """Unknown task type or status names in a filter are errors, not silently empty results."""
+    if not status_filters:
+        return
+    types = lookups.index("task_types").values()
+    check_names("task type", list(status_filters), {t["name"] for t in types})
+    statuses = {s["short_name"] for s in lookups.index("task_statuses").values()}
+    for allowed in status_filters.values():
+        check_names("task status", allowed, statuses)
 
 
 def matches_status_filters(tasks: list, status_filters: dict[str, list[str]] | None) -> bool:
@@ -22,8 +34,8 @@ def list_assets(
     exclude_asset_types: list[str] | None = None,
     task_status_filters: dict[str, list[str]] | None = None,
     name_contains: str | None = None,
-    limit: int = 200,
-    offset: int = 0,
+    limit: Limit = 100,
+    offset: Offset = 0,
 ) -> AssetList:
     """List a project's assets with their tasks, optionally filtered.
 
@@ -34,6 +46,9 @@ def list_assets(
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
+    known_types = {t["name"] for t in lookups.index("asset_types").values()}
+    check_names("asset type", (asset_types or []) + (exclude_asset_types or []), known_types)
+    check_status_filters(task_status_filters, lookups)
     include = {n.lower() for n in asset_types or []}
     exclude = {n.lower() for n in exclude_asset_types or []}
 
@@ -60,6 +75,7 @@ def list_assets(
 @mcp.tool(annotations=READ_ONLY, tags={"assets"})
 def get_asset(asset_id: str) -> AssetDetail:
     """Get an asset's details and tasks."""
+    asset_id = object_id(asset_id, "asset", "list_assets")
     lookups = get_lookups()
     client = get_client()
     asset = client.get(f"data/assets/{asset_id}")

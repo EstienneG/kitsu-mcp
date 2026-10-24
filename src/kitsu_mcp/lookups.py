@@ -1,5 +1,6 @@
 """Cached reference data (task types, statuses, people, ...) and name → record resolvers."""
 
+import difflib
 import threading
 import time
 from typing import Any
@@ -79,10 +80,11 @@ class Lookups:
             return matches[0]
         label = _LABELS[kind]
         if matches:
-            raise ToolError(f"Ambiguous {label} '{ref}': matches IDs {', '.join(m['id'] for m in matches)}")
-        options = sorted({str(r.get(fields[0])) for r in records.values() if r.get(fields[0])})
-        shown = ", ".join(options[:50]) + (" ..." if len(options) > 50 else "")
-        raise ToolError(f"Unknown {label} '{ref}'. Valid values: {shown}")
+            described = "; ".join(_describe(kind, m) for m in matches)
+            raise ToolError(f"Ambiguous {label} '{ref}', pass one of these IDs instead: {described}")
+        raise ToolError(
+            unknown_message(label, ref, [str(r.get(f)) for r in records.values() for f in fields if r.get(f)])
+        )
 
     def project(self, ref: str) -> Record:
         return self.resolve("projects", ref)
@@ -98,6 +100,37 @@ class Lookups:
 
     def asset_type(self, ref: str) -> Record:
         return self.resolve("asset_types", ref)
+
+
+def _describe(kind: str, record: Record) -> str:
+    if kind == "people":
+        details = ", ".join(str(record[k]) for k in ("email", "position") if record.get(k))
+        return (
+            f"{record.get('full_name')} ({details}) = {record['id']}"
+            if details
+            else f"{record.get('full_name')} = {record['id']}"
+        )
+    return f"{record.get('name') or record.get('short_name')} = {record['id']}"
+
+
+def unknown_message(label: str, ref: str, options: list[str]) -> str:
+    """'Unknown x' with the closest matches first, then (some of) the valid values."""
+    unique = sorted(set(options), key=str.lower)
+    by_lower = {o.lower(): o for o in unique}
+    wanted = ref.strip().lower()
+    close = [by_lower[m] for m in difflib.get_close_matches(wanted, list(by_lower), n=3, cutoff=0.6)]
+    close += [o for o in unique if wanted and wanted in o.lower() and o not in close][: 3 - len(close)]
+    hint = f" Did you mean: {', '.join(close)}?" if close else ""
+    shown = ", ".join(unique[:50]) + (" ..." if len(unique) > 50 else "")
+    return f"Unknown {label} '{ref}'.{hint} Valid values: {shown}"
+
+
+def check_names(label: str, given: list[str] | None, known: set[str]) -> None:
+    """Raise if any of `given` (case-insensitive) is not in `known`, so a typo is not an empty result."""
+    lowered = {k.lower(): k for k in known if k}
+    for name in given or []:
+        if name.lower() not in lowered:
+            raise ToolError(unknown_message(label, name, list(lowered.values())))
 
 
 _lookups: Lookups | None = None
