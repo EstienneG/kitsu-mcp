@@ -110,18 +110,30 @@ def _ratio(part: int, total: int) -> float:
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"projects", "reporting"})
-def project_overview(project: str) -> ProjectOverview:
+def project_overview(
+    project: str, task_types: list[str] | None = None, exclude_task_types: list[str] | None = None
+) -> ProjectOverview:
     """Where a production stands: entity and task counts, completion per task type, overdue tasks,
     tasks waiting for review, retakes, on hold, unassigned work and time logged vs. estimated.
 
     Counts follow each status's role (list_task_statuses shows them). Omitted tasks (OMIT, N/A, ...)
     are counted apart and left out of done_ratio, so dropped work does not inflate progress.
-    done_improvable counts done tasks that could still be improved (e.g. CBB, "could be better")."""
+    done_improvable counts done tasks that could still be improved (e.g. CBB, "could be better").
+    task_types / exclude_task_types (names or short names) limit the task counts and ratios, e.g.
+    exclude_task_types=["Animatic"] to leave admin or pre-production work out of progress; entity counts
+    (assets, shots) are unaffected."""
     client = get_client()
     lookups = get_lookups()
     info = client.get(f"data/projects/{lookups.project(project)['id']}")
+    keep = {lookups.task_type(t)["id"] for t in task_types or []}
+    drop = {lookups.task_type(t)["id"] for t in exclude_task_types or []}
     entities = project_entities(client, lookups, info["id"])
-    records = [task for entity in entities for task in entity.tasks()]
+    records = [
+        task
+        for entity in entities
+        for task in entity.tasks()
+        if (not keep or task.raw.get("task_type_id") in keep) and task.raw.get("task_type_id") not in drop
+    ]
 
     def status_of(r: TaskRecord) -> str | None:
         return r.raw.get("task_status_id")
