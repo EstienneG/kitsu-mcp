@@ -18,9 +18,9 @@ ALICE, BOB = "person-alice", "person-bob"
 
 def seed() -> dict[str, Any]:
     task_types = [
-        {"id": TT_MODEL, "name": "Modeling", "short_name": "MOD", "for_entity": "Asset"},
-        {"id": TT_ANIM, "name": "Animation", "short_name": "ANIM", "for_entity": "Shot"},
-        {"id": TT_COMP, "name": "Compositing", "short_name": "COMP", "for_entity": "Shot"},
+        {"id": TT_MODEL, "name": "Modeling", "short_name": "MOD", "for_entity": "Asset", "department_id": "dep-model"},
+        {"id": TT_ANIM, "name": "Animation", "short_name": "ANIM", "for_entity": "Shot", "department_id": "dep-anim"},
+        {"id": TT_COMP, "name": "Compositing", "short_name": "COMP", "for_entity": "Shot", "department_id": "dep-comp"},
         {"id": "tt-old", "name": "Old", "short_name": "OLD", "for_entity": "Asset", "archived": True},
     ]
     statuses = [
@@ -81,7 +81,7 @@ def seed() -> dict[str, Any]:
             "entity_type_id": "at-char",
             "project_id": PROJECT,
             "description": "Main character",
-            "data": {},
+            "data": {"rigged": "true", "date_rendu": "2026-11-06", "resolution": ""},
             "preview_file_id": "pf-hero",
             "canceled": False,
         },
@@ -114,7 +114,7 @@ def seed() -> dict[str, Any]:
             "nb_frames": 48,
             "fps": "24",
             "description": None,
-            "data": {},
+            "data": {"anim_level": "⭐⭐", "key_shot": "true", "handle_in": 4},
             "preview_file_id": "pf-sh010",
             "canceled": False,
         },
@@ -132,7 +132,7 @@ def seed() -> dict[str, Any]:
             "nb_frames": 72,
             "fps": None,
             "description": None,
-            "data": {"frame_in": "101", "frame_out": 172},
+            "data": {"frame_in": "101", "frame_out": 172, "key_shot": "false"},
             "preview_file_id": None,
             "canceled": False,
         },
@@ -332,7 +332,66 @@ def seed() -> dict[str, Any]:
             "shots": [{"entity_id": "s-1", "preview_file_id": "pf-sh010"}],
         }
     ]
+    # Custom fields ("metadata descriptors"), shaped like the live instance's. Kitsu stores values as text.
+    custom_fields = [
+        {
+            "id": "md-level",
+            "project_id": PROJECT,
+            "name": "Anim Level",
+            "field_name": "anim_level",
+            "entity_type": "Shot",
+            "data_type": "list",
+            "choices": ["⭐", "⭐⭐", "⭐⭐⭐"],
+            "departments": ["dep-anim"],
+            "position": 2,
+            "for_client": False,
+        },
+        {
+            "id": "md-key",
+            "project_id": PROJECT,
+            "name": "key_shot",
+            "field_name": "key_shot",
+            "entity_type": "Shot",
+            "data_type": "boolean",
+            "choices": [],
+            "departments": [],
+            "position": 1,
+            "for_client": False,
+        },
+        {
+            "id": "md-rigged",
+            "project_id": PROJECT,
+            "name": "Rigged",
+            "field_name": "rigged",
+            "entity_type": "Asset",
+            "data_type": "boolean",
+            "choices": [],
+            "departments": [],
+            "position": None,
+            "for_client": True,
+        },
+        {
+            "id": "md-due",
+            "project_id": PROJECT,
+            "name": "DATE RENDU",
+            "field_name": "date_rendu",
+            "entity_type": "Asset",
+            "data_type": "date",
+            "choices": [],
+            "departments": [],
+            "position": None,
+            "for_client": False,
+        },
+    ]
+    departments = [
+        {"id": "dep-model", "name": "Modeling", "color": "#888", "archived": False},
+        {"id": "dep-anim", "name": "Animation", "color": "#888", "archived": False},
+        {"id": "dep-comp", "name": "Compositing", "color": "#888", "archived": False},
+        {"id": "dep-sound", "name": "Sound", "color": "#888", "archived": False},
+    ]
     return {
+        "departments": departments,
+        "custom_fields": custom_fields,
         "task_types": task_types,
         "statuses": statuses,
         "people": people,
@@ -462,7 +521,9 @@ class FakeClient:
         if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)/add", path):
             task = self._task_or_404(m[1], path)
             task["duration"] = (task["duration"] or 0) + data["duration"]
-            return {"task_id": task["id"], "person_id": m[3], "date": m[2], "duration": data["duration"]}
+            entry = {"task_id": task["id"], "person_id": m[3], "date": m[2], "duration": data["duration"]}
+            self.data.setdefault("time_spents", []).append(entry)
+            return entry
         raise ToolError(f"Not found: {path} (no fake route)")
 
     def put(self, path: str, data: dict) -> Any:
@@ -566,7 +627,7 @@ class FakeClient:
             "data/projects/open": [p for p in d["projects"] if p["project_status_id"] == "ps-open"],
             "data/project-status": [{"id": "ps-open", "name": "Open"}, {"id": "ps-closed", "name": "Closed"}],
             "data/asset-types": d["asset_types"],
-            "data/departments": [{"id": "dep-anim", "name": "Animation"}],
+            "data/departments": d["departments"],
         }
         if path in simple:
             return simple[path]
@@ -606,6 +667,8 @@ class FakeClient:
             return playlists[(page - 1) * 20 : page * 20]
         if m := re.fullmatch(r"data/projects/([^/]+)/(sequences|episodes)", path):
             return [r for r in d[m[2]] if r["project_id"] == m[1]]
+        if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors", path):
+            return [f for f in d["custom_fields"] if f["project_id"] == m[1]]
         if m := re.fullmatch(r"data/projects/([^/]+)/team", path):
             return d["people"]
         if m := re.fullmatch(r"data/projects/([^/]+)/entities/([^/]+)/casting", path):
@@ -638,5 +701,10 @@ class FakeClient:
         if m := re.fullmatch(r"data/playlists/([^/]+)", path):
             return self._by_id("playlists")[m[1]]
         if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents", path):
-            return {"total": self._by_id("tasks")[m[1]]["duration"]}
+            # Zou: {"total": minutes, "<person id>": [entries], ...}
+            spent: dict[str, Any] = {"total": self._by_id("tasks")[m[1]]["duration"]}
+            for entry in d.get("time_spents", []):
+                if entry["task_id"] == m[1]:
+                    spent.setdefault(entry["person_id"], []).append(entry)
+            return spent
         raise ToolError(f"Not found: {path} (no fake route)")

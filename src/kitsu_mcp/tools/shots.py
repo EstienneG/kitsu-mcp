@@ -1,5 +1,6 @@
 from fastmcp.exceptions import ToolError
 
+from kitsu_mcp import custom_fields as cf
 from kitsu_mcp import links
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
@@ -25,6 +26,10 @@ def _frames(shot: dict, field: str) -> int | None:
         except (ValueError, OverflowError):
             return None
     return None
+
+
+_SHOWN = frozenset({"frame_in", "frame_out", "nb_frames"})
+"""Shot data keys already shown as top-level fields."""
 
 
 def _fps(value) -> float | None:
@@ -72,6 +77,7 @@ def list_shots(
     episode: str | None = None,
     task_status_filters: dict[str, list[str]] | None = None,
     name_contains: str | None = None,
+    custom_field_filters: cf.CustomFieldFilters | None = None,
     detail: Detail = "compact",
     limit: Limit = 100,
     offset: Offset = 0,
@@ -83,10 +89,16 @@ def list_shots(
     sequence / episode: names (case-insensitive) or IDs.
     task_status_filters: task type name -> allowed status short names; all must match,
     e.g. {"Animation": ["wip"], "Compositing": ["todo"]}.
+    custom_field_filters: custom field (display name or field_name, see list_custom_fields) -> allowed
+    values; all must match, e.g. {"key_shot": [true]} or {"Anim Level": ["⭐⭐⭐", "⭐⭐⭐⭐"]}. Text is
+    case-insensitive; null matches an unset field (an unset yes/no field is false). detail="full" also
+    gives each shot's custom_fields.
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
     check_status_filters(task_status_filters, lookups)
+    descriptors = cf.fields_for(lookups, project_id, "Shot")
+    field_filters = cf.compile_filters(custom_field_filters, descriptors, "shot")
     shots = get_client().get("data/shots/with-tasks", params={"project_id": project_id})
     if sequence and sequence not in {s.get("sequence_id") for s in shots}:
         check_names("sequence", [sequence], {s.get("sequence_name") or "" for s in shots})
@@ -102,6 +114,8 @@ def list_shots(
             continue
         if name_contains and name_contains.lower() not in shot.get("name", "").lower():
             continue
+        if not cf.matches(field_filters, shot.get("data")):
+            continue
         tasks = [task_summary(t, lookups) for t in shot.get("tasks") or []]
         if not matches_status_filters(tasks, task_status_filters):
             continue
@@ -116,6 +130,7 @@ def list_shots(
                 nb_frames=_frames(shot, "nb_frames"),
                 tasks=None if detail == "compact" else tasks,
                 statuses=statuses(tasks) if detail == "compact" else None,
+                custom_fields=None if detail == "compact" else cf.values(descriptors, shot.get("data")),
             )
         )
     results.sort(key=lambda s: (s.episode or "", s.sequence or "", s.name))
@@ -124,7 +139,8 @@ def list_shots(
 
 @tool(annotations=READ_ONLY, tags={"shots"})
 def get_shot(shot_id: str) -> ShotDetail:
-    """Get a shot's details (frame range, fps, custom data) and tasks."""
+    """Get a shot's details (frame range, fps), custom field values (by display name; list_custom_fields
+    explains them) and tasks."""
     shot_id = object_id(shot_id, "shot", "list_shots")
     lookups = get_lookups()
     client = get_client()
@@ -141,7 +157,7 @@ def get_shot(shot_id: str) -> ShotDetail:
         project_id=shot.get("project_id"),
         description=shot.get("description"),
         fps=_fps(shot.get("fps")),
-        data=shot.get("data"),
+        **cf.detail_fields(lookups, shot, "Shot", _SHOWN),
         tasks=[task_summary(t, lookups) for t in tasks],
         url=links.entity_url(shot.get("project_id"), "shot", shot["id"], shot.get("episode_id")),
     )
