@@ -260,3 +260,53 @@ class ProjectOverview(BaseModel):
     estimation: float = Field(description="Minutes estimated over all tasks")
     logged: float = Field(description="Minutes logged over all tasks")
     by_task_type: list[TaskTypeProgress]
+
+
+class PreviewFile(BaseModel):
+    id: str
+    revision: int | None
+    extension: str | None
+    is_movie: bool | None
+    original_name: str | None
+    status: str | None
+    validation_status: str | None
+    width: int | None
+    height: int | None
+    created_at: str | None
+
+
+class SavedPreview(BaseModel):
+    kind: str
+    id: str
+    name: str
+    path: str
+
+
+class FailedPreview(BaseModel):
+    name: str
+    error: str
+
+
+class DownloadResult(BaseModel):
+    saved: list[SavedPreview]
+    skipped: int = Field(description="Entities without a preview")
+    failed: list[FailedPreview]
+
+
+class Playlist(BaseModel):
+    id: str
+    name: str
+    for_entity: str | None
+    for_client: bool | None
+    task_type: str | None
+    updated_at: str | None
+
+
+class PlaylistItem(BaseModel):
+    entity_id: str
+    entity: str | None
+    preview_file_id: str | None
+
+
+class PlaylistDetail(Playlist):
+    items: list[PlaylistItem]

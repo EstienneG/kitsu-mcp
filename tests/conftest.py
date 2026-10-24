@@ -30,7 +30,11 @@ async def call(fake):
             if result.structured_content is not None:
                 content = result.structured_content
                 return content["result"] if set(content) == {"result"} else content
-            return json.loads(result.content[0].text)
+            text = result.content[0].text
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return text
 
         yield _call
 
