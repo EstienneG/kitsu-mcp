@@ -6,7 +6,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
 from kitsu_mcp import video
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import (
@@ -80,7 +80,7 @@ def _with_video_hint(image: Image, preview_file_id: str) -> Image | list[Image |
     return [image, VIDEO_HINT] if is_movie else image
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews"})
+@tool(annotations=READ_ONLY, tags={"previews"})
 def get_preview(entity_id: str, size: Size = "thumbnail") -> Image | list[Image | str] | str:
     """Show the current preview image of an asset or shot.
 
@@ -94,7 +94,7 @@ def get_preview(entity_id: str, size: Size = "thumbnail") -> Image | list[Image 
     return _with_video_hint(Image(data=_preview_bytes(preview_file_id, size), format="png"), preview_file_id)
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews"})
+@tool(annotations=READ_ONLY, tags={"previews"})
 def get_preview_file(
     preview_file_id: str, show: bool = False, size: Size = "thumbnail"
 ) -> PreviewFile | Image | list[Image | str]:
@@ -113,7 +113,7 @@ def get_preview_file(
     return [image, VIDEO_HINT] if video.is_video(record) else image
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews", "tasks"})
+@tool(annotations=READ_ONLY, tags={"previews", "tasks"})
 def list_task_previews(task_id: str) -> list[PreviewFile]:
     """All preview files uploaded on a task, newest revision first. A revision can hold several files;
     `position` 1 is its main one."""
@@ -123,7 +123,7 @@ def list_task_previews(task_id: str) -> list[PreviewFile]:
     return [_preview_file(p) for p in raw]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews", "video"})
+@tool(annotations=READ_ONLY, tags={"previews", "video"})
 def recent_previews(
     project: str,
     task_type: str | None = None,
@@ -185,7 +185,7 @@ def recent_previews(
 _MAX_FEED_PAGES = 5
 
 
-@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews"})
+@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews"})
 def download_previews(
     project: str,
     dest_dir: str,
@@ -245,7 +245,7 @@ def _playlist(p: dict) -> Playlist:
 _MAX_PLAYLIST_PAGES = 50
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews", "playlists"})
+@tool(annotations=READ_ONLY, tags={"previews", "playlists"})
 def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> PlaylistList:
     """List a project's review playlists, most recently updated first. `total` counts them all."""
     project_id = get_lookups().project(project)["id"]
@@ -261,7 +261,7 @@ def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> Playl
     return PlaylistList(total=len(playlists), playlists=playlists[offset : offset + limit])
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews", "playlists"})
+@tool(annotations=READ_ONLY, tags={"previews", "playlists"})
 def get_playlist(playlist_id: str) -> PlaylistDetail:
     """A playlist with its entities and the preview file shown for each."""
     playlist_id = object_id(playlist_id, "playlist", "list_playlists")

@@ -1,6 +1,10 @@
 """The shared FastMCP instance. Tool modules register on it when imported."""
 
+import functools
+
 from fastmcp import FastMCP
+from fastmcp.tools import ToolResult
+from mcp.types import TextContent
 
 mcp = FastMCP(
     "kitsu",
@@ -17,3 +21,24 @@ mcp = FastMCP(
 )
 
 READ_ONLY = {"readOnlyHint": True, "openWorldHint": True}
+
+
+def tool(**kwargs):
+    """Register a tool on `mcp` without publishing an output schema.
+
+    Results are still JSON; leaving their schemas out of the tool list roughly halves what every session
+    pays in context before any call (the field docs that matter are in the docstrings). Without a schema
+    an empty list would come back as no content at all, so it is sent as an explicit "[]".
+    """
+
+    def register(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kw):
+            result = fn(*args, **kw)
+            if isinstance(result, list) and not result:
+                return ToolResult(content=[TextContent(type="text", text="[]")])
+            return result
+
+        return mcp.tool(output_schema=None, **kwargs)(wrapper)
+
+    return register

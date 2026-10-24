@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import PeopleList, Person, PersonTask, PersonTaskBrief, PersonTaskList, Workload
@@ -19,7 +19,7 @@ def _person(p: dict, departments: dict[str, str], with_email: bool) -> Person:
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"people"})
+@tool(annotations=READ_ONLY, tags={"people"})
 def list_people(
     project: str | None = None,
     include_inactive: bool = False,
@@ -50,7 +50,7 @@ def list_people(
     return PeopleList(total=len(found), people=found[offset : offset + limit])
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"people", "tasks"})
+@tool(annotations=READ_ONLY, tags={"people", "tasks"})
 def get_person_tasks(
     person: str,
     done: bool = False,
@@ -99,7 +99,7 @@ def get_person_tasks(
     return PersonTaskList(total=len(tasks), tasks=rows)
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"people", "tasks", "reporting"})
+@tool(annotations=READ_ONLY, tags={"people", "tasks", "reporting"})
 def workload(project: str, task_types: list[str] | None = None) -> list[Workload]:
     """Open tasks per person on a project: counts, overdue, waiting for review, retakes, on hold,
     estimate vs. logged.
