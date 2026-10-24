@@ -310,3 +310,9 @@ class PlaylistItem(BaseModel):
 
 class PlaylistDetail(Playlist):
     items: list[PlaylistItem]
+
+
+class WriteResult(BaseModel):
+    ok: bool
+    message: str
+    task: TaskDetail | None = None
