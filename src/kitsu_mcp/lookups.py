@@ -3,7 +3,7 @@
 import difflib
 import threading
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp.exceptions import ToolError
 
@@ -11,6 +11,21 @@ from kitsu_mcp.client import KitsuClient, get_client
 from kitsu_mcp.config import get_settings
 
 Record = dict[str, Any]
+
+Role = Literal["omitted", "done", "on_hold", "retake", "waiting_review", "wip", "todo"]
+OPEN_ROLES: frozenset[str] = frozenset({"on_hold", "retake", "waiting_review", "wip", "todo"})
+"""Roles of tasks still to do. Omitted and done are closed."""
+DUE_ROLES: frozenset[str] = OPEN_ROLES - {"on_hold"}
+"""Open roles whose due date counts: a paused task is not overdue."""
+
+# Settings that assign roles, in precedence order, with the role they assign.
+_ROLE_SETTINGS: tuple[tuple[str, Role], ...] = (
+    ("omitted_statuses", "omitted"),
+    ("done_statuses", "done"),
+    ("on_hold_statuses", "on_hold"),
+    ("retake_statuses", "retake"),
+    ("review_statuses", "waiting_review"),
+)
 
 _SOURCES = {
     "projects": "data/projects",
@@ -58,19 +73,43 @@ class Lookups:
             return None
         return self.index(kind).get(record_id, {}).get(field)
 
-    def status_flag(self, status_id: str | None, flag: str) -> bool:
-        """A boolean flag of a task status: is_done, is_wip, is_retake, is_feedback_request."""
-        if not status_id:
-            return False
-        return bool(self.index("task_statuses").get(status_id, {}).get(flag))
+    def role(self, status_id: str | None) -> Role:
+        """What a task status means here: exactly one role, from the KITSU_*_STATUSES settings first, then
+        Kitsu's flags (done > retake > feedback request > in progress). Every count and filter uses this."""
+        return self.role_and_source(status_id)[0]
 
-    def is_omitted(self, status_id: str | None) -> bool:
-        """A done status that means the task was dropped (OMIT, N/A, ...), per KITSU_OMITTED_STATUSES."""
-        if not status_id:
-            return False
-        status = self.index("task_statuses").get(status_id, {})
-        names = {n.strip().lower() for n in self.client.settings.omitted_statuses.split(",") if n.strip()}
-        return bool({str(status.get("short_name") or "").lower(), str(status.get("name") or "").lower()} & names)
+    def role_and_source(self, status_id: str | None) -> tuple[Role, str]:
+        """The role and where it comes from: a setting name (e.g. "KITSU_DONE_STATUSES") or "kitsu flags"."""
+        status = self.index("task_statuses").get(status_id or "", {})
+        names = {str(status.get("short_name") or "").lower(), str(status.get("name") or "").lower()} - {""}
+        for setting, role in _ROLE_SETTINGS:
+            if names & _names(getattr(self.client.settings, setting)):
+                return role, f"KITSU_{setting.upper()}"
+        if status.get("is_done"):
+            return "done", "kitsu flags"
+        if status.get("is_retake"):
+            return "retake", "kitsu flags"
+        if status.get("is_feedback_request"):
+            return "waiting_review", "kitsu flags"
+        if status.get("is_wip"):
+            return "wip", "kitsu flags"
+        return "todo", "kitsu flags"
+
+    def unmatched_role_names(self) -> dict[str, list[str]]:
+        """Names in KITSU_*_STATUSES settings the user changed that match no status (likely typos).
+
+        Defaults list several spellings on purpose (pause, paused, ...), so they are not reported.
+        """
+        statuses = self.index("task_statuses").values()
+        known = {str(s.get(f) or "").lower() for s in statuses for f in ("short_name", "name")}
+        settings = self.client.settings
+        defaults = type(settings).model_fields
+        unmatched = {
+            f"KITSU_{setting.upper()}": sorted(_names(getattr(settings, setting)) - known)
+            for setting, _ in _ROLE_SETTINGS
+            if getattr(settings, setting) != defaults[setting].default
+        }
+        return {setting: names for setting, names in unmatched.items() if names}
 
     def person_name(self, person_id: str | None) -> str | None:
         if not person_id:
@@ -108,6 +147,10 @@ class Lookups:
 
     def asset_type(self, ref: str) -> Record:
         return self.resolve("asset_types", ref)
+
+
+def _names(setting: str) -> set[str]:
+    return {n.strip().lower() for n in setting.split(",") if n.strip()}
 
 
 def _describe(kind: str, record: Record) -> str:

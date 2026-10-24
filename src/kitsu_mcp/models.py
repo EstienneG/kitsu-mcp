@@ -30,10 +30,19 @@ class TaskStatus(BaseModel):
     id: str
     name: str
     short_name: str
+    role: str = Field(description="What it means here: omitted, done, on_hold, retake, waiting_review, wip or todo")
+    role_source: str = Field(description='"kitsu flags", or the KITSU_*_STATUSES setting that set the role')
     is_done: bool | None = None
     is_wip: bool | None = None
     is_retake: bool | None = None
     is_feedback_request: bool | None = None
+
+
+class TaskStatuses(BaseModel):
+    statuses: list[TaskStatus]
+    unmatched_settings: dict[str, list[str]] = Field(
+        default_factory=dict, description="Names in KITSU_*_STATUSES settings that match no status (typos?)"
+    )
 
 
 class Named(BaseModel):
@@ -101,9 +110,10 @@ class TaskRow(BaseModel):
 
 class AssigneeGroup(BaseModel):
     assignee: str
-    count: int
+    count: int = Field(description="All of this person's matching tasks")
     overdue: int
-    tasks: list[str] = Field(description="'entity / task type (status, due date)' for each task")
+    tasks: list[str] = Field(description="'entity / task type (status, due date)', at most tasks_per_group")
+    more: int = Field(0, description="Tasks not listed in `tasks` (raise tasks_per_group to see them)")
 
 
 class TaskList(BaseModel):
@@ -149,7 +159,7 @@ class AssetSummary(BaseModel):
     name: str
     type: str | None
     tasks: list[TaskSummary] | None = None
-    statuses: dict[str, str | None] | None = Field(default=None, description="Compact form: task type -> status")
+    statuses: dict[str, str | None] | None = Field(default=None, description='detail="compact": task type -> status')
 
 
 class AssetList(BaseModel):
@@ -183,7 +193,7 @@ class ShotSummary(BaseModel):
     frame_out: int | None
     nb_frames: int | None
     tasks: list[TaskSummary] | None = None
-    statuses: dict[str, str | None] | None = Field(default=None, description="Compact form: task type -> status")
+    statuses: dict[str, str | None] | None = Field(default=None, description='detail="compact": task type -> status')
 
 
 class ShotList(BaseModel):
@@ -241,8 +251,9 @@ class Workload(BaseModel):
     person: str
     open_tasks: int
     overdue: int
-    waiting_feedback: int = Field(description="Tasks in a feedback-request status (e.g. waiting for approval)")
+    waiting_feedback: int = Field(description="Open tasks waiting for review/approval")
     retakes: int
+    on_hold: int = Field(0, description="Open tasks paused (STAND BY, PAUSE, BLOCKED, ...)")
     estimation: float = Field(description="Minutes estimated over open tasks")
     logged: float = Field(description="Minutes logged over open tasks")
     next_due: str | None
@@ -256,7 +267,7 @@ class StatusCount(BaseModel):
 class TaskTypeProgress(BaseModel):
     task_type: str
     total: int
-    done: int = Field(description="Finished tasks, not counting omitted ones")
+    done: int = Field(description="Finished tasks (status role done), not counting omitted ones")
     omitted: int = Field(0, description="Dropped tasks (OMIT, N/A, ...), left out of done_ratio")
     done_ratio: float = Field(description="done / (total - omitted)")
     statuses: list[StatusCount]
@@ -273,10 +284,14 @@ class ProjectOverview(BaseModel):
     shots: int
     tasks: int
     omitted: int = Field(0, description="Dropped tasks (OMIT, N/A, ...), left out of done_ratio")
+    omitted_statuses: list[str] = Field(default_factory=list, description="Statuses counted as omitted")
     done_ratio: float = Field(description="Finished tasks / (tasks - omitted)")
-    overdue: int
-    waiting_feedback: int
+    done_improvable: int = Field(0, description="Done tasks that could still be improved (e.g. CBB)")
+    done_improvable_statuses: list[str] = Field(default_factory=list)
+    overdue: int = Field(description="Open tasks past their due date, not on hold")
+    waiting_feedback: int = Field(description="Open tasks waiting for review/approval")
     retakes: int
+    on_hold: int = Field(0, description="Open tasks paused (STAND BY, PAUSE, BLOCKED, ...)")
     unassigned_open: int
     estimation: float = Field(description="Minutes estimated over all tasks")
     logged: float = Field(description="Minutes logged over all tasks")

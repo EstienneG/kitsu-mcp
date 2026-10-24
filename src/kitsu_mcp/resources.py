@@ -15,9 +15,11 @@ def task_types_resource() -> list[dict]:
     return [t.model_dump() for t in list_task_types()]
 
 
-@mcp.resource("kitsu://task-statuses", mime_type="application/json", description="Task statuses and their flags")
-def task_statuses_resource() -> list[dict]:
-    return [s.model_dump() for s in list_task_statuses()]
+@mcp.resource(
+    "kitsu://task-statuses", mime_type="application/json", description="Task statuses with their Kitsu flags and role"
+)
+def task_statuses_resource() -> dict:
+    return list_task_statuses().model_dump()
 
 
 @mcp.resource(

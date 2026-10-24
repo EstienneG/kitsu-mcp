@@ -2,7 +2,7 @@
 
 import re
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastmcp.exceptions import ToolError
 from pydantic import Field
@@ -15,6 +15,8 @@ id_pattern = UUID
 MAX_LIMIT = 500
 
 Limit = Annotated[int, Field(ge=1, le=MAX_LIMIT, description=f"Page size, 1-{MAX_LIMIT}")]
+Detail = Literal["compact", "full"]
+"""Row width of list tools: "compact" (default) keeps what is needed to scan; "full" adds every field."""
 Offset = Annotated[int, Field(ge=0, description="Rows to skip, for paging")]
 
 

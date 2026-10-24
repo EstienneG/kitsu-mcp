@@ -8,7 +8,7 @@ from kitsu_mcp.formatters import comment, task_detail
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import AssigneeGroup, MyTask, StatusChange, TaskDetail, TaskHistory, TaskList, TaskRow
 from kitsu_mcp.production import EntityKind, TaskRecord, day, project_tasks
-from kitsu_mcp.validation import Limit, Offset, iso_date, object_id
+from kitsu_mcp.validation import MAX_LIMIT, Limit, Offset, iso_date, object_id
 
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
 
@@ -41,8 +41,10 @@ def search_tasks(
     overdue: bool = False,
     waiting_feedback: bool = False,
     include_done: bool = True,
+    include_omitted: bool = False,
     sort_by: SortKey = "due_date",
     group_by: Literal["assignee"] | None = None,
+    tasks_per_group: Annotated[int, Field(ge=1, le=MAX_LIMIT)] = 20,
     limit: Limit = 100,
     offset: Offset = 0,
 ) -> TaskList:
@@ -50,12 +52,15 @@ def search_tasks(
 
     project: name or ID. task_types: names or short names. statuses: status short names.
     assignee: person name, email or ID. group: asset type name or sequence name.
-    due_before / due_after: YYYY-MM-DD (inclusive). overdue: due date passed and status not done.
-    waiting_feedback: in a status that requests feedback (waiting for review/approval).
+    due_before / due_after: YYYY-MM-DD (inclusive). Status meanings follow each status's role (see
+    list_task_statuses): overdue = due date passed on a task still being worked on (not done, omitted or
+    on hold); waiting_feedback = role waiting_review; include_done=False drops done tasks; omitted tasks
+    (OMIT, N/A, ...) are left out unless include_omitted=True or asked for by status.
     Results are sorted by `sort_by` (missing values last); `total` counts all matches.
     group_by="assignee": instead of task rows, one compact line per task grouped by person (lighter
-    for "who owns what"); `total` still counts tasks, `groups` counts people, and limit/offset page
-    through the people.
+    for "who owns what"); each group lists at most tasks_per_group tasks (its count and overdue stay
+    exact, `more` says how many are not listed). `total` still counts tasks, `groups` counts people, and
+    limit/offset page through the people.
     """
     due_before = iso_date(due_before, "due_before") if due_before else None
     due_after = iso_date(due_after, "due_after") if due_after else None
@@ -80,20 +85,21 @@ def search_tasks(
             and (not due_before or (due is not None and due <= due_before))
             and (not due_after or (due is not None and due >= due_after))
             and (not overdue or record.is_overdue(lookups))
-            and (not waiting_feedback or lookups.status_flag(task.get("task_status_id"), "is_feedback_request"))
-            and (include_done or not record.is_done(lookups))
+            and (not waiting_feedback or record.role(lookups) == "waiting_review")
+            and (include_done or record.role(lookups) != "done")
+            and (include_omitted or bool(status_ids) or record.role(lookups) != "omitted")
         )
 
     records = [r for r in project_tasks(get_client(), lookups, project_id, entity_kind) if keep(r)]
     pairs = [(r.row(lookups), r.is_overdue(lookups)) for r in records]
     pairs.sort(key=lambda p: (getattr(p[0], sort_by) is None, getattr(p[0], sort_by) or "", p[0].entity or ""))
     if group_by == "assignee":
-        groups = _by_assignee(pairs)
+        groups = _by_assignee(pairs, tasks_per_group)
         return TaskList(total=len(pairs), groups=len(groups), by_assignee=groups[offset : offset + limit])
     return TaskList(total=len(pairs), tasks=[row for row, _ in pairs[offset : offset + limit]])
 
 
-def _by_assignee(pairs: list[tuple[TaskRow, bool]]) -> list[AssigneeGroup]:
+def _by_assignee(pairs: list[tuple[TaskRow, bool]], per_group: int) -> list[AssigneeGroup]:
     """Group (row, is_overdue) pairs by assignee, busiest first; a task with two assignees counts for both."""
     groups: dict[str, list[tuple[TaskRow, bool]]] = {}
     for row, late in pairs:
@@ -110,7 +116,8 @@ def _by_assignee(pairs: list[tuple[TaskRow, bool]]) -> list[AssigneeGroup]:
                 assignee=person,
                 count=len(items),
                 overdue=sum(late for _, late in items),
-                tasks=[line(r) for r, _ in items],
+                tasks=[line(r) for r, _ in items[:per_group]],
+                more=max(len(items) - per_group, 0),
             )
             for person, items in groups.items()
         ),

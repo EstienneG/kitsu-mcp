@@ -66,3 +66,25 @@ async def test_list_task_types_includes_types_used_but_not_declared(call, fake):
         "Compositing",
         "Modeling",
     ]
+
+
+async def test_group_by_caps_tasks_per_person(call):
+    result = await call("search_tasks", project="p-1", include_done=False, group_by="assignee", tasks_per_group=1)
+    bob = next(g for g in result["by_assignee"] if g["assignee"] == "Bob Leroy")
+    assert (bob["count"], len(bob["tasks"]), bob["more"], bob["overdue"]) == (2, 1, 1, 1)
+
+
+async def test_kitsu_get_caps_list_answers(call, fake):
+    fake.data["people"] += [{**fake.data["people"][0], "id": f"p{i}", "full_name": f"P{i}"} for i in range(300)]
+    result = await call("kitsu_get", path="data/persons", max_items=10)
+    assert result["truncated"] is True and (result["total"], result["returned"]) == (302, 10)
+    assert len(result["items"]) == 10
+    small = await call("kitsu_get", path="data/task-types")
+    assert isinstance(small, list) and len(small) == 4  # small answers come back unchanged
+
+
+async def test_kitsu_get_caps_answer_size(call, fake):
+    fake.data["people"] = [{**fake.data["people"][0], "id": f"p{i}", "bio": "x" * 2000} for i in range(60)]
+    result = await call("kitsu_get", path="data/persons", max_items=60)
+    assert result["truncated"] is True and result["returned"] < 60
+    assert len(str(result["items"])) < 60_000

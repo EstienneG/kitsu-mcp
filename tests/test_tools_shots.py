@@ -7,7 +7,7 @@ async def test_list_episodes_empty_for_short(call):
 
 
 async def test_list_shots(call):
-    result = await call("list_shots", project="p-1", sequence="sq010", compact=False)
+    result = await call("list_shots", project="p-1", sequence="sq010", detail="full")
     assert result["total"] == 2
     first = result["shots"][0]
     assert (first["name"], first["frame_in"], first["frame_out"], first["nb_frames"]) == ("SH010", 1, 48, 48)

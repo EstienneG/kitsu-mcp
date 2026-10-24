@@ -41,9 +41,27 @@ The password is stored in plain text in the agent's config file (e.g. `~/.vibe/c
 | `KITSU_VIDEO_CACHE_DIR` | system temp | Where the video tools cache movies (`kitsu-mcp-videos/`) |
 | `KITSU_VIDEO_CACHE_MB` | `1024` | Movie cache size; least recently used movies are deleted past it |
 | `KITSU_VIDEO_MAX_MB` | `500` | Largest movie the video tools download |
-| `KITSU_OMITTED_STATUSES` | `omit,na,n/a,omitted,cancelled,canceled` | Status names meaning "dropped"; progress ratios leave them out |
+| `KITSU_OMITTED_STATUSES` | `omit,na,n/a,omitted,cancelled,canceled` | Statuses meaning "dropped": left out of progress and open work |
+| `KITSU_DONE_STATUSES` | `cbb` | Statuses meaning "finished", whatever Kitsu flags (CBB: done, could be improved later) |
+| `KITSU_ON_HOLD_STATUSES` | `stand by,standby,pause,paused,blocked,on hold` | Open but paused: never overdue |
+| `KITSU_REVIEW_STATUSES` | (none) | Extra statuses meaning "waiting for review/approval" |
+| `KITSU_RETAKE_STATUSES` | (none) | Extra statuses meaning "sent back for changes" |
 
 Variables can also come from a `.env` file in the working directory.
+
+### Status roles
+
+Kitsu's flags on a status (done, retake, feedback request, in progress) do not always say what a studio
+means: OMIT is flagged done but means dropped, CBB is flagged retake *and* feedback request but means
+done-but-improvable. So every status gets exactly one **role** — `omitted`, `done`, `on_hold`, `retake`,
+`waiting_review`, `wip` or `todo` — and every count and filter uses it (progress, overdue, waiting for
+review, workload, search). A status listed in one of the `KITSU_*_STATUSES` settings above (names or short
+names, case-insensitive, checked in the order shown) takes that role; any other status gets it from
+Kitsu's flags, in the order done > retake > feedback request > in progress > to do.
+
+`list_task_statuses` shows each status's role and where it comes from, and reports configured names that
+match no status. `project_overview` reports which statuses it counted as omitted and as
+done-but-improvable.
 
 ## Development
 
@@ -67,7 +85,7 @@ Project, task type, status and person arguments take names (case-insensitive) or
 |---|---|
 | Meta | `whoami`, `kitsu_get` (raw read of any Zou `data/` route), `refresh_cache` |
 | Projects | `list_projects`, `list_task_types`, `list_task_statuses`, `list_asset_types`, `project_overview` |
-| Assets | `list_assets` (type, name and per-task-type status filters), `get_asset`, `get_asset_cast_in` |
+| Assets | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `get_asset`, `get_asset_cast_in` |
 | Shots | `list_episodes`, `list_sequences`, `list_shots`, `get_shot`, `get_shot_casting` |
 | Tasks | `search_tasks` (type, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
 | People | `list_people`, `get_person_tasks`, `workload` |

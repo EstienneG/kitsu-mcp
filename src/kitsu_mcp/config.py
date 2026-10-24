@@ -28,9 +28,19 @@ class Settings(BaseSettings):
     """Size of the movie cache; the least recently used movies are deleted past it."""
     video_max_mb: int = Field(500, gt=0)
     """Largest movie the video tools will download."""
+    # Status roles. Each is a comma-separated list of task status short names or names (case-insensitive).
+    # A listed status takes that role; any other status gets its role from Kitsu's flags. Checked in this
+    # order, so a status in two lists takes the first.
     omitted_statuses: str = "omit,na,n/a,omitted,cancelled,canceled"
-    """Comma-separated task status short names or names that mean "dropped", not "finished".
-    Kitsu flags them as done; progress ratios count them apart."""
+    """Dropped, not finished: left out of progress and open work (Kitsu flags them done)."""
+    done_statuses: str = "cbb"
+    """Finished, even if Kitsu flags them otherwise. CBB ("could be better") is done but improvable."""
+    on_hold_statuses: str = "stand by,standby,pause,paused,blocked,on hold"
+    """Open but paused: never counted as overdue or in progress."""
+    review_statuses: str = ""
+    """Waiting for review/approval, in addition to statuses Kitsu flags as feedback requests."""
+    retake_statuses: str = ""
+    """Sent back for changes, in addition to statuses Kitsu flags as retakes."""
 
 
 @lru_cache
