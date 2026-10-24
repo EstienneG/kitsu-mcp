@@ -14,6 +14,7 @@ import io
 import math
 import os
 import re
+import stat
 import tempfile
 import threading
 import time
@@ -220,13 +221,29 @@ def cache_dir() -> Path:
     """The movie cache of the current caller. Over HTTP each Kitsu user gets their own folder, so a movie
     fetched for one person is never served to another without Kitsu checking their access."""
     client = get_client()
-    path = _cache_root()
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = _private_dir(_cache_root(), parents=True)
     if client.credentials is not None:
-        users = path / "users"
-        users.mkdir(mode=0o700, exist_ok=True)
-        path = users / client.credentials.user_key[:32]
-        path.mkdir(mode=0o700, exist_ok=True)
+        path = _private_dir(_private_dir(path / "users") / client.credentials.user_key[:32])
+    return path
+
+
+def _private_dir(path: Path, parents: bool = False) -> Path:
+    """Create `path` (or accept it if it exists) as a real directory owned by us and readable only by us.
+
+    A shared temp dir could hold a folder someone else created first, world-writable or a symlink, to plant
+    or read movies; refuse it rather than use it.
+    """
+    path.mkdir(mode=0o700, parents=parents, exist_ok=True)
+    if os.name != "posix":
+        return path
+    info = path.lstat()
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        raise ToolError(
+            f"Video cache folder {path} is not a directory owned by this server's user; remove it or set "
+            "KITSU_VIDEO_CACHE_DIR to a private folder"
+        )
+    if stat.S_IMODE(info.st_mode) != 0o700:
+        path.chmod(0o700)
     return path
 
 
@@ -268,6 +285,8 @@ def _download(preview: dict, quality: Quality, path: Path) -> None:
             "(KITSU_VIDEO_MAX_MB); use quality='low'"
         )
     partial = path.with_name(f".{path.name}.{uuid.uuid4().hex}.part")
+    # Another user's eviction may have removed this (then empty) per-user folder since cache_dir().
+    _private_dir(path.parent)
     try:
         get_client().download(movie_route(preview, quality), partial, max_bytes=limit)
         partial.replace(path)
