@@ -163,6 +163,20 @@ class Lookups:
     def asset_type(self, ref: str) -> Record:
         return self.resolve("asset_types", ref)
 
+    def department(self, ref: str) -> Record:
+        return self.resolve("departments", ref)
+
+    def department_task_types(self, refs: list[str] | None) -> set[str] | None:
+        """IDs of the task types belonging to the given departments (names or IDs); None when no filter.
+
+        A task is in a department when its task type is: Kitsu links task types to departments, while people
+        can belong to several (or none), so they are not used.
+        """
+        if not refs:
+            return None
+        wanted = {self.department(ref)["id"] for ref in refs}
+        return {i for i, t in self.index("task_types").items() if t.get("department_id") in wanted}
+
 
 def names_in(setting: str) -> set[str]:
     """Normalized names in a comma-separated setting: lower case, single spaces."""

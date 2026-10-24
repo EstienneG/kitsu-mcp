@@ -18,9 +18,9 @@ ALICE, BOB = "person-alice", "person-bob"
 
 def seed() -> dict[str, Any]:
     task_types = [
-        {"id": TT_MODEL, "name": "Modeling", "short_name": "MOD", "for_entity": "Asset"},
-        {"id": TT_ANIM, "name": "Animation", "short_name": "ANIM", "for_entity": "Shot"},
-        {"id": TT_COMP, "name": "Compositing", "short_name": "COMP", "for_entity": "Shot"},
+        {"id": TT_MODEL, "name": "Modeling", "short_name": "MOD", "for_entity": "Asset", "department_id": "dep-model"},
+        {"id": TT_ANIM, "name": "Animation", "short_name": "ANIM", "for_entity": "Shot", "department_id": "dep-anim"},
+        {"id": TT_COMP, "name": "Compositing", "short_name": "COMP", "for_entity": "Shot", "department_id": "dep-comp"},
         {"id": "tt-old", "name": "Old", "short_name": "OLD", "for_entity": "Asset", "archived": True},
     ]
     statuses = [
@@ -383,7 +383,14 @@ def seed() -> dict[str, Any]:
             "for_client": False,
         },
     ]
+    departments = [
+        {"id": "dep-model", "name": "Modeling", "color": "#888", "archived": False},
+        {"id": "dep-anim", "name": "Animation", "color": "#888", "archived": False},
+        {"id": "dep-comp", "name": "Compositing", "color": "#888", "archived": False},
+        {"id": "dep-sound", "name": "Sound", "color": "#888", "archived": False},
+    ]
     return {
+        "departments": departments,
         "custom_fields": custom_fields,
         "task_types": task_types,
         "statuses": statuses,
@@ -620,7 +627,7 @@ class FakeClient:
             "data/projects/open": [p for p in d["projects"] if p["project_status_id"] == "ps-open"],
             "data/project-status": [{"id": "ps-open", "name": "Open"}, {"id": "ps-closed", "name": "Closed"}],
             "data/asset-types": d["asset_types"],
-            "data/departments": [{"id": "dep-anim", "name": "Animation"}],
+            "data/departments": d["departments"],
         }
         if path in simple:
             return simple[path]
