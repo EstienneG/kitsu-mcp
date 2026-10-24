@@ -29,9 +29,7 @@ def get_settings() -> Settings:
         return Settings()  # type: ignore[call-arg]
     except Exception as error:
         missing = [
-            f"KITSU_{e['loc'][0]}".upper()
-            for e in getattr(error, "errors", lambda: [])()
-            if e.get("type") == "missing"
+            f"KITSU_{e['loc'][0]}".upper() for e in getattr(error, "errors", lambda: [])() if e.get("type") == "missing"
         ]
         if missing:
             raise RuntimeError(f"Missing configuration: {', '.join(missing)}") from error
