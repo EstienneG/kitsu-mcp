@@ -33,3 +33,13 @@ async def call(fake):
             return json.loads(result.content[0].text)
 
         yield _call
+
+
+@pytest.fixture(autouse=True)
+def pinned_today(monkeypatch):
+    """Tests see 2026-10-15 as today: t-hero-mod (due 10-01, wfa) and t-sh010-comp (due 10-10) are overdue."""
+    from datetime import date
+
+    from kitsu_mcp import production
+
+    monkeypatch.setattr(production, "today", lambda: date(2026, 10, 15))

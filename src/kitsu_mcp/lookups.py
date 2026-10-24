@@ -57,6 +57,12 @@ class Lookups:
             return None
         return self.index(kind).get(record_id, {}).get(field)
 
+    def status_flag(self, status_id: str | None, flag: str) -> bool:
+        """A boolean flag of a task status: is_done, is_wip, is_retake, is_feedback_request."""
+        if not status_id:
+            return False
+        return bool(self.index("task_statuses").get(status_id, {}).get(flag))
+
     def person_name(self, person_id: str | None) -> str | None:
         if not person_id:
             return None

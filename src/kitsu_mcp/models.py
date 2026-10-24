@@ -75,6 +75,48 @@ class TaskDetail(BaseModel):
     comments: list[Comment] | None = None
 
 
+class TaskRow(BaseModel):
+    """A task with its entity context, as returned by searches."""
+
+    id: str
+    entity_id: str
+    entity: str | None
+    entity_kind: str = Field(description="asset or shot")
+    group: str | None = Field(description="Asset type, or episode/sequence for shots")
+    task_type: str | None
+    status: str | None
+    assignees: list[str]
+    due_date: str | None
+    estimation: float | None = Field(None, description="Minutes")
+    duration: float | None = Field(None, description="Minutes logged")
+    retake_count: int | None = None
+    last_comment_date: str | None = None
+
+
+class TaskList(BaseModel):
+    total: int = Field(description="Matches before limit/offset")
+    tasks: list[TaskRow]
+
+
+class StatusChange(BaseModel):
+    date: str | None
+    author: str | None
+    status: str | None
+    previous_status: str | None
+    text: str | None
+
+
+class TaskHistory(BaseModel):
+    id: str
+    entity: str | None
+    task_type: str | None
+    current_status: str | None
+    time_logged: float | None = Field(description="Minutes")
+    estimation: float | None = Field(description="Minutes")
+    retake_count: int | None
+    changes: list[StatusChange] = Field(description="Status changes, oldest first")
+
+
 class MyTask(BaseModel):
     id: str
     project: str | None
