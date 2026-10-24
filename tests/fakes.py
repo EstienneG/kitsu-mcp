@@ -2,10 +2,12 @@
 
 import copy
 import re
+from pathlib import Path
 from typing import Any
 
 from fastmcp.exceptions import ToolError
 
+from kitsu_mcp.client import NotFoundError, size_guard
 from kitsu_mcp.config import Settings
 
 PROJECT = "p-1"
@@ -181,6 +183,38 @@ def seed() -> dict[str, Any]:
                 "previews": [],
             },
         ],
+        "t-sh010-anim": [
+            {
+                "id": "c-anim-3",
+                "created_at": "2026-08-31T09:00:00",
+                "text": "Approved, the v1 00:00:01:12 (37) fix works.",
+                "person": {"id": BOB, "full_name": "Bob Leroy"},
+                "person_id": BOB,
+                "task_status": {"id": ST_DONE, "short_name": "done"},
+                "task_status_id": ST_DONE,
+                "previews": [],
+            },
+            {
+                "id": "c-anim-2",
+                "created_at": "2026-08-30T10:00:00",
+                "text": "v2: fixed the arm at frame 30",
+                "person": {"id": ALICE, "full_name": "Alice Martin"},
+                "person_id": ALICE,
+                "task_status": {"id": ST_WFA, "short_name": "wfa"},
+                "task_status_id": ST_WFA,
+                "previews": [{"id": "pf-sh010", "revision": 2}],
+            },
+            {
+                "id": "c-anim-1",
+                "created_at": "2026-08-20T10:00:00",
+                "text": "Arm pops at 00:00:01:00 and again around 2.5s; see drawing.",
+                "person": {"id": BOB, "full_name": "Bob Leroy"},
+                "person_id": BOB,
+                "task_status": {"id": ST_RETAKE, "short_name": "retake"},
+                "task_status_id": ST_RETAKE,
+                "previews": [{"id": "pf-sh010-v1", "revision": 1}],
+            },
+        ],
     }
     preview_files = {
         "pf-hero": {
@@ -199,15 +233,39 @@ def seed() -> dict[str, Any]:
         "pf-sh010": {
             "id": "pf-sh010",
             "task_id": "t-sh010-anim",
-            "revision": 1,
+            "revision": 2,
             "extension": "mp4",
-            "original_name": "sh010_anim_v001",
+            "original_name": "sh010_anim_v002",
             "is_movie": True,
             "status": "ready",
             "width": 1920,
             "height": 1080,
+            "duration": 3.0,
+            "file_size": 4000,
+            "annotations": None,
+            "data": {"original_file_size": 9000},
             "created_at": "2026-08-30T10:00:00",
             "validation_status": "neutral",
+        },
+        "pf-sh010-v1": {
+            "id": "pf-sh010-v1",
+            "task_id": "t-sh010-anim",
+            "revision": 1,
+            "extension": "mov",
+            "original_name": "sh010_anim_v001",
+            "is_movie": False,  # Kitsu's flag is unreliable: the extension says it is a movie
+            "status": "ready",
+            "width": 1920,
+            "height": 1080,
+            "duration": 2.0,
+            # Kitsu stores drawings by time; 1.0 s at 24 fps is frame 25, 2.0 s would be past the end.
+            "annotations": [
+                {"time": 1.0, "drawing": {"objects": [{"type": "path"}]}},
+                {"time": 0.5, "drawing": {"objects": []}},
+            ],
+            "data": {},
+            "created_at": "2026-08-20T10:00:00",
+            "validation_status": "rejected",
         },
     }
     casting = {
@@ -261,6 +319,8 @@ class FakeClient:
         self.data = data or seed()
         self.settings = Settings(host="http://kitsu.test/api", user="u", password="p")  # type: ignore[arg-type]
         self.calls: list[tuple[str, str, Any]] = []
+        self.movies: dict[str, bytes] = {}
+        """Movie files by route (e.g. movies/low/preview-files/<id>.mp4), served by download()."""
 
     # --- helpers -----------------------------------------------------------------
     def _by_id(self, kind: str) -> dict[str, dict]:
@@ -307,6 +367,18 @@ class FakeClient:
     def get_bytes(self, path: str) -> bytes:
         self.calls.append(("GET", path, None))
         return b"\x89PNG fake " + path.encode()
+
+    def download(self, path: str, dest: Path, max_bytes: int | None = None) -> int:
+        """Serve `movies` (route → bytes), honouring the size cap like the real client."""
+        self.calls.append(("GET", path, None))
+        if path not in self.movies:
+            raise NotFoundError(f"Not found: {path} (wrong ID, or the route does not exist)")
+        data = self.movies[path]
+        with dest.open("wb") as target:
+            for start in range(0, len(data), 8192):
+                target.write(data[start : start + 8192])
+                size_guard(path, max_bytes)(min(start + 8192, len(data)), 0)
+        return len(data)
 
     def post(self, path: str, data: Any) -> Any:
         """Apply the writes the tools send, the way Zou does, so tests see their effect."""

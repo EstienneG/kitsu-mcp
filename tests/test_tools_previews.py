@@ -26,7 +26,7 @@ async def test_get_preview_without_preview(call):
 
 async def test_get_preview_file_metadata(call):
     meta = await call("get_preview_file", preview_file_id="pf-sh010")
-    assert (meta["revision"], meta["is_movie"], meta["extension"], meta["is_video"]) == (1, True, "mp4", True)
+    assert (meta["revision"], meta["is_movie"], meta["extension"], meta["is_video"]) == (2, True, "mp4", True)
     assert "get_video_frames" in meta["note"]
     image = await call("get_preview_file", preview_file_id="pf-hero")
     assert (image["is_video"], image["note"]) == (False, None)
