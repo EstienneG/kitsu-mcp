@@ -13,10 +13,20 @@ Record = dict[str, Any]
 
 _SOURCES = {
     "projects": "data/projects",
+    "project_statuses": "data/project-status",
     "task_types": "data/task-types",
     "task_statuses": "data/task-status",
     "people": "data/persons",
     "asset_types": "data/asset-types",
+}
+
+_LABELS = {
+    "projects": "project",
+    "project_statuses": "project status",
+    "task_types": "task type",
+    "task_statuses": "task status",
+    "people": "person",
+    "asset_types": "asset type",
 }
 
 
@@ -61,7 +71,7 @@ class Lookups:
         matches = [r for r in records.values() if any(str(r.get(f) or "").lower() == wanted for f in fields)]
         if len(matches) == 1:
             return matches[0]
-        label = kind.replace("_", " ").rstrip("s")
+        label = _LABELS[kind]
         if matches:
             raise ToolError(f"Ambiguous {label} '{ref}': matches IDs {', '.join(m['id'] for m in matches)}")
         options = sorted({str(r.get(fields[0])) for r in records.values() if r.get(fields[0])})
