@@ -134,6 +134,7 @@ def compare_revisions(
     percentages, at most 8). Moments are matched by time, so revisions of different lengths line up
     by timecode; percentages are applied to each movie.
     """
+    video.require()
     if task_id and (preview_file_a or preview_file_b):
         raise ToolError("Pass either task_id or preview_file_a and preview_file_b")
     if task_id:
@@ -147,7 +148,6 @@ def compare_revisions(
         raise ToolError(f"At most {limit} moments when comparing (got {len(frames)})")
     if not 1 <= n <= limit:
         raise ToolError(f"n must be between 1 and {limit}")
-    video.require()
     sides = []
     for raw in (raw_a, raw_b):
         path = video.fetch(raw, quality)
@@ -195,7 +195,7 @@ def review_video(
     max_frames: int = 8,
     quality: Quality = "low",
     format: ImageFormat = "jpeg",
-) -> list[str | Image]:
+) -> list[str | Image] | str:
     """A task's latest movie with the frames its comments point at, for reviewing feedback.
 
     Reads the task's comments (newest first) and finds the frames they reference: Kitsu timecode
@@ -204,9 +204,9 @@ def review_video(
     referenced frame (at most max_frames, 1-16, newest comments first). Pass preview_file_id to
     review another revision than the latest.
     """
+    video.require()
     if not 1 <= max_frames <= video.MAX_FRAMES:
         raise ToolError(f"max_frames must be between 1 and {video.MAX_FRAMES}")
-    video.require()
     client = get_client()
     if preview_file_id:
         preview = video.resolve_preview(preview_file_id, None)
@@ -262,6 +262,8 @@ def review_video(
             {"note": "No comment references a frame; use get_video_contact_sheet for an overview."} if not shown else {}
         ),
     }
+    if not shown:
+        return json.dumps(summary, ensure_ascii=False)
     result: list[str | Image] = [json.dumps(summary, ensure_ascii=False)]
     for frame in shown:
         label = video.frame_label(frame, probe.fps, f"v{revision} " if revision is not None else "")
