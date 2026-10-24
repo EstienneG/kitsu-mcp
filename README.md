@@ -84,6 +84,7 @@ way.
 | `KITSU_ON_HOLD_STATUSES` | `stand by,standby,pause,paused,blocked,on hold` | Open but paused: never overdue |
 | `KITSU_REVIEW_STATUSES` | (none) | Extra statuses meaning "waiting for review/approval" |
 | `KITSU_RETAKE_STATUSES` | (none) | Extra statuses meaning "sent back for changes" |
+| `KITSU_DRY_RUN_LOG` | (none) | JSONL file each write-tool dry run is appended to |
 
 Variables can also come from a `.env` file in the working directory.
 
@@ -110,9 +111,9 @@ done-but-improvable.
 
 Layout (`src/kitsu_mcp/`): `config.py` settings, `client.py` HTTP client (login, re-login, retries,
 error mapping), `lookups.py` cached reference data and name resolution, `models.py` output schemas,
-`formatters.py` payload → model conversion, `production.py` project-wide task views, `tools/` one
-module per domain, `resources.py`, `prompts.py`, `auth.py` per-caller credentials, `http.py` HTTP mode
-(hidden local tools, `/health`, TLS guard), `links.py` Kitsu web links.
+`formatters.py` payload → model conversion, `production.py` project-wide task views, `plans.py` write plans
+(dry run), `tools/` one module per domain, `resources.py`, `prompts.py`, `auth.py` per-caller credentials,
+`http.py` HTTP mode (hidden local tools, `/health`, TLS guard), `links.py` Kitsu web links.
 
 Release: bump `version` in `pyproject.toml`, then `uv build && uv publish`.
 
@@ -135,6 +136,14 @@ Project, task type, status and person arguments take names (case-insensitive) or
 **Links:** detail results carry a `url` to the Kitsu page (asset, shot, task, preview in the player, playlist),
 and preview metadata a `download_url` to the original upload. They open in a browser signed in to Kitsu, so
 movies are watched and downloaded there rather than passed through the server.
+
+**Dry run.** Every write tool takes `dry_run=True`: it runs the same lookups and checks with reads only and
+returns the plan instead of writing: `would` (the action in one line), `requests` (method, path and payload,
+exactly what the real call sends), `before`/`after` for the fields that change (status, assignees, dates,
+estimate, time logged), and `warnings` (e.g. Kitsu may refuse a status your role cannot set). If a check fails
+(archived status, inactive person, start date after due date, over 24 h logged in a day), `verdict` is
+`would_fail` with the `reason`, and the real call refuses with the same reason. Invalid arguments (bad IDs,
+unknown names) are errors either way. Agents are told to dry-run first and show the user the plan.
 
 **Resources:** `kitsu://projects`, `kitsu://task-types`, `kitsu://task-statuses`,
 `kitsu://projects/{project}/overview`, `kitsu://tasks/{task_id}`.
