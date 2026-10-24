@@ -93,6 +93,10 @@ Project, task type, status and person arguments take names (case-insensitive) or
 | Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | Write (opt-in) | `add_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time` |
 
+**Links:** detail results carry a `url` to the Kitsu page (asset, shot, task, preview in the player, playlist),
+and preview metadata a `download_url` to the original upload. They open in a browser signed in to Kitsu, so
+movies are watched and downloaded there rather than passed through the server.
+
 **Resources:** `kitsu://projects`, `kitsu://task-types`, `kitsu://task-statuses`,
 `kitsu://projects/{project}/overview`, `kitsu://tasks/{task_id}`.
 

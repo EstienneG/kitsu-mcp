@@ -104,6 +104,7 @@ class TaskDetail(BaseModel):
     last_comment_date: str | None = None
     last_preview_file_id: str | None = Field(None, description="Latest upload; video tools accept it")
     comments: list[Comment] | None = None
+    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
 
 class TaskBrief(BaseModel):
@@ -197,6 +198,7 @@ class AssetDetail(BaseModel):
     project_id: str | None
     data: dict[str, Any] | None
     tasks: list[TaskSummary]
+    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
 
 class Sequence(BaseModel):
@@ -228,6 +230,7 @@ class ShotDetail(ShotSummary):
     description: str | None
     fps: float | None
     data: dict[str, Any] | None
+    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
 
 class CastAsset(BaseModel):
@@ -354,6 +357,8 @@ class PreviewFile(BaseModel):
     )
     duration: float | None = Field(default=None, description="Seconds, for movies")
     note: str | None = None
+    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
+    download_url: str | None = Field(None, description="Original upload; opens in a browser signed in to Kitsu")
 
 
 class RecentPreview(BaseModel):
@@ -405,6 +410,7 @@ class Playlist(BaseModel):
     for_client: bool | None
     task_type: str | None
     updated_at: str | None
+    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
 
 class PlaylistList(BaseModel):
@@ -428,6 +434,7 @@ class VideoInfo(BaseModel):
     revision: int | None
     original_name: str | None
     extension: str | None
+    download_url: str | None = Field(None, description="Original upload; opens in a browser signed in to Kitsu")
     quality: str = Field(description="Which file was probed: low (Kitsu's web-playback encode) or original")
     file_bytes: int
     codec: str | None
