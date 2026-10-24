@@ -113,14 +113,47 @@ def resolve_preview(preview_file_id: str | None, entity_id: str | None) -> dict:
             f"Preview file {preview_file_id} is not a video (extension {extension(preview) or 'unknown'}); "
             "use get_preview_file with show=True to see it"
         )
+    if is_broken(preview):
+        raise ToolError(f"Preview file {preview_file_id} is marked broken in Kitsu (its processing failed)")
     return preview
 
 
+def is_broken(preview: dict) -> bool:
+    """Kitsu marks previews whose processing failed as `broken`; they have no playable movie or image."""
+    return preview.get("status") == "broken"
+
+
 def task_videos(task_id: str) -> list[dict]:
-    """Movie previews of a task, newest revision first."""
+    """Playable movie previews of a task, newest revision first; within a revision, by upload position.
+
+    A revision can hold several files (position 1, 2, ...), e.g. a playblast and a render. Kitsu shows
+    position 1 as the revision's main file.
+    """
     previews = get_client().get(f"data/tasks/{check_id(task_id, 'task ID')}/previews")
-    videos = [p for p in previews if is_video(p)]
-    return sorted(videos, key=lambda p: (p.get("revision") or 0, p.get("created_at") or ""), reverse=True)
+    videos = [p for p in previews if is_video(p) and not is_broken(p)]
+    return sorted(
+        videos,
+        key=lambda p: (-(p.get("revision") or 0), p.get("position") or 1, p.get("created_at") or ""),
+    )
+
+
+def latest_revisions(task_id: str, count: int) -> list[dict]:
+    """The main movie (lowest position) of each of the `count` latest distinct revisions, newest first."""
+    picked: dict[int, dict] = {}
+    for preview in task_videos(task_id):
+        picked.setdefault(preview.get("revision") or 0, preview)
+        if len(picked) == count:
+            break
+    return list(picked.values())
+
+
+def original_size(preview: dict) -> int | None:
+    """Bytes of the uploaded file. Zou's `file_size` is the original's size; `data.original_file_size`
+    is not reliable (it can be far smaller than the uploaded file)."""
+    for value in (preview.get("file_size"), (preview.get("data") or {}).get("original_file_size")):
+        if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
+            return int(value)
+    return None
 
 
 def movie_route(preview: dict, quality: Quality) -> str:
@@ -165,7 +198,7 @@ def fetch(preview: dict, quality: Quality = "low") -> Path:
             os.utime(path)  # mark as recently used
             return path
         limit = max_download_bytes()
-        known = (preview.get("data") or {}).get("original_file_size") if quality == "original" else None
+        known = original_size(preview) if quality == "original" else None
         if known and known > limit:
             raise ToolError(
                 f"The original movie is {known / 2**20:.0f} MB, over the {limit / 2**20:.0f} MB cap "
@@ -277,11 +310,14 @@ def parse_moment(spec: int | float | str, fps: float, frame_count: int) -> int:
     """A 1-based frame from a frame number, timecode, time or percentage.
 
     Accepted: 37 or "37" or "f37" (frame number), "00:00:01:12" (HH:MM:SS:FF timecode), "0:01.5" or
-    "00:00:01.5" (M:SS / H:MM:SS time), 1.5 or "1.5s" (seconds), "50%" (of the duration).
+    "00:00:01.5" (M:SS / H:MM:SS time), 1.5 or "1.5s" (seconds; a whole number like 27.0 is a frame,
+    use "27s" for seconds), "50%" (of the duration).
     """
     frame: int
     if isinstance(spec, bool):
         raise ToolError(f"Invalid frame reference: {spec!r}")
+    if isinstance(spec, float) and spec.is_integer():
+        spec = int(spec)  # JSON clients may send 27.0 for frame 27; whole seconds need "27s"
     if isinstance(spec, int):
         frame = spec
     elif isinstance(spec, float):
@@ -320,7 +356,7 @@ def parse_moments(specs: list[int | float | str], fps: float, frame_count: int) 
         raise ToolError("Give at least one frame reference")
     if len(specs) > MAX_FRAMES:
         raise ToolError(f"At most {MAX_FRAMES} frames per call (got {len(specs)})")
-    return [parse_moment(s, fps, frame_count) for s in specs]
+    return list(dict.fromkeys(parse_moment(s, fps, frame_count) for s in specs))
 
 
 def even_frames(n: int, frame_count: int) -> list[int]:
@@ -345,7 +381,7 @@ class Reference:
 
 _KITSU_TAG = re.compile(r"v(\d+) (?:\d+:)?\d+:\d+[.:]\d+ \((\d+)\)")
 _TEXT_TIMECODE = re.compile(r"(?<![\d:])(\d{1,2}:\d{2}:\d{2}[:;]\d{1,2})(?![\d:])")
-_TEXT_FRAME = re.compile(r"\b(?:frames?|frm|fr|f|images?|img)\s*#?\s*(\d{1,6})\b", re.IGNORECASE)
+_TEXT_FRAME = re.compile(r"\b(?:frames?|frm|fr|f)\s*#?\s*(\d{1,6})\b", re.IGNORECASE)
 _TEXT_SECONDS = re.compile(r"(?<![\w.:])(\d+(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)\b", re.IGNORECASE)
 
 
@@ -477,6 +513,7 @@ def grid(
     columns: int,
     aspect: float,
     headers: list[str] | None = None,
+    empty_label: str | None = "past end",
 ) -> PILImage:
     """Lay labelled tiles out in a grid that fits within MAX_SHEET_SIDE. `aspect` is height / width."""
     from PIL import Image as PIL
@@ -503,9 +540,15 @@ def grid(
         for c, text in enumerate(headers):
             draw.text((gap + c * (width + gap) + 4, 3), text, fill=(255, 220, 120), font=_font(header - 6))
     for i, cell in enumerate(cells):
-        if cell is None:
-            continue
         r, c = divmod(i, columns)
+        if cell is None:
+            if empty_label:
+                draw = ImageDraw.Draw(sheet)
+                x, y = gap + c * (width + gap), header + gap + r * (tile_h + gap)
+                draw.text(
+                    (x + 8, y + height // 2), empty_label, fill=(150, 150, 150), font=_font(_bar_height(width) - 6)
+                )
+            continue
         sheet.paste(
             labelled(cell[0], cell[1], width, height), (gap + c * (width + gap), header + gap + r * (tile_h + gap))
         )
