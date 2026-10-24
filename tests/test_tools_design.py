@@ -149,3 +149,13 @@ async def test_list_people_and_playlists_page(call):
     assert people["total"] == 2 and [p["full_name"] for p in people["people"]] == ["Bob Leroy"]
     playlists = await call("list_playlists", project="p-1", limit=1)
     assert playlists["total"] == 1 and len(playlists["playlists"]) == 1
+
+
+async def test_project_overview_task_type_filters(call):
+    everything = await call("project_overview", project="p-1")
+    shots_only = await call("project_overview", project="p-1", exclude_task_types=["Modeling"])
+    assert (everything["tasks"], shots_only["tasks"]) == (5, 3)
+    assert shots_only["assets"] == everything["assets"]  # entity counts are not filtered
+    assert {t["task_type"] for t in shots_only["by_task_type"]} == {"Animation", "Compositing"}
+    anim = await call("project_overview", project="p-1", task_types=["ANIM"])
+    assert (anim["tasks"], anim["done_ratio"]) == (2, 0.5)
