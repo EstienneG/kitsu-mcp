@@ -7,8 +7,17 @@ from kitsu_mcp.server import mcp
 async def test_get_preview_returns_image(fake):
     async with Client(mcp) as client:
         result = await client.call_tool("get_preview", {"entity_id": "a-hero"})
-    assert result.content[0].type == "image"
-    assert fake.calls[-1][1] == "pictures/thumbnails/preview-files/pf-hero.png"
+    assert [c.type for c in result.content] == ["image"]
+    assert ("GET", "pictures/thumbnails/preview-files/pf-hero.png", None) in fake.calls
+
+
+async def test_get_preview_of_a_video_points_to_the_video_tools(fake):
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_preview", {"entity_id": "s-1"})
+        shown = await client.call_tool("get_preview_file", {"preview_file_id": "pf-sh010", "show": True})
+    for r in (result, shown):
+        assert [c.type for c in r.content] == ["image", "text"]
+        assert "get_video_contact_sheet" in r.content[1].text
 
 
 async def test_get_preview_without_preview(call):
@@ -17,7 +26,15 @@ async def test_get_preview_without_preview(call):
 
 async def test_get_preview_file_metadata(call):
     meta = await call("get_preview_file", preview_file_id="pf-sh010")
-    assert (meta["revision"], meta["is_movie"], meta["extension"]) == (1, True, "mp4")
+    assert (meta["revision"], meta["is_movie"], meta["extension"], meta["is_video"]) == (1, True, "mp4", True)
+    assert "get_video_frames" in meta["note"]
+    image = await call("get_preview_file", preview_file_id="pf-hero")
+    assert (image["is_video"], image["note"]) == (False, None)
+
+
+async def test_get_preview_file_detects_video_by_extension(call, fake):
+    fake.data["preview_files"]["pf-sh010"]["is_movie"] = False  # Kitsu reports False on real mp4s
+    assert (await call("get_preview_file", preview_file_id="pf-sh010"))["is_video"]
 
 
 async def test_list_task_previews(call):

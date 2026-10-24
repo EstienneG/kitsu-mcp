@@ -38,6 +38,9 @@ The password is stored in plain text in the agent's config file (e.g. `~/.vibe/c
 | `KITSU_CACHE_TTL` | `300` | Seconds to cache projects, task types, statuses, people |
 | `KITSU_TIMEOUT` | `30` | Per-request timeout (seconds) |
 | `KITSU_MAX_RETRIES` | `3` | Attempts for reads failing with a server or network error |
+| `KITSU_VIDEO_CACHE_DIR` | system temp | Where the video tools cache movies (`kitsu-mcp-videos/`) |
+| `KITSU_VIDEO_CACHE_MB` | `1024` | Movie cache size; least recently used movies are deleted past it |
+| `KITSU_VIDEO_MAX_MB` | `500` | Largest movie the video tools download |
 
 Variables can also come from a `.env` file in the working directory.
 
@@ -74,4 +77,27 @@ Project, task type, status and person arguments take names (case-insensitive) or
 **Resources:** `kitsu://projects`, `kitsu://task-types`, `kitsu://task-statuses`,
 `kitsu://projects/{project}/overview`, `kitsu://tasks/{task_id}`.
 
-**Prompts:** `project_status_report`, `review_queue`, `my_day`, `person_summary`.
+**Prompts:** `project_status_report`, `review_queue`, `my_day`, `person_summary`, `review_shot`.
+
+## Video
+
+The video tools look inside movie previews. They need the optional `video` extra (PyAV, which
+bundles ffmpeg, and Pillow), so no system ffmpeg is required:
+
+    uvx --from 'kitsu-mcp[video]' kitsu-mcp      # or: pip install 'kitsu-mcp[video]'
+
+Use that as the command when registering the server (e.g. `-- uvx --from 'kitsu-mcp[video]' kitsu-mcp`
+for Claude Code). Without the extra the tools are still listed but answer with an error saying how
+to install it (`download_video` works either way). `get_preview` and `get_preview_file` say when a
+preview is a video.
+
+- Movies are fetched at Kitsu's low-resolution playback quality by default (`quality="original"` for
+  the uploaded file) and cached per preview file and quality (see the `KITSU_VIDEO_*` settings).
+- Tools take a `preview_file_id`, or an `entity_id` (shot or asset) to use its current preview.
+- Frames are numbered from 1, like Kitsu's player. Frame arguments accept frame numbers (`37`),
+  timecodes (`"00:00:01:12"`, HH:MM:SS:FF), times (`"1.5s"`) and percentages (`"50%"`).
+  `review_video` finds the frames a task's comments point at: Kitsu's `v3 00:00:01:12 (37)` tags,
+  timecodes, "frame 37", "2.5s", and frames with drawn annotations.
+- Limits: at most 16 frames per call, grids at most 1568 px on a side, single frames at most
+  1280 px. The agent only sees sampled still frames: no motion in between and no audio. Every image
+  costs context, so start with `get_video_contact_sheet` and zoom in with `get_video_frames`.

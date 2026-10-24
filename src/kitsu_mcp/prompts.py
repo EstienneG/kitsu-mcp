@@ -47,3 +47,21 @@ def person_summary(person: str, project: str | None = None) -> str:
         "completions). Report open tasks by status, anything overdue or in retake, estimate vs. time logged, "
         "and what they finished recently."
     )
+
+
+@mcp.prompt(tags={"video"})
+def review_shot(shot_id: str, task_type: str | None = None) -> str:
+    """Review a shot's latest movie against the feedback on it."""
+    task = f"its {task_type} task" if task_type else "the task with the most recent comments"
+    return (
+        f"Review the latest movie of the shot with ID '{shot_id}' (find IDs with list_shots).\n"
+        f"1. Call get_shot to find {task}. Call get_video_info with entity_id='{shot_id}' for the duration, "
+        "fps and frame count.\n"
+        "2. Call get_video_contact_sheet (n=12) for an overview and describe what happens in the shot.\n"
+        "3. Call get_task on the task to read its comments, then review_video on the task to see the frames the "
+        "comments point at (timecodes, frame numbers, drawn annotations).\n"
+        "4. For a closer look at a moment call get_video_frames; if the task has an earlier movie revision, "
+        "compare_revisions shows what changed.\n"
+        "Report, per comment: the feedback, the frames it refers to, and whether the latest movie seems to address "
+        "it. Flag uncertain observations: you only see sampled still frames and cannot hear the audio."
+    )
