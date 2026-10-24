@@ -4,7 +4,7 @@ from kitsu_mcp.app import READ_ONLY, mcp
 from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import Person, PersonTask, Workload
-from kitsu_mcp.production import day, project_tasks
+from kitsu_mcp.production import assigned_tasks, day, project_tasks
 from kitsu_mcp.validation import Limit
 
 
@@ -51,12 +51,13 @@ def get_person_tasks(
 ) -> list[PersonTask]:
     """List the tasks assigned to a person (name, email or ID): open ones, or done ones with done=True.
 
-    Open tasks are sorted by due date; done tasks most recent first. At most `limit` (default 50).
+    Open and done follow the status roles (list_task_statuses), like workload and project_overview:
+    CBB is done, omitted tasks are in neither list. Open tasks are sorted by due date; done tasks most
+    recent first. At most `limit` (default 50).
     """
     lookups = get_lookups()
     person_id = lookups.person(person)["id"]
     project_id = lookups.project(project)["id"] if project else None
-    route = "done-tasks" if done else "tasks"
     tasks = [
         PersonTask(
             id=t["id"],
@@ -71,7 +72,7 @@ def get_person_tasks(
             duration=t.get("duration"),
             last_comment_date=t.get("last_comment_date"),
         )
-        for t in get_client().get(f"data/persons/{person_id}/{route}")
+        for t in assigned_tasks(get_client(), lookups, person_id, done)
         if project_id is None or t.get("project_id") == project_id
     ]
     if done:

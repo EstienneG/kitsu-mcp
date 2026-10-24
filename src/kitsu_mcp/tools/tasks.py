@@ -7,7 +7,7 @@ from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import comment, task_detail
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import AssigneeGroup, MyTask, StatusChange, TaskDetail, TaskHistory, TaskList, TaskRow
-from kitsu_mcp.production import EntityKind, TaskRecord, day, project_tasks
+from kitsu_mcp.production import EntityKind, TaskRecord, assigned_tasks, day, project_tasks
 from kitsu_mcp.validation import MAX_LIMIT, Limit, Offset, iso_date, object_id
 
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
@@ -153,7 +153,8 @@ def task_history(task_id: str) -> TaskHistory:
 
 @mcp.tool(annotations=READ_ONLY, tags={"tasks"})
 def my_tasks() -> list[MyTask]:
-    """List open tasks assigned to the logged-in user."""
+    """List open tasks assigned to the logged-in user (open per the status roles, like workload)."""
+    client = get_client()
     return [
         MyTask(
             id=t["id"],
@@ -164,5 +165,5 @@ def my_tasks() -> list[MyTask]:
             status=t.get("task_status_short_name"),
             due_date=day(t.get("due_date")),
         )
-        for t in get_client().get("data/user/tasks")
+        for t in assigned_tasks(client, get_lookups(), client.user_id(), done=False)
     ]

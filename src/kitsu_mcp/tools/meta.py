@@ -51,29 +51,49 @@ _MAX_CHARS = 50_000
 
 
 def _bounded(answer: Any, max_items: int) -> Any:
-    """Keep a raw answer small enough for a model's context: cap list length, then total size."""
+    """Keep a raw answer small enough for a model's context and still valid data.
+
+    Lists (top level, or the list values of a top-level dict such as {"data": [...]}) keep at most
+    max_items items, fewer if they are still over the size cap. Anything else over the cap, or a single
+    item that alone is over it, is replaced by a note with its size.
+    """
     if isinstance(answer, list):
-        items = answer[:max_items]
-        while len(items) > 1 and len(json.dumps(items, default=str)) > _MAX_CHARS:
-            items = items[: len(items) // 2]
-        if len(items) < len(answer):
-            return {
-                "truncated": True,
-                "total": len(answer),
-                "returned": len(items),
-                "items": items,
-                "hint": "Narrow with params, page with the typed tools, or raise max_items for small items.",
-            }
-        return answer
-    text = json.dumps(answer, default=str)
-    if len(text) > _MAX_CHARS:
-        return {
-            "truncated": True,
-            "chars": len(text),
-            "preview": text[:_MAX_CHARS],
-            "hint": "The answer is too large to return whole; use a typed tool or a narrower route.",
-        }
-    return answer
+        return _bounded_list(answer, max_items)
+    if isinstance(answer, dict) and any(isinstance(v, list) for v in answer.values()):
+        bounded = {k: _bounded_list(v, max_items) if isinstance(v, list) else v for k, v in answer.items()}
+        if _size(bounded) <= _MAX_CHARS:
+            return bounded
+        return _too_big(answer)
+    return answer if _size(answer) <= _MAX_CHARS else _too_big(answer)
+
+
+def _bounded_list(items: list, max_items: int) -> Any:
+    kept = items[:max_items]
+    while kept and _size(kept) > _MAX_CHARS:
+        kept = kept[: len(kept) // 2]
+    if len(kept) == len(items):
+        return items
+    return {
+        "truncated": True,
+        "total": len(items),
+        "returned": len(kept),
+        "items": kept,
+        "hint": "Narrow with params, page with the typed tools, or raise max_items for small items."
+        if kept
+        else "Even one item is over the size limit; use a typed tool or a narrower route.",
+    }
+
+
+def _size(value: Any) -> int:
+    return len(json.dumps(value, default=str))
+
+
+def _too_big(answer: Any) -> dict:
+    return {
+        "truncated": True,
+        "chars": _size(answer),
+        "hint": "The answer is too large to return; use a typed tool, narrower params or a narrower route.",
+    }
 
 
 @mcp.tool(annotations={"readOnlyHint": True, "idempotentHint": True}, tags={"meta"})
