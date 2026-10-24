@@ -1,5 +1,8 @@
 """Output-shape features: compact lists, grouping, feedback filter, dates, emails, skip counts."""
 
+import pytest
+from fastmcp.exceptions import ToolError
+
 
 async def test_list_shots_and_assets_compact(call):
     shots = await call("list_shots", project="p-1")
@@ -169,3 +172,79 @@ async def test_whoami_describes_the_server(call, fake):
     assert server["max_page_size"] == 500 and server["version"]
     assert server["status_role_settings"]["KITSU_DONE_STATUSES"] == ["cbb"]
     assert "password" not in str(result).lower() and server["kitsu_host"] != "p"
+
+
+@pytest.mark.parametrize(
+    "wanted, project, expected",
+    [
+        (["Set"], ["Set Dressing", "Asset Set", "Sunset"], {"set dressing"}),
+        (["FX"], ["SFX", "FX"], {"fx"}),
+        (["FX"], ["SFX"], None),  # no whole-word match: an error for an include filter
+        (["character"], ["Characters"], {"characters"}),
+        (["Characters"], ["Characters - PFE 2028"], {"characters - pfe 2028"}),
+    ],
+)
+def test_match_types_by_whole_words(wanted, project, expected):
+    from kitsu_mcp.tools.assets import match_types
+
+    if expected is None:
+        with pytest.raises(ToolError):
+            match_types(wanted, project, set(project), strict=True)
+    else:
+        assert match_types(wanted, project, set(project), strict=True) == expected
+
+
+async def test_excluding_a_studio_type_the_project_lacks_is_fine(call, fake):
+    """Agents reuse exclude lists across projects; only names unknown studio-wide are errors."""
+    fake.data["asset_types"].append({"id": "at-prop", "name": "Prop"})  # in the studio, not in p-1
+    result = await call("list_assets", project="p-1", exclude_asset_types=["Environment", "Prop"])
+    assert [a["name"] for a in result["assets"]] == ["Hero"]
+    with pytest.raises(ToolError, match="Unknown asset type in this project 'Vehicle'"):
+        await call("list_assets", project="p-1", exclude_asset_types=["Vehicle"])
+
+
+async def test_include_and_exclude_cancelling_out_is_an_error(call):
+    with pytest.raises(ToolError, match="cancel out"):
+        await call("list_assets", project="p-1", asset_types=["Character"], exclude_asset_types=["character"])
+
+
+async def test_get_preview_by_entity_survives_a_metadata_failure(call, fake, monkeypatch):
+    original = fake._route
+
+    def route(path, params):
+        if path == "data/preview-files/pf-hero":
+            raise ToolError("Not found: data/preview-files/pf-hero")
+        return original(path, params)
+
+    monkeypatch.setattr(fake, "_route", route)
+    from fastmcp import Client
+
+    from kitsu_mcp.server import mcp
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_preview", {"entity_id": "a-hero"})
+    assert [c.type for c in result.content] == ["image"]
+
+
+async def test_whoami_survives_a_status_lookup_failure(call, fake, monkeypatch):
+    original = fake._route
+
+    def route(path, params):
+        if path == "data/task-status":
+            raise ToolError("Kitsu error")
+        return original(path, params)
+
+    monkeypatch.setattr(fake, "_route", route)
+    assert (await call("whoami"))["server"]["unmatched_status_settings"] == {}
+
+
+def test_server_info_hides_credentials_in_the_host():
+    from kitsu_mcp.tools.meta import _without_userinfo
+
+    assert _without_userinfo("https://bob:secret@kitsu.example.com:8443/api") == "https://kitsu.example.com:8443/api"
+    assert _without_userinfo("http://kitsu.test/api") == "http://kitsu.test/api"
+
+
+async def test_overview_filters_cancelling_out_is_an_error(call):
+    with pytest.raises(ToolError, match="cancel out"):
+        await call("project_overview", project="p-1", task_types=["ANIM"], exclude_task_types=["Animation"])

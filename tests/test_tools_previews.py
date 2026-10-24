@@ -25,7 +25,7 @@ async def test_get_preview_without_preview(call):
     assert await call("get_preview", entity_id="a-forest") == "This entity has no preview."
 
 
-async def test_get_preview_file_metadata(call):
+async def test_get_preview_metadata(call):
     meta = await call("get_preview", preview_file_id="pf-sh010", show=False)
     assert (meta["revision"], meta["is_movie"], meta["extension"], meta["is_video"]) == (2, True, "mp4", True)
     assert "get_video_frames" in meta["note"]
@@ -33,7 +33,7 @@ async def test_get_preview_file_metadata(call):
     assert (image["is_video"], image["note"]) == (False, None)
 
 
-async def test_get_preview_file_detects_video_by_extension(call, fake):
+async def test_get_preview_detects_video_by_extension(call, fake):
     fake.data["preview_files"]["pf-sh010"]["is_movie"] = False  # Kitsu reports False on real mp4s
     assert (await call("get_preview", preview_file_id="pf-sh010", show=False))["is_video"]
 

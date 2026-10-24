@@ -1,10 +1,8 @@
 """The shared FastMCP instance. Tool modules register on it when imported."""
 
-import functools
+import inspect
 
 from fastmcp import FastMCP
-from fastmcp.tools import ToolResult
-from mcp.types import TextContent
 
 mcp = FastMCP(
     "kitsu",
@@ -23,22 +21,24 @@ mcp = FastMCP(
 READ_ONLY = {"readOnlyHint": True, "openWorldHint": True}
 
 
-def tool(**kwargs):
-    """Register a tool on `mcp` without publishing an output schema.
+# One small schema for every data tool instead of a detailed one per tool: clients still get structured
+# results (fastmcp's `.data`, `structured_content`), while the tool list stays about half the size.
+_GENERIC_OUTPUT = {"type": "object", "properties": {"result": {}}, "x-fastmcp-wrap-result": True}
 
-    Results are still JSON; leaving their schemas out of the tool list roughly halves what every session
-    pays in context before any call (the field docs that matter are in the docstrings). Without a schema
-    an empty list would come back as no content at all, so it is sent as an explicit "[]".
+
+def tool(**kwargs):
+    """Register a tool on `mcp` with a generic output schema instead of a detailed one.
+
+    Detailed output schemas were half of what every session paid in context before any call; the field
+    notes that matter are in the docstrings. Tools that can return images keep no schema at all, since
+    images cannot be structured content. The decorated function itself is returned unchanged, so other
+    modules (resources) can still call it directly.
     """
 
     def register(fn):
-        @functools.wraps(fn)
-        def wrapper(*args, **kw):
-            result = fn(*args, **kw)
-            if isinstance(result, list) and not result:
-                return ToolResult(content=[TextContent(type="text", text="[]")])
-            return result
-
-        return mcp.tool(output_schema=None, **kwargs)(wrapper)
+        returns = str(inspect.signature(fn).return_annotation)
+        schema = None if "Image" in returns else _GENERIC_OUTPUT
+        mcp.tool(output_schema=schema, **kwargs)(fn)
+        return fn
 
     return register

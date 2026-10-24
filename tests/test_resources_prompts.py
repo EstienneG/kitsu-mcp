@@ -37,3 +37,12 @@ async def test_prompts_mention_the_tools_they_rely_on(fake):
             text = (await client.get_prompt(prompt.name, args)).messages[0].content.text
             referenced = {name for name in tool_names if name in text}
             assert referenced, f"{prompt.name} references no tool"
+
+
+async def test_list_resources_with_nothing_in_them(fake):
+    """Resources call tool functions directly: an empty studio must give [], not crash."""
+    fake.data["projects"] = [p for p in fake.data["projects"] if p["project_status_id"] != "ps-open"]
+    fake.data["task_types"] = []
+    async with Client(mcp) as client:
+        assert json.loads((await client.read_resource("kitsu://projects"))[0].text) == []
+        assert json.loads((await client.read_resource("kitsu://task-types"))[0].text) == []
