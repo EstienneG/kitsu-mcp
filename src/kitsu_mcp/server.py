@@ -1,6 +1,6 @@
-"""Kitsu MCP server: the FastMCP app with every tool module registered."""
+"""Kitsu MCP server: the FastMCP app with every tool, resource and prompt registered."""
 
-from kitsu_mcp import tools  # noqa: F401  (registers tools)
+from kitsu_mcp import prompts, resources, tools  # noqa: F401  (registration side effects)
 from kitsu_mcp.app import mcp
 
 __all__ = ["mcp"]
