@@ -1,6 +1,7 @@
 """HTTP mode: each caller runs as their own Kitsu user, local-disk tools are hidden, links point at Kitsu."""
 
 import base64
+import os
 
 import pytest
 from fastmcp import Client
@@ -12,6 +13,7 @@ from kitsu_mcp import auth
 from kitsu_mcp import client as client_module
 from kitsu_mcp import lookups as lookups_module
 from kitsu_mcp.auth import Credentials, TTLCache, parse_authorization
+from kitsu_mcp.client import LoginRejected
 from kitsu_mcp.server import mcp
 from tests.fakes import ALICE, BOB, FakeClient
 
@@ -65,9 +67,10 @@ def test_login_throttle(monkeypatch):
     clock[0] += 2.5
     throttle.check("u")
     throttle.check("someone-else")
-    throttle.succeeded("u")
+    throttle.succeeded("u", "login-u")
     throttle.failed("u")
     throttle.check("u")  # a success resets the count
+    assert throttle.known_good("login-u") and not throttle.known_good("other-login")
 
 
 def test_ttl_cache_expires_and_bounds():
@@ -94,6 +97,7 @@ class PerUserFake(FakeClient):
 
     people = {"alice@example.com": ALICE, "bob@example.com": BOB}
     logins: list[str] = []
+    kitsu_down = False
 
     def __init__(self, settings, credentials=None):
         super().__init__()
@@ -103,8 +107,10 @@ class PerUserFake(FakeClient):
 
     def connect(self) -> None:
         PerUserFake.logins.append(self.credentials.user)
+        if PerUserFake.kitsu_down:
+            raise ToolError("Could not reach Kitsu on POST auth/login: ConnectionError")
         if self.credentials.user not in self.people or self.credentials.password != "right":
-            raise ToolError("Kitsu rejected the credentials; check the Kitsu email and password")
+            raise LoginRejected("Kitsu rejected the credentials; check the Kitsu email and password")
 
     def get(self, path, params=None):
         REQUESTS.append((self.credentials.user, path))
@@ -130,6 +136,7 @@ async def server(monkeypatch):
     monkeypatch.setattr(client_module, "_logins", auth.LoginThrottle())
     REQUESTS.clear()
     PerUserFake.logins.clear()
+    PerUserFake.kitsu_down = False
     async with run_server_async(mcp) as url:
         yield url
     client_module._user_clients.clear()
@@ -186,6 +193,28 @@ async def test_wrong_passwords_are_not_cached_and_get_throttled(server):
     assert len(client_module._user_clients) == 1  # only Alice's good login is cached
     assert PerUserFake.logins.count("bob@example.com") < 8  # throttled before every guess reached Kitsu
     assert (await call(server, alice, "whoami"))["id"] == ALICE
+
+
+async def test_guessing_cannot_lock_out_the_real_user(server):
+    """Wrong passwords for Alice's email throttle the guesser, but Alice's known-good login still works."""
+    alice = basic("alice@example.com", "right")
+    assert (await call(server, alice, "whoami"))["id"] == ALICE
+    client_module._user_clients.clear()  # her client expired; she must log in again
+    for attempt in range(10):
+        with pytest.raises(ToolError, match="rejected the credentials|Too many failed"):
+            await call(server, basic("alice@example.com", f"guess{attempt}"), "whoami")
+    with pytest.raises(ToolError, match="Too many failed"):
+        await call(server, basic("alice@example.com", "another-guess"), "whoami")
+    assert (await call(server, alice, "whoami"))["id"] == ALICE
+
+
+async def test_kitsu_outage_is_not_counted_as_failed_logins(server):
+    PerUserFake.kitsu_down = True
+    for _ in range(8):
+        with pytest.raises(ToolError, match="Could not reach Kitsu"):
+            await call(server, basic("alice@example.com", "right"), "whoami")
+    PerUserFake.kitsu_down = False
+    assert (await call(server, basic("alice@example.com", "right"), "whoami"))["id"] == ALICE
 
 
 async def test_my_tasks_follow_the_caller(server):
@@ -265,3 +294,46 @@ def test_video_cache_is_per_user_with_one_shared_budget(fake, tmp_path):
     video.evict()
     assert not (alice_dir / "old.mp4").exists()
     assert (bob_dir / "new.mp4").exists()
+
+
+def test_cache_folder_made_private_and_ownership_checked(fake, tmp_path):
+    import stat
+
+    from kitsu_mcp import video
+
+    loose = tmp_path / "loose"
+    loose.mkdir(mode=0o777)
+    loose.chmod(0o777)
+    fake.settings.video_cache_dir = loose
+    assert video.cache_dir() == loose
+    assert stat.S_IMODE(loose.stat().st_mode) == 0o700  # tightened, not left as found
+
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (tmp_path / "link").symlink_to(target)
+    fake.settings.video_cache_dir = tmp_path / "link"
+    with pytest.raises(ToolError, match="not a directory owned by this server"):
+        video.cache_dir()
+
+
+def test_cache_folder_owned_by_someone_else_is_refused(fake, tmp_path, monkeypatch):
+    from kitsu_mcp import video
+
+    fake.settings.video_cache_dir = tmp_path / "cache"
+    real_uid = os.getuid()
+    monkeypatch.setattr(video.os, "getuid", lambda: real_uid + 1)
+    with pytest.raises(ToolError, match="not a directory owned by this server"):
+        video.cache_dir()
+
+
+def test_download_recreates_a_user_folder_evicted_meanwhile(fake, tmp_path, monkeypatch):
+    from kitsu_mcp import video
+
+    fake.settings.video_cache_dir = tmp_path
+    fake.credentials = Credentials("alice@example.com", "right")
+    folder = video.cache_dir()
+    folder.rmdir()  # another user's eviction removed it, now empty
+    monkeypatch.setattr(fake, "download", lambda route, dest, max_bytes=None: dest.write_bytes(b"movie"), raising=False)
+    path = folder / "pf-1_low.mp4"
+    video._download({"id": "pf-1", "extension": "mp4"}, "low", path)
+    assert path.read_bytes() == b"movie"

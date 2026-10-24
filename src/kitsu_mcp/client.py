@@ -32,6 +32,10 @@ class NotFoundError(ToolError):
     """Kitsu answered 404: wrong ID, or a route this instance does not have."""
 
 
+class LoginRejected(ToolError):
+    """Kitsu refused the email/password (not an outage): the only failure the login throttle counts."""
+
+
 class FileTooLargeError(ToolError):
     """A download went past its size cap and was stopped."""
 
@@ -77,6 +81,12 @@ class KitsuClient:
         """Log in now (instead of on the first request), reporting a rejected login as a ToolError."""
         try:
             self._connect()
+        except (NotAuthenticatedException, AuthFailedException) as error:
+            raise LoginRejected(str(_tool_error(error, "POST", "auth/login"))) from error
+        except (requests.ConnectionError, requests.Timeout, requests.JSONDecodeError, ServerErrorException) as error:
+            raise ToolError(
+                f"Could not log in: Kitsu is unreachable or unavailable ({error.__class__.__name__})"
+            ) from error
         except (GazuException, requests.RequestException) as error:
             raise _tool_error(error, "POST", "auth/login") from error
 
@@ -213,14 +223,17 @@ def _user_client(credentials: Credentials) -> KitsuClient:
         cached = _user_clients.get(credentials.key)
         if cached is not None:
             return cached
-        _logins.check(credentials.user_key)
+        # A login Kitsu accepted recently skips the throttle: someone who only knows the email cannot lock
+        # out the person who knows the password.
+        if not _logins.known_good(credentials.key):
+            _logins.check(credentials.user_key)
         client = KitsuClient(get_settings(), credentials)
         try:
             client.connect()
-        except ToolError:
+        except LoginRejected:
             _logins.failed(credentials.user_key)
             raise
-        _logins.succeeded(credentials.user_key)
+        _logins.succeeded(credentials.user_key, credentials.key)
         _user_clients.put(credentials.key, client)
         return client
 
