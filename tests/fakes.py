@@ -319,6 +319,27 @@ class FakeClient:
     def user_id(self) -> str:
         return self.data["me"]
 
+    def _person_tasks(self, person_id: str, done: bool) -> list[dict]:
+        statuses = self._by_id("statuses")
+        return [
+            {
+                "id": t["id"],
+                "project_id": t["project_id"],
+                "project_name": "Demo Short",
+                "entity_name": self._entity(t["entity_id"])["name"],
+                "entity_type_name": "Shot" if t["entity_id"].startswith("s-") else "Character",
+                "sequence_name": "SQ010" if t["entity_id"].startswith("s-") else None,
+                "task_type_name": self._by_id("task_types")[t["task_type_id"]]["name"],
+                "task_status_short_name": statuses[t["task_status_id"]]["short_name"],
+                "due_date": t["due_date"],
+                "estimation": t["estimation"],
+                "duration": t["duration"],
+                "last_comment_date": t["last_comment_date"],
+            }
+            for t in self.data["tasks"]
+            if person_id in t["assignees"] and statuses[t["task_status_id"]]["is_done"] == done
+        ]
+
     def _route(self, path: str, params: dict) -> Any:  # noqa: C901 - a router is a long switch
         d = self.data
         project_id = params.get("project_id")
@@ -330,6 +351,7 @@ class FakeClient:
             "data/projects/open": [p for p in d["projects"] if p["project_status_id"] == "ps-open"],
             "data/project-status": [{"id": "ps-open", "name": "Open"}, {"id": "ps-closed", "name": "Closed"}],
             "data/asset-types": d["asset_types"],
+            "data/departments": [{"id": "dep-anim", "name": "Animation"}],
         }
         if path in simple:
             return simple[path]
@@ -349,20 +371,9 @@ class FakeClient:
         if path == "data/tasks":
             return [t for t in d["tasks"] if project_id in (None, t["project_id"])]
         if path == "data/user/tasks":
-            people = d["me"]
-            return [
-                {
-                    "id": t["id"],
-                    "project_name": "Demo Short",
-                    "entity_name": self._entity(t["entity_id"])["name"],
-                    "entity_type_name": "Shot",
-                    "task_type_name": self._by_id("task_types")[t["task_type_id"]]["name"],
-                    "task_status_short_name": self._by_id("statuses")[t["task_status_id"]]["short_name"],
-                    "due_date": t["due_date"],
-                }
-                for t in d["tasks"]
-                if people in t["assignees"]
-            ]
+            return self._person_tasks(d["me"], done=False)
+        if m := re.fullmatch(r"data/persons/([^/]+)/(tasks|done-tasks)", path):
+            return self._person_tasks(m[1], done=m[2] == "done-tasks")
         if m := re.fullmatch(r"data/projects/([^/]+)", path):
             project = self._by_id("projects").get(m[1])
             if project is None:

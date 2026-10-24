@@ -193,3 +193,70 @@ class CastIn(BaseModel):
     sequence: str | None
     episode: str | None
     occurrences: int | None
+
+
+class Person(BaseModel):
+    id: str
+    full_name: str | None
+    email: str | None
+    role: str | None
+    position: str | None = None
+    departments: list[str] = Field(default_factory=list)
+
+
+class PersonTask(BaseModel):
+    id: str
+    project: str | None
+    entity: str | None
+    entity_type: str | None
+    sequence: str | None
+    task_type: str | None
+    status: str | None
+    due_date: str | None
+    estimation: float | None = Field(None, description="Minutes")
+    duration: float | None = Field(None, description="Minutes logged")
+    last_comment_date: str | None = None
+
+
+class Workload(BaseModel):
+    person: str
+    open_tasks: int
+    overdue: int
+    waiting_feedback: int = Field(description="Tasks in a feedback-request status (e.g. waiting for approval)")
+    retakes: int
+    estimation: float = Field(description="Minutes estimated over open tasks")
+    logged: float = Field(description="Minutes logged over open tasks")
+    next_due: str | None
+
+
+class StatusCount(BaseModel):
+    status: str
+    count: int
+
+
+class TaskTypeProgress(BaseModel):
+    task_type: str
+    total: int
+    done: int
+    done_ratio: float
+    statuses: list[StatusCount]
+
+
+class ProjectOverview(BaseModel):
+    project: str
+    production_type: str | None
+    start_date: str | None
+    end_date: str | None
+    fps: str | None
+    resolution: str | None
+    assets: int
+    shots: int
+    tasks: int
+    done_ratio: float
+    overdue: int
+    waiting_feedback: int
+    retakes: int
+    unassigned_open: int
+    estimation: float = Field(description="Minutes estimated over all tasks")
+    logged: float = Field(description="Minutes logged over all tasks")
+    by_task_type: list[TaskTypeProgress]
