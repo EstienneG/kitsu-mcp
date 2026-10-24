@@ -1,4 +1,4 @@
-# Hosted kitsu-mcp for Le Chat / AI Studio connectors. Put HTTPS in front (Fly.io, Render and the like do),
+# Hosted kitsu-mcp for web agents (one server per studio). Put HTTPS in front (Fly.io, Render and the like do),
 # then confirm it with KITSU_BEHIND_TLS=true at run time: the server refuses a public bind without it.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
