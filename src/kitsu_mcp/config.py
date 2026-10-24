@@ -1,6 +1,7 @@
 """Server settings, read from environment variables or a `.env` in the working directory."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,6 +22,12 @@ class Settings(BaseSettings):
     """Per-request timeout in seconds."""
     max_retries: int = Field(3, ge=1)
     """Attempts for idempotent requests that fail with a server or network error."""
+    video_cache_dir: Path | None = None
+    """Where downloaded movies are cached (default: a kitsu-mcp-videos folder in the system temp dir)."""
+    video_cache_mb: int = Field(1024, ge=0)
+    """Size of the movie cache; the least recently used movies are deleted past it."""
+    video_max_mb: int = Field(500, gt=0)
+    """Largest movie the video tools will download."""
 
 
 @lru_cache
