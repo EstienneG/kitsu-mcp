@@ -81,7 +81,7 @@ def seed() -> dict[str, Any]:
             "entity_type_id": "at-char",
             "project_id": PROJECT,
             "description": "Main character",
-            "data": {},
+            "data": {"rigged": "true", "date_rendu": "2026-11-06", "resolution": ""},
             "preview_file_id": "pf-hero",
             "canceled": False,
         },
@@ -114,7 +114,7 @@ def seed() -> dict[str, Any]:
             "nb_frames": 48,
             "fps": "24",
             "description": None,
-            "data": {},
+            "data": {"anim_level": "⭐⭐", "key_shot": "true", "handle_in": 4},
             "preview_file_id": "pf-sh010",
             "canceled": False,
         },
@@ -132,7 +132,7 @@ def seed() -> dict[str, Any]:
             "nb_frames": 72,
             "fps": None,
             "description": None,
-            "data": {"frame_in": "101", "frame_out": 172},
+            "data": {"frame_in": "101", "frame_out": 172, "key_shot": "false"},
             "preview_file_id": None,
             "canceled": False,
         },
@@ -332,7 +332,59 @@ def seed() -> dict[str, Any]:
             "shots": [{"entity_id": "s-1", "preview_file_id": "pf-sh010"}],
         }
     ]
+    # Custom fields ("metadata descriptors"), shaped like the live instance's. Kitsu stores values as text.
+    custom_fields = [
+        {
+            "id": "md-level",
+            "project_id": PROJECT,
+            "name": "Anim Level",
+            "field_name": "anim_level",
+            "entity_type": "Shot",
+            "data_type": "list",
+            "choices": ["⭐", "⭐⭐", "⭐⭐⭐"],
+            "departments": ["dep-anim"],
+            "position": 2,
+            "for_client": False,
+        },
+        {
+            "id": "md-key",
+            "project_id": PROJECT,
+            "name": "key_shot",
+            "field_name": "key_shot",
+            "entity_type": "Shot",
+            "data_type": "boolean",
+            "choices": [],
+            "departments": [],
+            "position": 1,
+            "for_client": False,
+        },
+        {
+            "id": "md-rigged",
+            "project_id": PROJECT,
+            "name": "Rigged",
+            "field_name": "rigged",
+            "entity_type": "Asset",
+            "data_type": "boolean",
+            "choices": [],
+            "departments": [],
+            "position": None,
+            "for_client": True,
+        },
+        {
+            "id": "md-due",
+            "project_id": PROJECT,
+            "name": "DATE RENDU",
+            "field_name": "date_rendu",
+            "entity_type": "Asset",
+            "data_type": "date",
+            "choices": [],
+            "departments": [],
+            "position": None,
+            "for_client": False,
+        },
+    ]
     return {
+        "custom_fields": custom_fields,
         "task_types": task_types,
         "statuses": statuses,
         "people": people,
@@ -608,6 +660,8 @@ class FakeClient:
             return playlists[(page - 1) * 20 : page * 20]
         if m := re.fullmatch(r"data/projects/([^/]+)/(sequences|episodes)", path):
             return [r for r in d[m[2]] if r["project_id"] == m[1]]
+        if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors", path):
+            return [f for f in d["custom_fields"] if f["project_id"] == m[1]]
         if m := re.fullmatch(r"data/projects/([^/]+)/team", path):
             return d["people"]
         if m := re.fullmatch(r"data/projects/([^/]+)/entities/([^/]+)/casting", path):
