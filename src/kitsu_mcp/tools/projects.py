@@ -1,5 +1,7 @@
 from collections import Counter, defaultdict
 
+from fastmcp.exceptions import ToolError
+
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
@@ -127,6 +129,8 @@ def project_overview(
     info = client.get(f"data/projects/{lookups.project(project)['id']}")
     keep = {lookups.task_type(t)["id"] for t in task_types or []}
     drop = {lookups.task_type(t)["id"] for t in exclude_task_types or []}
+    if keep and keep <= drop:
+        raise ToolError("task_types and exclude_task_types cancel out: nothing would be counted")
     entities = project_entities(client, lookups, info["id"])
     records = [
         task

@@ -2,6 +2,7 @@ import json
 import re
 from importlib import metadata
 from typing import Annotated, Any
+from urllib.parse import urlsplit, urlunsplit
 
 from fastmcp.exceptions import ToolError
 from pydantic import Field
@@ -35,17 +36,33 @@ def _server_info(client) -> ServerInfo:
     lookups = get_lookups()
     return ServerInfo(
         version=_version(),
-        kitsu_host=settings.host,
+        kitsu_host=_without_userinfo(settings.host),
         write_tools=settings.allow_write,
         video_tools=video.available(),
         max_page_size=MAX_LIMIT,
         status_role_settings={
             f"KITSU_{name.upper()}": sorted(names_in(getattr(settings, name))) for name, _ in ROLE_SETTINGS
         },
-        unmatched_status_settings=lookups.unmatched_role_names(),
+        unmatched_status_settings=_unmatched(lookups),
         cache_ttl_seconds=settings.cache_ttl,
         video_max_mb=settings.video_max_mb,
     )
+
+
+def _unmatched(lookups) -> dict[str, list[str]]:
+    """Best effort: whoami is a connectivity check and must not fail on the status lookup."""
+    try:
+        return lookups.unmatched_role_names()
+    except ToolError:
+        return {}
+
+
+def _without_userinfo(url: str) -> str:
+    """A host URL without any user:password@ part."""
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    return urlunsplit(parts._replace(netloc=parts.netloc.rsplit("@", 1)[1]))
 
 
 def _version() -> str:

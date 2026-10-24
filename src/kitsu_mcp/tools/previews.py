@@ -94,7 +94,13 @@ def get_preview(
         if not preview_file_id:
             return "This entity has no preview."
     preview_file_id = object_id(preview_file_id or "", "preview file", "list_task_previews")
-    record = client.get(f"data/preview-files/{preview_file_id}")
+    try:
+        record = client.get(f"data/preview-files/{preview_file_id}")
+    except ToolError:
+        if not show or not entity_id:
+            raise
+        # The entity's image is what was asked for; its metadata (video hint, broken flag) is a bonus.
+        return Image(data=_preview_bytes(preview_file_id, size), format="png")
     if not show:
         return _preview_file(record)
     if video.is_broken(record):
