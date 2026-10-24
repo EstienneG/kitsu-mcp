@@ -1,4 +1,4 @@
-"""HTTP transport: the server hosted for Le Chat / AI Studio custom connectors.
+"""HTTP transport: the server hosted for web agents (custom MCP connectors).
 
 Every caller logs in to Kitsu with their own credentials (see kitsu_mcp.auth). Tools that only make sense on
 the caller's machine (writing files to a folder) are hidden over HTTP. That is enforced per request, so it
