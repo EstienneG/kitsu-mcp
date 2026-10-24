@@ -105,3 +105,29 @@ async def test_kitsu_get_never_returns_a_huge_single_item(call, fake, monkeypatc
     monkeypatch.setattr(fake, "_route", lambda path, params: {"blob": "x" * 200_000})
     result = await call("kitsu_get", path="data/whatever")
     assert result["truncated"] is True and "preview" not in result
+
+
+async def test_asset_types_match_project_names_by_containment(call, fake):
+    """Projects name types differently ("Characters - PFE 2028"); a shorter name still finds them."""
+    fake.data["asset_types"].append({"id": "at-char-pfe", "name": "Character - PFE 2028"})
+    fake.data["assets"][0]["asset_type_id"] = "at-char-pfe"
+    fake.data["assets"][0]["asset_type_name"] = "Character - PFE 2028"
+    result = await call("list_assets", project="p-1", asset_types=["character"])
+    assert [a["name"] for a in result["assets"]] == ["Hero"]
+    excluded = await call("list_assets", project="p-1", exclude_asset_types=["Character"])
+    assert [a["name"] for a in excluded["assets"]] == ["Forest"]
+
+
+async def test_asset_type_exact_name_wins_over_containment(call, fake):
+    fake.data["asset_types"].append({"id": "at-char-2", "name": "Character Props"})
+    fake.data["assets"].append(
+        {
+            **fake.data["assets"][0],
+            "id": "a-cp",
+            "name": "Hat",
+            "asset_type_id": "at-char-2",
+            "asset_type_name": "Character Props",
+        }
+    )
+    result = await call("list_assets", project="p-1", asset_types=["Character"])
+    assert [a["name"] for a in result["assets"]] == ["Hero"]

@@ -22,6 +22,20 @@ def check_status_filters(status_filters: dict[str, list[str]] | None, lookups: L
         check_names("task status", allowed, statuses)
 
 
+def match_types(wanted: list[str] | None, project_types: list[str]) -> set[str]:
+    """Lower-case names of the project's asset types that `wanted` refers to: for each, the type with that
+    exact name, else every type whose name contains it. An unmatched name is an error naming the options."""
+    matched: set[str] = set()
+    lowered = {t.lower(): t for t in project_types}
+    for name in wanted or []:
+        key = " ".join(name.split()).lower()
+        hits = {key} if key in lowered else {t for t in lowered if key and key in t}
+        if not hits:
+            check_names("asset type in this project", [name], set(project_types))
+        matched |= hits
+    return matched
+
+
 def matches_status_filters(tasks: list, status_filters: dict[str, list[str]] | None) -> bool:
     """True if, for every task type in the filter, the entity has a task of that type in an allowed status."""
     if not status_filters:
@@ -48,20 +62,21 @@ def list_assets(
     detail="compact" (default) gives each asset's tasks as {task type: status}; detail="full" returns
     full task rows (IDs, assignees, due dates, latest preview), several times larger. get_asset has the details.
     project: project name or ID.
-    asset_types / exclude_asset_types: asset type names (e.g. ["Environment"]).
+    asset_types / exclude_asset_types: asset type names, matched against the types this project uses:
+    an exact name, else every type containing it ("Characters" also matches "Characters - PFE 2028").
     task_status_filters: task type name -> allowed status short names; all must match,
     e.g. {"Modelling": ["APP", "wip"], "Sculpting": ["WRA"]}. Matching is case-insensitive.
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
-    known_types = {t["name"] for t in lookups.index("asset_types").values()}
-    check_names("asset type", (asset_types or []) + (exclude_asset_types or []), known_types)
     check_status_filters(task_status_filters, lookups)
-    include = {n.lower() for n in asset_types or []}
-    exclude = {n.lower() for n in exclude_asset_types or []}
+    client = get_client()
+    project_types = [t["name"] for t in client.get(f"data/projects/{project_id}/asset-types")]
+    include = match_types(asset_types, project_types)
+    exclude = match_types(exclude_asset_types, project_types)
 
     results = []
-    for asset in get_client().get("data/assets/with-tasks", params={"project_id": project_id}):
+    for asset in client.get("data/assets/with-tasks", params={"project_id": project_id}):
         if asset.get("canceled"):
             continue
         type_name = asset.get("asset_type_name") or lookups.name("asset_types", asset.get("entity_type_id")) or ""

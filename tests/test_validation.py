@@ -70,8 +70,8 @@ def test_ambiguous_person_lists_names_and_emails():
 @pytest.mark.parametrize(
     "tool, args, label",
     [
-        ("list_assets", {"project": "p-1", "asset_types": ["Charcters"]}, "asset type 'Charcters'"),
-        ("list_assets", {"project": "p-1", "exclude_asset_types": ["Props"]}, "asset type 'Props'"),
+        ("list_assets", {"project": "p-1", "asset_types": ["Charcters"]}, "asset type in this project 'Charcters'"),
+        ("list_assets", {"project": "p-1", "exclude_asset_types": ["Props"]}, "asset type in this project 'Props'"),
         ("list_assets", {"project": "p-1", "task_status_filters": {"Modelingg": ["wip"]}}, "task type 'Modelingg'"),
         ("list_assets", {"project": "p-1", "task_status_filters": {"Modeling": ["wipp"]}}, "task status 'wipp'"),
         ("list_shots", {"project": "p-1", "sequence": "sq999x"}, "sequence 'sq999x'"),
