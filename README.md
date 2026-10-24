@@ -1,18 +1,39 @@
 # kitsu-mcp
 
-MCP server (FastMCP + Gazu) for a Kitsu/Zou instance. Runs locally over stdio, or hosted over HTTP as a
-Le Chat / AI Studio connector where each person logs in with their own Kitsu account. Read-only by default;
-write tools are opt-in.
+An [MCP](https://modelcontextprotocol.io) server for [Kitsu](https://www.cg-wire.com/kitsu), CGWire's production
+tracker. It lets an AI agent read a Kitsu production the way a production manager or supervisor would: where a
+project stands, what is waiting for review, who is overloaded, what changed on a shot, what a preview movie shows.
+Write tools (comments, status changes, assignments, schedules, time logs, playlists) are opt-in.
 
-## Install
+It talks to the Zou API with each person's own Kitsu login, so everyone sees exactly what Kitsu lets them see.
+It runs on the user's machine (stdio) for desktop and CLI agents, or hosted once for a whole studio (HTTP) for
+web agents.
 
-You only need [uv](https://docs.astral.sh/uv/getting-started/installation/):
+Examples of what to ask:
+- "Where does our short film stand? What is late?"
+- "What is waiting for my review today?"
+- "Who on the animation team has too much on their plate this week?"
+- "Show me the latest compositing preview of sh010 and the comments on it."
 
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+## Quick start
 
-Then register the server with your agent, using your Kitsu login.
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+and a Kitsu account. Any MCP client that runs local servers can start it with:
 
-**Mistral Vibe**
+    command: uvx kitsu-mcp
+    env:     KITSU_HOST=https://your-studio.cg-wire.com/api
+             KITSU_USER=you@example.com
+             KITSU_PASSWORD=your-password
+
+Use `uvx --from 'kitsu-mcp[video]' kitsu-mcp` as the command for the [video tools](#video). Web agents need the
+[hosted server](#hosted-server) instead.
+
+## Client setup
+
+**AI Studio** and **Vibe Work** run in the cloud: they connect to a [hosted server](#hosted-server) at an HTTPS
+URL. Each person signs in with their own Kitsu login. See [Mistral connectors](#mistral-connectors-ai-studio-vibe-work-le-chat).
+
+**Vibe CLI**
 
     vibe mcp add kitsu --transport stdio --command uvx --arg kitsu-mcp \
       --env KITSU_HOST=https://your-studio.cg-wire.com/api \
@@ -27,13 +48,21 @@ Then register the server with your agent, using your Kitsu login.
       -e KITSU_PASSWORD='your-password' \
       -- uvx kitsu-mcp
 
-The password is stored in plain text in the agent's config file (e.g. `~/.vibe/config.toml`).
+**Codex**
 
-## Hosted connector (Le Chat, AI Studio)
+    codex mcp add kitsu \
+      --env KITSU_HOST=https://your-studio.cg-wire.com/api \
+      --env KITSU_USER=you@example.com \
+      --env KITSU_PASSWORD='your-password' \
+      -- uvx kitsu-mcp
 
-Le Chat and AI Studio run in Mistral's cloud, so they need the server at a public HTTPS URL. One server serves
-everyone: each person adds their own private connector with their Kitsu login, and every call runs as them,
-with their Kitsu permissions.
+Local clients store the password in plain text in their config file (e.g. `~/.vibe/config.toml`). Add
+`KITSU_ALLOW_WRITE=true` to expose the write tools; every write tool also has a [dry run](#tools).
+
+## Hosted server
+
+Web agents need the server at a public HTTPS URL. One server serves the whole studio: each person connects with
+their own Kitsu login, and every call runs as them, with their Kitsu permissions.
 
 **Run it.** Only `KITSU_HOST` is needed (no shared login). Deploy the image on a host that terminates HTTPS
 (Fly.io, Render, a reverse proxy) and confirm it with `KITSU_BEHIND_TLS=true`:
@@ -41,13 +70,16 @@ with their Kitsu permissions.
     docker run -p 8000:8000 -e KITSU_HOST=https://your-studio.cg-wire.com/api -e KITSU_BEHIND_TLS=true \
       ghcr.io/estienneg/kitsu-mcp:latest
 
-(or build it yourself with `docker build -t kitsu-mcp .`). Pin a version tag such as `:0.2.0` in production.
+(or build it yourself with `docker build -t kitsu-mcp .`). Pin a version tag such as `:0.3.0` in production.
 
 To try it locally without a proxy, run `KITSU_HOST=... kitsu-mcp --http`, which listens on 127.0.0.1:8000.
 
 The supported entry point is `kitsu-mcp --http` (`--host` / `--port`, or `KITSU_HTTP_HOST` / `PORT`): it
 applies the TLS check below, which `fastmcp run` would skip. The MCP endpoint is `/mcp`; `/health` answers
 for health checks. The image runs as an unprivileged user.
+
+**Logging in.** Clients send the person's Kitsu login in the `Authorization` header: `Basic` with their Kitsu
+email and password, or, where only a bearer token can be entered, `Bearer email:password`.
 
 **HTTPS is required.** Callers send their Kitsu password with every request, so the server refuses to listen
 on anything but localhost unless the operator confirms TLS terminates in front of it (`--behind-tls` or
@@ -56,20 +88,24 @@ memory, under keys derived with a per-process secret. Only logins Kitsu accepted
 inactivity. Repeated rejected logins for one account are slowed down (a Kitsu outage does not count), while a
 login Kitsu accepted in the last day is always let through, so guessing at someone's email cannot lock them
 out. Spraying many emails from one address is not throttled; fine at studio scale, otherwise rate-limit at the
-proxy. Listing the tools works without a login
-(it is metadata only); every tool call needs one.
-
-**Each user** (AI Studio → Connectors → Add, or Le Chat → Connectors → Custom MCP connector):
-- URL: `https://<your-server>/mcp`, visibility **Private**
-- Authentication: **Basic**, with their Kitsu email and password. Where only a bearer token can be entered,
-  use `email:password` as the token.
+proxy. Listing the tools works without a login (it is metadata only); every tool call needs one.
 
 Differences from stdio: `download_previews` and `download_video` are hidden (they would write to the server's
 disk, not the user's); give people the `url` (Kitsu page) or `download_url` (original upload) instead, which
-open in their own Kitsu browser session. The
-video tools cache movies per user, and `KITSU_VIDEO_CACHE_MB` caps all users' movies together. Write tools
-follow `KITSU_ALLOW_WRITE` as over stdio. Kitsu accounts with two-factor authentication cannot log in this
-way.
+open in their own Kitsu browser session. The video tools cache movies per user, and `KITSU_VIDEO_CACHE_MB` caps
+all users' movies together. Write tools follow `KITSU_ALLOW_WRITE` as over stdio. Kitsu accounts with
+two-factor authentication cannot log in this way.
+
+### Mistral connectors (AI Studio, Vibe Work, Le Chat)
+
+AI Studio, Vibe Work and Le Chat all use the hosted server through the same custom MCP connector:
+
+- **AI Studio:** Connectors → Add. **Vibe Work:** Connectors → + Add Connector → Custom MCP Connector.
+  **Le Chat:** Connectors → Custom MCP connector.
+- Each person adds their own connector. Name: `kitsu`. Server URL: `https://<your-server>/mcp`. Visibility:
+  **Private**, so the connector carries only their login.
+- Authentication: **Basic** with the person's Kitsu email and password. Where only a bearer token can be
+  entered, use `email:password` as the token.
 
 ## Configuration
 
