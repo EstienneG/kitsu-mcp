@@ -1,9 +1,10 @@
 from kitsu_mcp.app import READ_ONLY, mcp
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
-from kitsu_mcp.lookups import get_lookups
+from kitsu_mcp.lookups import check_names, get_lookups
 from kitsu_mcp.models import CastAsset, CastIn, Named, Sequence, ShotDetail, ShotList, ShotSummary
-from kitsu_mcp.tools.assets import matches_status_filters
+from kitsu_mcp.tools.assets import check_status_filters, matches_status_filters
+from kitsu_mcp.validation import Limit, Offset, object_id
 
 
 def _frames(shot: dict, field: str) -> int | None:
@@ -41,6 +42,8 @@ def list_sequences(project: str, episode: str | None = None) -> list[Sequence]:
     client = get_client()
     project_id = get_lookups().project(project)["id"]
     episodes = {e["id"]: e["name"] for e in client.get(f"data/projects/{project_id}/episodes")}
+    if episode and episode not in episodes:
+        check_names("episode", [episode], set(episodes.values()))
     wanted = episode.lower() if episode else None
     sequences = [
         Sequence(id=s["id"], name=s["name"], episode=episodes.get(s.get("parent_id")), description=s.get("description"))
@@ -58,8 +61,8 @@ def list_shots(
     episode: str | None = None,
     task_status_filters: dict[str, list[str]] | None = None,
     name_contains: str | None = None,
-    limit: int = 200,
-    offset: int = 0,
+    limit: Limit = 100,
+    offset: Offset = 0,
 ) -> ShotList:
     """List a project's shots with frame ranges and tasks, optionally filtered.
 
@@ -69,8 +72,14 @@ def list_shots(
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
+    check_status_filters(task_status_filters, lookups)
+    shots = get_client().get("data/shots/with-tasks", params={"project_id": project_id})
+    if sequence and sequence not in {s.get("sequence_id") for s in shots}:
+        check_names("sequence", [sequence], {s.get("sequence_name") or "" for s in shots})
+    if episode and episode not in {s.get("episode_id") for s in shots}:
+        check_names("episode", [episode], {s.get("episode_name") or "" for s in shots})
     results = []
-    for shot in get_client().get("data/shots/with-tasks", params={"project_id": project_id}):
+    for shot in shots:
         if shot.get("canceled"):
             continue
         if sequence and sequence.lower() not in {(shot.get("sequence_name") or "").lower(), shot.get("sequence_id")}:
@@ -101,6 +110,7 @@ def list_shots(
 @mcp.tool(annotations=READ_ONLY, tags={"shots"})
 def get_shot(shot_id: str) -> ShotDetail:
     """Get a shot's details (frame range, fps, custom data) and tasks."""
+    shot_id = object_id(shot_id, "shot", "list_shots")
     lookups = get_lookups()
     client = get_client()
     shot = client.get(f"data/shots/{shot_id}")
@@ -124,6 +134,7 @@ def get_shot(shot_id: str) -> ShotDetail:
 @mcp.tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
 def get_shot_casting(shot_id: str) -> list[CastAsset]:
     """List the assets cast in a shot (the breakdown)."""
+    shot_id = object_id(shot_id, "shot", "list_shots")
     client = get_client()
     project_id = client.get(f"data/shots/{shot_id}")["project_id"]
     return [
@@ -141,6 +152,7 @@ def get_shot_casting(shot_id: str) -> list[CastAsset]:
 @mcp.tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
 def get_asset_cast_in(asset_id: str) -> list[CastIn]:
     """List the shots an asset is cast in."""
+    asset_id = object_id(asset_id, "asset", "list_assets")
     return [
         CastIn(
             shot_id=c["shot_id"],

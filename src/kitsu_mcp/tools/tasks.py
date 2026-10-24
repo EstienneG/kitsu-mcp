@@ -1,4 +1,6 @@
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from kitsu_mcp.app import READ_ONLY, mcp
 from kitsu_mcp.client import get_client
@@ -6,14 +8,17 @@ from kitsu_mcp.formatters import comment, task_detail
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import MyTask, StatusChange, TaskDetail, TaskHistory, TaskList
 from kitsu_mcp.production import EntityKind, TaskRecord, day, project_tasks
-from kitsu_mcp.validation import iso_date
+from kitsu_mcp.validation import Limit, Offset, iso_date, object_id
 
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"tasks"})
-def get_task(task_id: str, include_comments: bool = True, comment_limit: int = 20) -> TaskDetail:
+def get_task(
+    task_id: str, include_comments: bool = True, comment_limit: Annotated[int, Field(ge=1, le=200)] = 20
+) -> TaskDetail:
     """Get a task with its entity, status, assignees and latest comments (newest first)."""
+    task_id = object_id(task_id, "task", "search_tasks")
     client = get_client()
     result = task_detail(client.get(f"data/tasks/{task_id}/full"))
     if include_comments:
@@ -36,8 +41,8 @@ def search_tasks(
     overdue: bool = False,
     include_done: bool = True,
     sort_by: SortKey = "due_date",
-    limit: int = 100,
-    offset: int = 0,
+    limit: Limit = 100,
+    offset: Offset = 0,
 ) -> TaskList:
     """Search a project's asset and shot tasks.
 
@@ -80,6 +85,7 @@ def search_tasks(
 @mcp.tool(annotations=READ_ONLY, tags={"tasks"})
 def task_history(task_id: str) -> TaskHistory:
     """Status changes of a task over time (from its comments), plus time logged vs. estimate."""
+    task_id = object_id(task_id, "task", "search_tasks")
     client = get_client()
     task = task_detail(client.get(f"data/tasks/{task_id}/full"))
     comments = [comment(c) for c in reversed(client.get(f"data/tasks/{task_id}/comments"))]

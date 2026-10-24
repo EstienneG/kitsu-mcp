@@ -18,6 +18,7 @@ from kitsu_mcp.models import (
     PreviewFile,
     SavedPreview,
 )
+from kitsu_mcp.validation import object_id
 
 Size = Literal["thumbnail", "preview"]
 
@@ -83,6 +84,7 @@ def get_preview(entity_id: str, size: Size = "thumbnail") -> Image | list[Image 
     size: "thumbnail" (small, cheap) or "preview" (full resolution, large). For a video this is its
     poster frame, and the result says which video tools show more.
     """
+    entity_id = object_id(entity_id, "asset or shot", "list_assets or list_shots")
     preview_file_id = get_client().get(f"data/entities/{entity_id}").get("preview_file_id")
     if not preview_file_id:
         return "This entity has no preview."
@@ -98,6 +100,7 @@ def get_preview_file(
     Preview file IDs appear in comments (get_task) and playlists. is_video tells whether it is a
     movie; for movies show=True gives the poster frame, and the video tools show the rest.
     """
+    preview_file_id = object_id(preview_file_id, "preview file", "list_task_previews")
     record = get_client().get(f"data/preview-files/{preview_file_id}")
     if not show:
         return _preview_file(record)
@@ -111,6 +114,7 @@ def get_preview_file(
 def list_task_previews(task_id: str) -> list[PreviewFile]:
     """All preview files uploaded on a task, newest revision first. A revision can hold several files;
     `position` 1 is its main one."""
+    task_id = object_id(task_id, "task", "search_tasks")
     raw = get_client().get(f"data/tasks/{task_id}/previews")
     raw.sort(key=lambda p: (-(p.get("revision") or 0), p.get("position") or 1, p.get("created_at") or ""))
     return [_preview_file(p) for p in raw]
@@ -191,6 +195,7 @@ def list_playlists(project: str) -> list[Playlist]:
 @mcp.tool(annotations=READ_ONLY, tags={"previews", "playlists"})
 def get_playlist(playlist_id: str) -> PlaylistDetail:
     """A playlist with its entities and the preview file shown for each."""
+    playlist_id = object_id(playlist_id, "playlist", "list_playlists")
     client = get_client()
     raw = client.get(f"data/playlists/{playlist_id}")
     items = raw.get("shots") or []
