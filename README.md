@@ -51,7 +51,10 @@ for health checks. The image runs as an unprivileged user.
 on anything but localhost unless the operator confirms TLS terminates in front of it (`--behind-tls` or
 `KITSU_BEHIND_TLS=true`; deliberately not set in the image). It never logs credentials and keeps them only in
 memory, under keys derived with a per-process secret. Only logins Kitsu accepted are kept, for an hour of
-inactivity; repeated failed logins for one account are slowed down. Listing the tools works without a login
+inactivity. Repeated rejected logins for one account are slowed down (a Kitsu outage does not count), while a
+login Kitsu accepted in the last day is always let through, so guessing at someone's email cannot lock them
+out. Spraying many emails from one address is not throttled; fine at studio scale, otherwise rate-limit at the
+proxy. Listing the tools works without a login
 (it is metadata only); every tool call needs one.
 
 **Each user** (AI Studio → Connectors → Add, or Le Chat → Connectors → Custom MCP connector):
