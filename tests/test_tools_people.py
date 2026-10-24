@@ -26,6 +26,7 @@ async def test_workload(call):
         "estimation": 720,
         "logged": 60,
         "next_due": "2026-10-10",
+        "on_hold": 0,
     }
     assert rows["Alice Martin"]["waiting_feedback"] == 1
     assert rows["(unassigned)"]["open_tasks"] == 1

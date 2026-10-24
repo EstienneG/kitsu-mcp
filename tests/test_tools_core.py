@@ -24,7 +24,7 @@ async def test_list_asset_types_accepts_project_name(call):
 
 
 async def test_list_assets_filters(call):
-    result = await call("list_assets", project="p-1", asset_types=["character"], compact=False)
+    result = await call("list_assets", project="p-1", asset_types=["character"], detail="full")
     assert [a["name"] for a in result["assets"]] == ["Hero"]
     assert result["assets"][0]["tasks"][0] == {
         "id": "t-hero-mod",

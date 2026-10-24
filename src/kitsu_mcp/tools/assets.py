@@ -3,7 +3,7 @@ from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
 from kitsu_mcp.lookups import Lookups, check_names, get_lookups
 from kitsu_mcp.models import AssetDetail, AssetList, AssetSummary
-from kitsu_mcp.validation import Limit, Offset, object_id
+from kitsu_mcp.validation import Detail, Limit, Offset, object_id
 
 
 def statuses(tasks: list) -> dict[str, str | None]:
@@ -39,14 +39,14 @@ def list_assets(
     exclude_asset_types: list[str] | None = None,
     task_status_filters: dict[str, list[str]] | None = None,
     name_contains: str | None = None,
-    compact: bool = True,
+    detail: Detail = "compact",
     limit: Limit = 100,
     offset: Offset = 0,
 ) -> AssetList:
     """List a project's assets with their tasks, optionally filtered.
 
-    compact (default) gives each asset's tasks as {task type: status}; compact=False returns full task
-    rows (IDs, assignees, due dates, latest preview), several times larger. get_asset has the details.
+    detail="compact" (default) gives each asset's tasks as {task type: status}; detail="full" returns
+    full task rows (IDs, assignees, due dates, latest preview), several times larger. get_asset has the details.
     project: project name or ID.
     asset_types / exclude_asset_types: asset type names (e.g. ["Environment"]).
     task_status_filters: task type name -> allowed status short names; all must match,
@@ -74,7 +74,7 @@ def list_assets(
         tasks = [task_summary(t, lookups) for t in asset.get("tasks") or []]
         if not matches_status_filters(tasks, task_status_filters):
             continue
-        if compact:
+        if detail == "compact":
             results.append(AssetSummary(id=asset["id"], name=asset["name"], type=type_name, statuses=statuses(tasks)))
         else:
             results.append(AssetSummary(id=asset["id"], name=asset["name"], type=type_name, tasks=tasks))

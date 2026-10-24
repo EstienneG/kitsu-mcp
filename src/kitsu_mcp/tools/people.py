@@ -83,16 +83,18 @@ def get_person_tasks(
 
 @mcp.tool(annotations=READ_ONLY, tags={"people", "tasks", "reporting"})
 def workload(project: str, task_types: list[str] | None = None) -> list[Workload]:
-    """Open (not done) tasks per person on a project: counts, overdue, waiting feedback, estimate vs. logged.
+    """Open tasks per person on a project: counts, overdue, waiting for review, retakes, on hold,
+    estimate vs. logged.
 
-    Sorted by number of open tasks. Unassigned open tasks are reported as person "(unassigned)".
+    Open = not done and not omitted (status roles: see list_task_statuses); on-hold tasks are open but
+    never overdue. Sorted by number of open tasks. Unassigned open tasks are reported as "(unassigned)".
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
     type_ids = {lookups.task_type(t)["id"] for t in task_types or []}
     by_person: dict[str | None, list] = defaultdict(list)
     for record in project_tasks(get_client(), lookups, project_id):
-        if record.is_done(lookups) or (type_ids and record.raw.get("task_type_id") not in type_ids):
+        if not record.is_open(lookups) or (type_ids and record.raw.get("task_type_id") not in type_ids):
             continue
         for person_id in record.raw.get("assignees") or [None]:
             by_person[person_id].append(record)
@@ -100,14 +102,15 @@ def workload(project: str, task_types: list[str] | None = None) -> list[Workload
     rows = []
     for person_id, records in by_person.items():
         dues = sorted(d for r in records if (d := day(r.raw.get("due_date"))))
-        status_ids = [r.raw.get("task_status_id") for r in records]
+        roles = [r.role(lookups) for r in records]
         rows.append(
             Workload(
                 person=lookups.person_name(person_id) or "(unassigned)",
                 open_tasks=len(records),
                 overdue=sum(r.is_overdue(lookups) for r in records),
-                waiting_feedback=sum(lookups.status_flag(s, "is_feedback_request") for s in status_ids),
-                retakes=sum(lookups.status_flag(s, "is_retake") for s in status_ids),
+                waiting_feedback=roles.count("waiting_review"),
+                retakes=roles.count("retake"),
+                on_hold=roles.count("on_hold"),
                 estimation=sum(r.raw.get("estimation") or 0 for r in records),
                 logged=sum(r.raw.get("duration") or 0 for r in records),
                 next_due=dues[0] if dues else None,
