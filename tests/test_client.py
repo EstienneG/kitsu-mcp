@@ -87,10 +87,19 @@ def test_missing_config_is_reported(monkeypatch):
     monkeypatch.chdir("/")
     config.get_settings.cache_clear()
     try:
-        with pytest.raises(RuntimeError, match="Missing configuration: KITSU_HOST, KITSU_USER, KITSU_PASSWORD"):
+        with pytest.raises(RuntimeError, match="Missing configuration: KITSU_HOST$"):
             config.get_settings()
     finally:
         config.get_settings.cache_clear()
+
+
+def test_stdio_requires_a_login():
+    """The login is optional in Settings (HTTP callers bring their own) but required over stdio."""
+    from kitsu_mcp.config import require_login
+
+    with pytest.raises(RuntimeError, match="Missing configuration: KITSU_USER, KITSU_PASSWORD"):
+        require_login(Settings(host="http://kitsu.test/api"))  # type: ignore[arg-type]
+    require_login(Settings(host="http://kitsu.test/api", user="u", password="p"))  # type: ignore[arg-type]
 
 
 def test_relogin_does_not_recurse_when_login_itself_is_rejected(monkeypatch):
