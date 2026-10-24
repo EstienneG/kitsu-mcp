@@ -6,7 +6,7 @@ from kitsu_mcp.app import READ_ONLY, mcp
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import comment, task_detail
 from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import MyTask, StatusChange, TaskDetail, TaskHistory, TaskList
+from kitsu_mcp.models import AssigneeGroup, MyTask, StatusChange, TaskDetail, TaskHistory, TaskList, TaskRow
 from kitsu_mcp.production import EntityKind, TaskRecord, day, project_tasks
 from kitsu_mcp.validation import Limit, Offset, iso_date, object_id
 
@@ -39,8 +39,10 @@ def search_tasks(
     due_before: str | None = None,
     due_after: str | None = None,
     overdue: bool = False,
+    waiting_feedback: bool = False,
     include_done: bool = True,
     sort_by: SortKey = "due_date",
+    group_by: Literal["assignee"] | None = None,
     limit: Limit = 100,
     offset: Offset = 0,
 ) -> TaskList:
@@ -49,7 +51,10 @@ def search_tasks(
     project: name or ID. task_types: names or short names. statuses: status short names.
     assignee: person name, email or ID. group: asset type name or sequence name.
     due_before / due_after: YYYY-MM-DD (inclusive). overdue: due date passed and status not done.
+    waiting_feedback: in a status that requests feedback (waiting for review/approval).
     Results are sorted by `sort_by` (missing values last); `total` counts all matches.
+    group_by="assignee": instead of task rows, one compact line per task grouped by person (lighter
+    for "who owns what"); limit/offset then apply to the groups.
     """
     due_before = iso_date(due_before, "due_before") if due_before else None
     due_after = iso_date(due_after, "due_after") if due_after else None
@@ -74,12 +79,42 @@ def search_tasks(
             and (not due_before or (due is not None and due <= due_before))
             and (not due_after or (due is not None and due >= due_after))
             and (not overdue or record.is_overdue(lookups))
+            and (not waiting_feedback or lookups.status_flag(task.get("task_status_id"), "is_feedback_request"))
             and (include_done or not record.is_done(lookups))
         )
 
-    rows = [r.row(lookups) for r in project_tasks(get_client(), lookups, project_id, entity_kind) if keep(r)]
-    rows.sort(key=lambda r: (getattr(r, sort_by) is None, getattr(r, sort_by) or "", r.entity or ""))
-    return TaskList(total=len(rows), tasks=rows[offset : offset + limit])
+    records = [r for r in project_tasks(get_client(), lookups, project_id, entity_kind) if keep(r)]
+    pairs = [(r.row(lookups), r.is_overdue(lookups)) for r in records]
+    pairs.sort(key=lambda p: (getattr(p[0], sort_by) is None, getattr(p[0], sort_by) or "", p[0].entity or ""))
+    if group_by == "assignee":
+        groups = _by_assignee(pairs)
+        return TaskList(total=len(pairs), by_assignee=groups[offset : offset + limit])
+    return TaskList(total=len(pairs), tasks=[row for row, _ in pairs[offset : offset + limit]])
+
+
+def _by_assignee(pairs: list[tuple[TaskRow, bool]]) -> list[AssigneeGroup]:
+    """Group (row, is_overdue) pairs by assignee, busiest first; a task with two assignees counts for both."""
+    groups: dict[str, list[tuple[TaskRow, bool]]] = {}
+    for row, late in pairs:
+        for person in row.assignees or ["(unassigned)"]:
+            groups.setdefault(person, []).append((row, late))
+
+    def line(r: TaskRow) -> str:
+        details = ", ".join(x for x in (r.status, r.due_date and f"due {r.due_date}") if x)
+        return f"{r.entity} / {r.task_type} ({details})"
+
+    return sorted(
+        (
+            AssigneeGroup(
+                assignee=person,
+                count=len(items),
+                overdue=sum(late for _, late in items),
+                tasks=[line(r) for r, _ in items],
+            )
+            for person, items in groups.items()
+        ),
+        key=lambda g: (-g.count, g.assignee),
+    )
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"tasks"})
@@ -119,7 +154,7 @@ def my_tasks() -> list[MyTask]:
             entity_type=t.get("entity_type_name"),
             task_type=t.get("task_type_name"),
             status=t.get("task_status_short_name"),
-            due_date=t.get("due_date"),
+            due_date=day(t.get("due_date")),
         )
         for t in get_client().get("data/user/tasks")
     ]

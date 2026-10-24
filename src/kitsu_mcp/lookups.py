@@ -64,6 +64,14 @@ class Lookups:
             return False
         return bool(self.index("task_statuses").get(status_id, {}).get(flag))
 
+    def is_omitted(self, status_id: str | None) -> bool:
+        """A done status that means the task was dropped (OMIT, N/A, ...), per KITSU_OMITTED_STATUSES."""
+        if not status_id:
+            return False
+        status = self.index("task_statuses").get(status_id, {})
+        names = {n.strip().lower() for n in self.client.settings.omitted_statuses.split(",") if n.strip()}
+        return bool({str(status.get("short_name") or "").lower(), str(status.get("name") or "").lower()} & names)
+
     def person_name(self, person_id: str | None) -> str | None:
         if not person_id:
             return None

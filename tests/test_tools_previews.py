@@ -1,5 +1,6 @@
 import pytest
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.server import mcp
 
@@ -84,3 +85,29 @@ async def test_download_previews_keeps_existing_files(call, fake, tmp_path):
     )
     assert [s["id"] for s in result["saved"]] == ["a-hero"]
     assert existing.read_bytes() != b"mine"
+
+
+async def test_recent_previews(call):
+    result = await call("recent_previews", project="Demo Short")
+    # Three comments carry an upload; newest first.
+    assert result["total"] == 3
+    assert [p["preview_file_id"] for p in result["previews"]] == ["pf-hero", "pf-sh010", "pf-sh010-v1"]
+    first = result["previews"][0]
+    assert (first["is_video"], first["author"], first["task_type"]) == (False, "Alice Martin", "Modeling")
+
+
+async def test_recent_previews_filters(call):
+    videos = await call("recent_previews", project="p-1", videos_only=True)
+    assert [p["preview_file_id"] for p in videos["previews"]] == ["pf-sh010", "pf-sh010-v1"]
+    assert all(p["is_video"] for p in videos["previews"])
+    anim = await call("recent_previews", project="p-1", task_type="Animation", since="2026-08-25")
+    assert [(p["preview_file_id"], p["entity"], p["revision"]) for p in anim["previews"]] == [
+        ("pf-sh010", "SQ010 / SH010", 2)
+    ]
+    named = await call("recent_previews", project="p-1", entity_name_contains="hero", limit=1)
+    assert [p["entity"] for p in named["previews"]] == ["Hero"]
+
+
+async def test_recent_previews_rejects_bad_dates(call):
+    with pytest.raises(ToolError, match="since must be a YYYY-MM-DD"):
+        await call("recent_previews", project="p-1", since="yesterday")

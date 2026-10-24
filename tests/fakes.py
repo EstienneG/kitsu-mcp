@@ -466,6 +466,50 @@ class FakeClient:
     def user_id(self) -> str:
         return self.data["me"]
 
+    def _news(self, project_id: str, params: dict) -> dict:
+        """Zou's activity feed: one item per comment, newest first, paged; filters as Zou applies them."""
+        tasks = self._by_id("tasks")
+        items = []
+        for task_id, comments in self.data["comments"].items():
+            task = tasks.get(task_id)
+            if task is None or task["project_id"] != project_id:
+                continue
+            for c in comments:
+                preview = (c.get("previews") or [{}])[0]
+                record = self.data["preview_files"].get(preview.get("id"), {})
+                entity = self._entity(task["entity_id"])
+                items.append(
+                    {
+                        "created_at": c["created_at"],
+                        "task_id": task_id,
+                        "task_type_id": task["task_type_id"],
+                        "task_status_id": c.get("task_status_id"),
+                        "author_id": c.get("person_id"),
+                        "task_entity_id": task["entity_id"],
+                        "full_entity_name": f"{entity.get('sequence_name')} / {entity['name']}"
+                        if entity.get("sequence_name")
+                        else entity["name"],
+                        "preview_file_id": preview.get("id"),
+                        "preview_file_revision": preview.get("revision"),
+                        "preview_file_extension": record.get("extension"),
+                    }
+                )
+        if params.get("only_preview") == "true":
+            items = [i for i in items if i["preview_file_id"]]
+        if params.get("task_type_id"):
+            items = [i for i in items if i["task_type_id"] == params["task_type_id"]]
+        if params.get("after"):
+            items = [i for i in items if i["created_at"] > params["after"]]
+        items.sort(key=lambda i: i["created_at"], reverse=True)
+        limit, page = int(params.get("limit", 50)), int(params.get("page", 1))
+        return {
+            "data": items[(page - 1) * limit : page * limit],
+            "total": len(items),
+            "nb_pages": max(1, -(-len(items) // limit)),
+            "page": page,
+            "limit": limit,
+        }
+
     def _person_tasks(self, person_id: str, done: bool) -> list[dict]:
         statuses = self._by_id("statuses")
         return [
@@ -529,6 +573,8 @@ class FakeClient:
         if m := re.fullmatch(r"data/projects/([^/]+)/asset-types", path):
             used = {a["asset_type_id"] for a in d["assets"] if a["project_id"] == m[1]}
             return [t for t in d["asset_types"] if t["id"] in used]
+        if m := re.fullmatch(r"data/projects/([^/]+)/news", path):
+            return self._news(m[1], params)
         if m := re.fullmatch(r"data/projects/([^/]+)/playlists", path):
             # Zou pages playlists 20 at a time; past the end it returns an empty page.
             page = int(params.get("page", 1))

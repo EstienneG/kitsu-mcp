@@ -8,9 +8,10 @@ def project_status_report(project: str) -> str:
     """Write a status report for a production."""
     return (
         f"Write a concise status report for the Kitsu project '{project}'.\n"
-        f"1. Call project_overview for '{project}' and summarize overall completion and each task type's progress.\n"
-        "2. Call search_tasks with overdue=True and list the most urgent overdue tasks (entity, task type, "
-        "assignee, due date).\n"
+        f"1. Call project_overview for '{project}' and summarize overall completion and each task type's progress "
+        "(omitted tasks are counted apart; mention them if there are many).\n"
+        "2. Call search_tasks with overdue=True and group_by='assignee', and list the most urgent overdue tasks "
+        "per person.\n"
         "3. Call workload and point out anyone overloaded and how much open work is unassigned.\n"
         "End with three concrete recommendations. Use tables where they help."
     )
@@ -21,10 +22,10 @@ def review_queue(project: str) -> str:
     """List what is waiting for a supervisor's review."""
     return (
         f"Find everything waiting for review on the Kitsu project '{project}'.\n"
-        "Call list_task_statuses and pick the statuses whose is_feedback_request flag is true. Then call "
-        "search_tasks with those statuses, include_done=False and sort_by='last_comment_date'. Group the result by "
-        "task type, oldest request first, and show for each the entity, assignee and how long it has waited. "
-        "For the three oldest, call get_task and quote the artist's latest comment."
+        "Call search_tasks with waiting_feedback=True and sort_by='last_comment_date'. Group the result by task "
+        "type, oldest request first, and show for each the entity, assignee and how long it has waited. "
+        "For the three oldest, call get_task and quote the artist's latest comment; when the task has a "
+        "last_preview_file_id that is a video, review_video shows the frames the comments point at."
     )
 
 
@@ -54,10 +55,11 @@ def review_shot(shot_id: str, task_type: str | None = None) -> str:
     """Review a shot's latest movie against the feedback on it."""
     task = f"its {task_type} task" if task_type else "the task with the most recent comments"
     return (
-        f"Review the latest movie of the shot with ID '{shot_id}' (find IDs with list_shots).\n"
-        f"1. Call get_shot to find {task}. Call get_video_info with entity_id='{shot_id}' for the duration, "
-        "fps and frame count.\n"
-        "2. Call get_video_contact_sheet (n=12) for an overview and describe what happens in the shot.\n"
+        f"Review the latest movie of the shot with ID '{shot_id}' (find IDs with list_shots, or recent uploads "
+        "with recent_previews).\n"
+        f"1. Call get_shot to find {task} (each task lists its last_preview_file_id). Call get_video_info with "
+        "that preview_file_id for the duration, fps and frame count.\n"
+        "2. Call get_video_contact_sheet (n=12) on the same preview for an overview and describe what happens.\n"
         "3. Call get_task on the task to read its comments, then review_video on the task to see the frames the "
         "comments point at (timecodes, frame numbers, drawn annotations).\n"
         "4. For a closer look at a moment call get_video_frames; if the task has an earlier movie revision, "

@@ -47,6 +47,7 @@ class TaskRecord:
             duration=task.get("duration"),
             retake_count=task.get("retake_count"),
             last_comment_date=task.get("last_comment_date"),
+            last_preview_file_id=task.get("last_preview_file_id"),
         )
 
     def is_done(self, lookups: Lookups) -> bool:

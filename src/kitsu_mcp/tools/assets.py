@@ -6,6 +6,11 @@ from kitsu_mcp.models import AssetDetail, AssetList, AssetSummary
 from kitsu_mcp.validation import Limit, Offset, object_id
 
 
+def statuses(tasks: list) -> dict[str, str | None]:
+    """Compact form of an entity's tasks: task type -> status short name."""
+    return {t.task_type or "?": t.status for t in tasks}
+
+
 def check_status_filters(status_filters: dict[str, list[str]] | None, lookups: Lookups) -> None:
     """Unknown task type or status names in a filter are errors, not silently empty results."""
     if not status_filters:
@@ -34,11 +39,14 @@ def list_assets(
     exclude_asset_types: list[str] | None = None,
     task_status_filters: dict[str, list[str]] | None = None,
     name_contains: str | None = None,
+    compact: bool = True,
     limit: Limit = 100,
     offset: Offset = 0,
 ) -> AssetList:
     """List a project's assets with their tasks, optionally filtered.
 
+    compact (default) gives each asset's tasks as {task type: status}; compact=False returns full task
+    rows (IDs, assignees, due dates, latest preview), several times larger. get_asset has the details.
     project: project name or ID.
     asset_types / exclude_asset_types: asset type names (e.g. ["Environment"]).
     task_status_filters: task type name -> allowed status short names; all must match,
@@ -66,7 +74,10 @@ def list_assets(
         tasks = [task_summary(t, lookups) for t in asset.get("tasks") or []]
         if not matches_status_filters(tasks, task_status_filters):
             continue
-        results.append(AssetSummary(id=asset["id"], name=asset["name"], type=type_name, tasks=tasks))
+        if compact:
+            results.append(AssetSummary(id=asset["id"], name=asset["name"], type=type_name, statuses=statuses(tasks)))
+        else:
+            results.append(AssetSummary(id=asset["id"], name=asset["name"], type=type_name, tasks=tasks))
 
     results.sort(key=lambda a: ((a.type or "").lower(), a.name.lower()))
     return AssetList(total=len(results), assets=results[offset : offset + limit])

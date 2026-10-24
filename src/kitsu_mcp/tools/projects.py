@@ -32,12 +32,20 @@ def list_projects(include_closed: bool = False) -> list[Project]:
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"projects"})
-def list_task_types() -> list[TaskType]:
-    """List task types (Modelling, Animation, ...) with the entity kind they apply to."""
+def list_task_types(project: str | None = None) -> list[TaskType]:
+    """List task types (Modelling, Animation, ...) with the entity kind they apply to.
+
+    project (name or ID): only the task types that production uses; otherwise the whole studio's.
+    """
+    lookups = get_lookups()
+    used: set[str] | None = None
+    if project:
+        info = get_client().get(f"data/projects/{lookups.project(project)['id']}")
+        used = set(info.get("task_types") or [])
     return [
         TaskType(id=t["id"], name=t["name"], short_name=t.get("short_name"), for_entity=t.get("for_entity"))
-        for t in get_lookups().index("task_types").values()
-        if not t.get("archived")
+        for t in lookups.index("task_types").values()
+        if not t.get("archived") and (used is None or t["id"] in used)
     ]
 
 
@@ -66,6 +74,14 @@ def list_asset_types(project: str) -> list[Named]:
     return [Named(id=t["id"], name=t["name"]) for t in get_client().get(f"data/projects/{project_id}/asset-types")]
 
 
+def _number(value) -> float | None:
+    """Zou stores fps as text ("23", "23.976")."""
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _ratio(part: int, total: int) -> float:
     return round(part / total, 3) if total else 0.0
 
@@ -73,7 +89,10 @@ def _ratio(part: int, total: int) -> float:
 @mcp.tool(annotations=READ_ONLY, tags={"projects", "reporting"})
 def project_overview(project: str) -> ProjectOverview:
     """Where a production stands: entity and task counts, completion per task type, overdue tasks,
-    tasks waiting for feedback, retakes, unassigned work and time logged vs. estimated."""
+    tasks waiting for feedback, retakes, unassigned work and time logged vs. estimated.
+
+    Omitted tasks (OMIT, N/A, ...: see KITSU_OMITTED_STATUSES) are counted apart and left out of
+    done_ratio, so dropped work does not inflate progress."""
     client = get_client()
     lookups = get_lookups()
     info = client.get(f"data/projects/{lookups.project(project)['id']}")
@@ -84,6 +103,7 @@ def project_overview(project: str) -> ProjectOverview:
         return r.raw.get("task_status_id")
 
     open_records = [r for r in records if not r.is_done(lookups)]
+    omitted = [r for r in records if lookups.is_omitted(status_of(r))]
     by_type: dict[str, list[TaskRecord]] = defaultdict(list)
     for r in records:
         by_type[lookups.name("task_types", r.raw.get("task_type_id")) or "?"].append(r)
@@ -91,29 +111,32 @@ def project_overview(project: str) -> ProjectOverview:
     progress = []
     for task_type, group in sorted(by_type.items()):
         counts = Counter(lookups.name("task_statuses", status_of(r), "short_name") or "?" for r in group)
-        done = sum(r.is_done(lookups) for r in group)
+        dropped = sum(lookups.is_omitted(status_of(r)) for r in group)
+        done = sum(r.is_done(lookups) for r in group) - dropped
         progress.append(
             TaskTypeProgress(
                 task_type=task_type,
                 total=len(group),
                 done=done,
-                done_ratio=_ratio(done, len(group)),
+                omitted=dropped,
+                done_ratio=_ratio(done, len(group) - dropped),
                 statuses=[StatusCount(status=s, count=n) for s, n in counts.most_common()],
             )
         )
 
-    done_total = len(records) - len(open_records)
+    done_total = len(records) - len(open_records) - len(omitted)
     return ProjectOverview(
         project=info["name"],
         production_type=info.get("production_type"),
         start_date=day(info.get("start_date")),
         end_date=day(info.get("end_date")),
-        fps=info.get("fps"),
+        fps=_number(info.get("fps")),
         resolution=info.get("resolution"),
         assets=sum(e.kind == "asset" for e in entities),
         shots=sum(e.kind == "shot" for e in entities),
         tasks=len(records),
-        done_ratio=_ratio(done_total, len(records)),
+        omitted=len(omitted),
+        done_ratio=_ratio(done_total, len(records) - len(omitted)),
         overdue=sum(r.is_overdue(lookups) for r in open_records),
         waiting_feedback=sum(lookups.status_flag(status_of(r), "is_feedback_request") for r in open_records),
         retakes=sum(lookups.status_flag(status_of(r), "is_retake") for r in open_records),
