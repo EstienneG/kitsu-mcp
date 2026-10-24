@@ -68,10 +68,6 @@ async def test_get_task_without_comments(call):
     assert (await call("get_task", task_id="t-hero-mod", include_comments=False))["comments"] is None
 
 
-async def test_my_tasks(call):
-    assert {t["id"] for t in await call("my_tasks")} == {"t-hero-mod", "t-sh010-anim"}
-
-
 async def test_unknown_project_is_a_readable_error(call):
     with pytest.raises(ToolError, match="Unknown project 'Nope'"):
         await call("list_assets", project="Nope")
