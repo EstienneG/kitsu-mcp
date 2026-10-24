@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     """Waiting for review/approval, in addition to statuses Kitsu flags as feedback requests."""
     retake_statuses: str = ""
     """Sent back for changes, in addition to statuses Kitsu flags as retakes."""
+    dry_run_log: Path | None = None
+    """JSONL file that every write-tool dry run (dry_run=True) is appended to."""
 
 
 @lru_cache

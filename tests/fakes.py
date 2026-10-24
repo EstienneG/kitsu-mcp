@@ -462,7 +462,9 @@ class FakeClient:
         if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)/add", path):
             task = self._task_or_404(m[1], path)
             task["duration"] = (task["duration"] or 0) + data["duration"]
-            return {"task_id": task["id"], "person_id": m[3], "date": m[2], "duration": data["duration"]}
+            entry = {"task_id": task["id"], "person_id": m[3], "date": m[2], "duration": data["duration"]}
+            self.data.setdefault("time_spents", []).append(entry)
+            return entry
         raise ToolError(f"Not found: {path} (no fake route)")
 
     def put(self, path: str, data: dict) -> Any:
@@ -638,5 +640,10 @@ class FakeClient:
         if m := re.fullmatch(r"data/playlists/([^/]+)", path):
             return self._by_id("playlists")[m[1]]
         if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents", path):
-            return {"total": self._by_id("tasks")[m[1]]["duration"]}
+            # Zou: {"total": minutes, "<person id>": [entries], ...}
+            spent: dict[str, Any] = {"total": self._by_id("tasks")[m[1]]["duration"]}
+            for entry in d.get("time_spents", []):
+                if entry["task_id"] == m[1]:
+                    spent.setdefault(entry["person_id"], []).append(entry)
+            return spent
         raise ToolError(f"Not found: {path} (no fake route)")

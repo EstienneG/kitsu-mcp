@@ -396,3 +396,197 @@ async def test_failure_mid_add_keeps_the_progress_report_for_any_error(call, wra
     monkeypatch.setattr(wra, "post", broken)
     with pytest.raises(ToolError, match="Added nothing before failing on SH010: connection reset. Calling"):
         await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-1"])
+
+
+# --- dry_run -------------------------------------------------------------------------------------------------
+
+# One real-looking call per write tool: (tool, arguments, expected before, expected after).
+DRY_RUNS = [
+    (
+        "add_comment",
+        {"task_id": "t-hero-mod", "text": "Approved", "status": "done"},
+        {"status": "wfa"},
+        {"status": "done"},
+    ),
+    ("set_task_status", {"task_id": "t-hero-mod", "status": "retake"}, {"status": "wfa"}, {"status": "retake"}),
+    (
+        "assign_task",
+        {"task_id": "t-hero-mod", "person": "bob"},
+        {"assignees": ["Alice Martin"]},
+        {"assignees": ["Alice Martin", "Bob Leroy"]},
+    ),
+    (
+        "update_task_schedule",
+        {"task_id": "t-hero-mod", "due_date": "2026-11-01", "estimation_minutes": 120},
+        {"due_date": "2026-10-01", "estimation": 960},
+        {"due_date": "2026-11-01", "estimation": 120},
+    ),
+    (
+        "log_time",
+        {"task_id": "t-hero-mod", "minutes": 90, "day": "2026-10-14"},
+        {"task_total": 600, "person_day": 0},
+        {"task_total": 690, "person_day": 90},
+    ),
+]
+
+
+@pytest.mark.parametrize("name, args, before, after", DRY_RUNS, ids=[d[0] for d in DRY_RUNS])
+async def test_dry_run_writes_nothing_and_plans_the_real_call(call, fake, writable, name, args, before, after):
+    plan = await call(name, **args, dry_run=True)
+    assert writes(fake) == [], "a dry run must not POST or PUT"
+    assert (plan["dry_run"], plan["ok"], plan["verdict"]) == (True, True, "would_succeed")
+    assert plan["would"] and plan["reason"] is None
+    assert (plan["before"], plan["after"]) == (before, after)
+
+    result = await call(name, **args)
+    assert result["ok"] is True and "dry_run" not in result
+    assert [(r["method"], r["path"], r["payload"]) for r in plan["requests"]] == writes(fake)
+
+
+async def test_dry_run_shows_the_one_line_action(call, fake, writable):
+    plan = await call("set_task_status", task_id="t-sh010-comp", status="wip", dry_run=True)
+    assert plan["would"] == "Change SH010 / Compositing from retake to wip"
+
+
+async def test_dry_run_warns_without_failing(call, fake, writable):
+    plan = await call("set_task_status", task_id="t-hero-mod", status="wfa", dry_run=True)
+    assert plan["verdict"] == "would_succeed"
+    assert any("already wfa" in w for w in plan["warnings"])
+    plan = await call("assign_task", task_id="t-hero-mod", person="alice", dry_run=True)
+    assert plan["before"] == plan["after"] and any("already assigned" in w for w in plan["warnings"])
+
+
+async def test_dry_run_warns_when_kitsu_may_refuse_the_role(call, fake, writable):
+    """Alice is an artist ("user"); done is not open to artists and assigning is for leads."""
+    plan = await call("set_task_status", task_id="t-hero-mod", status="done", dry_run=True)
+    assert plan["verdict"] == "would_succeed"
+    assert any("not open to artists" in w for w in plan["warnings"])
+    assert any("closes the task" in w for w in plan["warnings"])
+    plan = await call("assign_task", task_id="t-sh020-anim", person="bob", dry_run=True)
+    assert any("usually cannot assign" in w for w in plan["warnings"])
+
+
+def _archive_done(fake):
+    next(s for s in fake.data["statuses"] if s["id"] == ST_DONE)["archived"] = True
+
+
+def _deactivate_bob(fake):
+    next(p for p in fake.data["people"] if p["id"] == BOB)["active"] = False
+
+
+def _full_day(fake):
+    fake.data["time_spents"] = [{"task_id": "t-hero-mod", "person_id": ALICE, "date": "2026-10-14", "duration": 1400}]
+
+
+FAILING = [
+    ("add_comment", {"task_id": "t-hero-mod", "text": "ok", "status": "done"}, _archive_done, "archived"),
+    ("set_task_status", {"task_id": "t-hero-mod", "status": "done"}, _archive_done, "archived"),
+    ("assign_task", {"task_id": "t-sh020-anim", "person": "bob"}, _deactivate_bob, "inactive"),
+    ("update_task_schedule", {"task_id": "t-hero-mod", "start_date": "2026-10-05"}, lambda fake: None, "after the due"),
+    ("log_time", {"task_id": "t-hero-mod", "minutes": 60, "day": "2026-10-14"}, _full_day, "over 24 h"),
+]
+
+
+@pytest.mark.parametrize("name, args, setup, reason", FAILING, ids=[f[0] for f in FAILING])
+async def test_failing_check_is_a_verdict_in_dry_run_and_an_error_for_real(
+    call, fake, writable, name, args, setup, reason
+):
+    setup(fake)
+    plan = await call(name, **args, dry_run=True)
+    assert (plan["ok"], plan["verdict"]) == (False, "would_fail")
+    assert reason in plan["reason"]
+    assert plan["requests"], "the plan still shows what would have been sent"
+    with pytest.raises(ToolError, match=reason):
+        await call(name, **args)
+    assert writes(fake) == []
+
+
+@pytest.mark.parametrize(
+    "name, args, error",
+    [
+        ("set_task_status", {"task_id": "t-hero-mod", "status": "approvedd"}, "Unknown task status"),
+        ("assign_task", {"task_id": "t-hero-mod", "person": "nobody"}, "Unknown person"),
+        ("update_task_schedule", {"task_id": "t-hero-mod"}, "Nothing to update"),
+        ("log_time", {"task_id": "t-hero-mod", "minutes": 0}, "between 1 and 1440"),
+        ("add_comment", {"task_id": "not an id", "text": "hi"}, "not a task ID"),
+    ],
+)
+async def test_dry_run_still_raises_on_bad_arguments(call, fake, writable, name, args, error):
+    with pytest.raises(ToolError, match=error):
+        await call(name, **args, dry_run=True)
+    assert writes(fake) == []
+
+
+async def test_log_time_dry_run_counts_the_persons_day(call, fake, writable):
+    fake.data["time_spents"] = [{"task_id": "t-hero-mod", "person_id": BOB, "date": "2026-10-14", "duration": 30}]
+    plan = await call("log_time", task_id="t-hero-mod", minutes=60, day="2026-10-14", person="bob", dry_run=True)
+    assert plan["before"]["person_day"] == 30 and plan["after"]["person_day"] == 90
+    assert plan["requests"][0]["path"] == f"actions/tasks/t-hero-mod/time-spents/2026-10-14/persons/{BOB}/add"
+
+
+async def test_dry_run_log_appends_jsonl(call, fake, writable, tmp_path, monkeypatch):
+    import json
+
+    log = tmp_path / "plans.jsonl"
+    monkeypatch.setattr(fake.settings, "dry_run_log", log)
+    await call("assign_task", task_id="t-sh020-anim", person="bob", dry_run=True)
+    await call("log_time", task_id="t-hero-mod", minutes=5, dry_run=True)
+    lines = [json.loads(line) for line in log.read_text().splitlines()]
+    assert [line["tool"] for line in lines] == ["assign_task", "log_time"]
+    assert lines[0]["requests"][0]["method"] == "PUT" and lines[0]["dry_run"] is True
+    await call("assign_task", task_id="t-sh020-anim", person="bob")
+    assert len(log.read_text().splitlines()) == 2, "real calls are not logged"
+
+
+async def test_every_write_tool_has_dry_run(writable):
+    """Any tool tagged write (not just the ones listed here) must offer dry_run, documented."""
+    tagged = {t.name: t for t in await mcp.list_tools() if "write" in (t.tags or set())}
+    assert set(tagged) == WRITE_TOOLS, "WRITE_TOOLS is out of date"
+    for name, t in tagged.items():
+        assert t.parameters["properties"]["dry_run"]["default"] is False, name
+        assert "dry_run=True" in (t.description or ""), name
+
+
+async def test_create_playlist_dry_run_writes_nothing_and_plans_the_real_call(call, fake, writable):
+    args = {"project": "p-1", "name": "WRA shots", "for_entity": "shot", "task_type": "anim"}
+    plan = await call("create_playlist", **args, dry_run=True)
+    assert writes(fake) == [] and (plan["dry_run"], plan["verdict"]) == (True, "would_succeed")
+    planned = [(r["method"], r["path"], r["payload"]) for r in plan["requests"]]
+    await call("create_playlist", **args)
+    assert writes(fake) == planned
+
+
+async def test_add_to_playlist_dry_run_lists_adds_and_skips_without_writing(call, fake, writable):
+    playlist = (await call("create_playlist", project="p-1", name="Review", for_entity="shot"))["playlist"]
+    fake.calls.clear()
+    args = {"playlist_id": playlist["id"], "task_ids": ["t-sh010-anim", "t-sh020-anim"]}
+    plan = await call("add_to_playlist", **args, dry_run=True)
+    assert writes(fake) == []
+    assert [r["payload"]["entity_id"] for r in plan["requests"]] == ["s-1"]
+    assert any("SH020" in w for w in plan["warnings"])  # no preview uploaded: skipped
+    planned = [(r["method"], r["path"], r["payload"]) for r in plan["requests"]]
+    await call("add_to_playlist", **args)
+    assert writes(fake) == planned
+
+
+def test_plan_send_reports_partial_progress(fake):
+    from kitsu_mcp.plans import PartialSendError, Plan
+
+    plan = Plan("test", would="two comments")
+    plan.request("POST", "actions/tasks/t-hero-mod/comment", {"task_status_id": ST_WFA, "comment": "one"})
+    plan.request("POST", "actions/tasks/t-missing/comment", {"task_status_id": ST_WFA, "comment": "two"})
+    with pytest.raises(PartialSendError, match="Sent 1 of 2 requests, then failed") as raised:
+        plan.send()
+    assert raised.value.sent == 1
+    assert len(writes(fake)) == 2
+
+
+def test_plan_with_failed_check_sends_nothing(fake):
+    from kitsu_mcp.plans import Plan
+
+    plan = Plan("test", would="a comment")
+    plan.request("POST", "actions/tasks/t-hero-mod/comment", {"task_status_id": ST_WFA, "comment": "one"})
+    plan.fail("Not allowed.")
+    with pytest.raises(ToolError, match="Not allowed. Nothing was sent."):
+        plan.send()
+    assert writes(fake) == []
