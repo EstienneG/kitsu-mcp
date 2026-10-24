@@ -5,11 +5,28 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class ServerInfo(BaseModel):
+    """How this server is set up: what an agent can and cannot do here."""
+
+    version: str
+    kitsu_host: str
+    write_tools: bool = Field(description="add_comment, set_task_status, ... available (KITSU_ALLOW_WRITE)")
+    video_tools: bool = Field(description="The video extra (PyAV, Pillow) is installed")
+    max_page_size: int
+    status_role_settings: dict[str, list[str]] = Field(
+        description="KITSU_*_STATUSES: status names given each role; list_task_statuses shows the result"
+    )
+    unmatched_status_settings: dict[str, list[str]] = Field(description="Configured names that match no status")
+    cache_ttl_seconds: float
+    video_max_mb: int
+
+
 class User(BaseModel):
     id: str
     full_name: str | None
     email: str | None
     role: str | None
+    server: ServerInfo | None = None
 
 
 class Project(BaseModel):

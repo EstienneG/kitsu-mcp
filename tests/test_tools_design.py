@@ -159,3 +159,13 @@ async def test_project_overview_task_type_filters(call):
     assert {t["task_type"] for t in shots_only["by_task_type"]} == {"Animation", "Compositing"}
     anim = await call("project_overview", project="p-1", task_types=["ANIM"])
     assert (anim["tasks"], anim["done_ratio"]) == (2, 0.5)
+
+
+async def test_whoami_describes_the_server(call, fake):
+    result = await call("whoami")
+    assert result["full_name"] == "Alice Martin"  # unchanged user fields
+    server = result["server"]
+    assert server["kitsu_host"] == "http://kitsu.test/api" and server["write_tools"] is False
+    assert server["max_page_size"] == 500 and server["version"]
+    assert server["status_role_settings"]["KITSU_DONE_STATUSES"] == ["cbb"]
+    assert "password" not in str(result).lower() and server["kitsu_host"] != "p"
