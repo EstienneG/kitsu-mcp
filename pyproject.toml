@@ -1,6 +1,6 @@
 [project]
 name = "kitsu-mcp"
-version = "0.3.0"
+version = "0.3.1"
 description = "MCP server for the Kitsu (CGWire) production tracker"
 readme = "README.md"
 license = "MIT"
