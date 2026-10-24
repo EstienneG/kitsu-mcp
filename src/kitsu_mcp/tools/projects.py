@@ -12,7 +12,7 @@ from kitsu_mcp.models import (
     TaskType,
     TaskTypeProgress,
 )
-from kitsu_mcp.production import TaskRecord, day, project_entities
+from kitsu_mcp.production import TaskRecord, day, project_entities, project_tasks
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"projects"})
@@ -35,13 +35,17 @@ def list_projects(include_closed: bool = False) -> list[Project]:
 def list_task_types(project: str | None = None) -> list[TaskType]:
     """List task types (Modelling, Animation, ...) with the entity kind they apply to.
 
-    project (name or ID): only the task types that production uses; otherwise the whole studio's.
+    project (name or ID): only the task types that production declares or has tasks of; otherwise the
+    whole studio's.
     """
     lookups = get_lookups()
     used: set[str] | None = None
     if project:
-        info = get_client().get(f"data/projects/{lookups.project(project)['id']}")
-        used = set(info.get("task_types") or [])
+        client = get_client()
+        project_id = lookups.project(project)["id"]
+        # A project's declared list can miss types it has tasks of, so add those.
+        used = set(client.get(f"data/projects/{project_id}").get("task_types") or [])
+        used |= {tt for t in project_tasks(client, lookups, project_id) if (tt := t.raw.get("task_type_id"))}
     return [
         TaskType(id=t["id"], name=t["name"], short_name=t.get("short_name"), for_entity=t.get("for_entity"))
         for t in lookups.index("task_types").values()
@@ -102,8 +106,9 @@ def project_overview(project: str) -> ProjectOverview:
     def status_of(r: TaskRecord) -> str | None:
         return r.raw.get("task_status_id")
 
-    open_records = [r for r in records if not r.is_done(lookups)]
     omitted = [r for r in records if lookups.is_omitted(status_of(r))]
+    # Omitted wins over Kitsu's done flag: a dropped task is neither open nor finished.
+    open_records = [r for r in records if not r.is_done(lookups) and not lookups.is_omitted(status_of(r))]
     by_type: dict[str, list[TaskRecord]] = defaultdict(list)
     for r in records:
         by_type[lookups.name("task_types", r.raw.get("task_type_id")) or "?"].append(r)
@@ -112,7 +117,7 @@ def project_overview(project: str) -> ProjectOverview:
     for task_type, group in sorted(by_type.items()):
         counts = Counter(lookups.name("task_statuses", status_of(r), "short_name") or "?" for r in group)
         dropped = sum(lookups.is_omitted(status_of(r)) for r in group)
-        done = sum(r.is_done(lookups) for r in group) - dropped
+        done = sum(r.is_done(lookups) and not lookups.is_omitted(status_of(r)) for r in group)
         progress.append(
             TaskTypeProgress(
                 task_type=task_type,
@@ -124,7 +129,7 @@ def project_overview(project: str) -> ProjectOverview:
             )
         )
 
-    done_total = len(records) - len(open_records) - len(omitted)
+    done_total = sum(r.is_done(lookups) and not lookups.is_omitted(status_of(r)) for r in records)
     return ProjectOverview(
         project=info["name"],
         production_type=info.get("production_type"),

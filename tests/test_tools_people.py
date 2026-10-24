@@ -76,7 +76,7 @@ async def test_project_overview_leaves_omitted_tasks_out_of_progress(call, fake)
 
 
 async def test_list_task_types_for_a_project(call, fake):
-    fake.data["projects"][0]["task_types"] = ["tt-model", "tt-anim"]
+    fake.data["projects"][0]["task_types"] = ["tt-model", "tt-anim", "tt-comp"]
     names = [t["name"] for t in await call("list_task_types", project="Demo Short")]
-    assert sorted(names) == ["Animation", "Modeling"]
+    assert sorted(names) == ["Animation", "Compositing", "Modeling"]  # archived "Old" left out
     assert len(await call("list_task_types")) == 3

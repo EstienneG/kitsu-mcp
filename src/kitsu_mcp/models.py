@@ -109,6 +109,7 @@ class AssigneeGroup(BaseModel):
 class TaskList(BaseModel):
     total: int = Field(description="Matches before limit/offset")
     tasks: list[TaskRow] = Field(default_factory=list)
+    groups: int | None = Field(default=None, description="With group_by: number of groups before limit/offset")
     by_assignee: list[AssigneeGroup] | None = Field(
         default=None, description="Set with group_by='assignee', instead of tasks"
     )
