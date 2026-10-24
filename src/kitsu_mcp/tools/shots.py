@@ -1,5 +1,6 @@
 from fastmcp.exceptions import ToolError
 
+from kitsu_mcp import links
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
@@ -142,6 +143,7 @@ def get_shot(shot_id: str) -> ShotDetail:
         fps=_fps(shot.get("fps")),
         data=shot.get("data"),
         tasks=[task_summary(t, lookups) for t in tasks],
+        url=links.entity_url(shot.get("project_id"), "shot", shot["id"], shot.get("episode_id")),
     )
 
 

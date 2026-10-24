@@ -5,7 +5,7 @@ from typing import Literal
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
-from kitsu_mcp import video
+from kitsu_mcp import links, video
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
@@ -41,7 +41,8 @@ def _safe_filename(name: str) -> str:
     return re.sub(r"[^\w.-]+", "_", name).strip("_") or "unnamed"
 
 
-def _preview_file(p: dict) -> PreviewFile:
+def _preview_file(p: dict, task: dict | None = None) -> PreviewFile:
+    """`task`: the preview's `data/tasks/<id>/full` record, to link to the preview in Kitsu's player."""
     return PreviewFile(
         id=p["id"],
         revision=p.get("revision"),
@@ -57,7 +58,23 @@ def _preview_file(p: dict) -> PreviewFile:
         is_video=video.is_video(p),
         duration=p.get("duration") if video.is_video(p) else None,
         note=_note(p),
+        url=_preview_url(task, p["id"]) if task else None,
+        download_url=links.download_url(p),
     )
+
+
+def _preview_url(task: dict, preview_file_id: str) -> str | None:
+    return links.task_url(
+        task.get("project_id"),
+        task["id"],
+        (task.get("task_type") or {}).get("for_entity"),
+        (task.get("episode") or {}).get("id"),
+        preview_file_id,
+    )
+
+
+def _task_full(task_id: str | None) -> dict | None:
+    return get_client().get(f"data/tasks/{task_id}/full") if task_id else None
 
 
 def _note(p: dict) -> str | None:
@@ -102,7 +119,7 @@ def get_preview(
         # The entity's image is what was asked for; its metadata (video hint, broken flag) is a bonus.
         return Image(data=_preview_bytes(preview_file_id, size), format="png")
     if not show:
-        return _preview_file(record)
+        return _preview_file(record, _task_full(record.get("task_id")))
     if video.is_broken(record):
         raise ToolError(f"Preview file {preview_file_id} is marked broken in Kitsu (its processing failed)")
     image = Image(data=_preview_bytes(preview_file_id, size), format="png")
@@ -116,7 +133,8 @@ def list_task_previews(task_id: str) -> list[PreviewFile]:
     task_id = object_id(task_id, "task", "search_tasks")
     raw = get_client().get(f"data/tasks/{task_id}/previews")
     raw.sort(key=lambda p: (-(p.get("revision") or 0), p.get("position") or 1, p.get("created_at") or ""))
-    return [_preview_file(p) for p in raw]
+    task = _task_full(task_id) if raw else None
+    return [_preview_file(p, task) for p in raw]
 
 
 @tool(annotations=READ_ONLY, tags={"previews", "video"})
@@ -132,7 +150,8 @@ def recent_previews(
 
     Answers "what was uploaded today?" or "show me the latest animation of SH020": filter by task type
     (name or short name), since (YYYY-MM-DD), videos_only, or entity_name_contains, then pass a
-    preview_file_id to get_preview, get_video_contact_sheet or review_video.
+    preview_file_id to get_preview (show=False gives its Kitsu page and download links), get_video_contact_sheet
+    or review_video.
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
@@ -193,6 +212,7 @@ def download_previews(
 
     Writes local files only; Kitsu is not modified. Files are named <entity name>_<entity id>.png.
     Existing files are left alone (counted as skipped) unless overwrite=True. Canceled entities are skipped.
+    Preview metadata (get_preview with show=False) carries a `download_url` to hand a file to someone.
     """
     client = get_client()
     project_id = get_lookups().project(project)["id"]
@@ -235,6 +255,7 @@ def _playlist(p: dict) -> Playlist:
         for_client=p.get("for_client"),
         task_type=get_lookups().name("task_types", p.get("task_type_id")),
         updated_at=p.get("updated_at"),
+        url=links.playlist_url(p.get("project_id"), p["id"], p.get("episode_id")),
     )
 
 

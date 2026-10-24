@@ -1,5 +1,6 @@
 """Raw Zou payloads → output models. Every tool formats through here."""
 
+from kitsu_mcp import links
 from kitsu_mcp.lookups import Lookups
 from kitsu_mcp.models import Comment, TaskDetail, TaskSummary
 
@@ -51,4 +52,10 @@ def task_detail(task: dict) -> TaskDetail:
         retake_count=task.get("retake_count"),
         last_comment_date=task.get("last_comment_date"),
         last_preview_file_id=task.get("last_preview_file_id"),
+        url=links.task_url(
+            task.get("project_id"),
+            task["id"],
+            (task.get("task_type") or {}).get("for_entity"),
+            (task.get("episode") or {}).get("id"),
+        ),
     )

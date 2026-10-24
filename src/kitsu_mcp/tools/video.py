@@ -7,7 +7,7 @@ from pathlib import Path
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
-from kitsu_mcp import video
+from kitsu_mcp import links, video
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import comment as format_comment
@@ -33,6 +33,7 @@ def _info(preview: dict, path: Path, probe: Probe, quality: Quality) -> VideoInf
         revision=preview.get("revision"),
         original_name=preview.get("original_name"),
         extension=preview.get("extension"),
+        download_url=links.download_url(preview),
         quality=quality,
         file_bytes=path.stat().st_size,
         codec=probe.codec,
@@ -323,7 +324,8 @@ def download_video(
 
     Writes local files only; Kitsu is not modified. The file is named <original name>_<preview file id>.<ext>.
     An existing file is left alone (skipped=True) unless overwrite=True. quality="low" is Kitsu's
-    web-playback encode, "original" the uploaded file. Does not need the video extra.
+    web-playback encode, "original" the uploaded file. Does not need the video extra. To hand a movie
+    to someone, give them its `download_url` (get_preview with show=False).
     """
     preview = video.resolve_preview(preview_file_id, entity_id)
     dest = Path(dest_dir).expanduser()
