@@ -2,6 +2,7 @@ import re
 
 from fastmcp.exceptions import ToolError
 
+from kitsu_mcp import links
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
@@ -139,4 +140,5 @@ def get_asset(asset_id: str) -> AssetDetail:
         project_id=asset.get("project_id"),
         data=asset.get("data"),
         tasks=[task_summary(t, lookups) for t in tasks],
+        url=links.entity_url(asset.get("project_id"), "asset", asset["id"], asset.get("episode_id")),
     )

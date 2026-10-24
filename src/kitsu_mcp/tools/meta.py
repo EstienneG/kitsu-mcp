@@ -2,7 +2,6 @@ import json
 import re
 from importlib import metadata
 from typing import Annotated, Any
-from urllib.parse import urlsplit, urlunsplit
 
 from fastmcp.exceptions import ToolError
 from pydantic import Field
@@ -10,6 +9,7 @@ from pydantic import Field
 from kitsu_mcp import video
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
+from kitsu_mcp.config import without_userinfo
 from kitsu_mcp.lookups import ROLE_SETTINGS, get_lookups, names_in
 from kitsu_mcp.models import ServerInfo, User
 from kitsu_mcp.validation import MAX_LIMIT
@@ -36,7 +36,7 @@ def _server_info(client) -> ServerInfo:
     lookups = get_lookups()
     return ServerInfo(
         version=_version(),
-        kitsu_host=_without_userinfo(settings.host),
+        kitsu_host=without_userinfo(settings.host),
         write_tools=settings.allow_write,
         video_tools=video.available(),
         max_page_size=MAX_LIMIT,
@@ -55,14 +55,6 @@ def _unmatched(lookups) -> dict[str, list[str]]:
         return lookups.unmatched_role_names()
     except ToolError:
         return {}
-
-
-def _without_userinfo(url: str) -> str:
-    """A host URL without any user:password@ part."""
-    parts = urlsplit(url)
-    if "@" not in parts.netloc:
-        return url
-    return urlunsplit(parts._replace(netloc=parts.netloc.rsplit("@", 1)[1]))
 
 
 def _version() -> str:
