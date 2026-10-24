@@ -273,6 +273,11 @@ class PreviewFile(BaseModel):
     width: int | None
     height: int | None
     created_at: str | None
+    is_video: bool = Field(
+        default=False, description="A movie, detected from the extension (is_movie is unreliable); see the video tools"
+    )
+    duration: float | None = Field(default=None, description="Seconds, for movies")
+    note: str | None = None
 
 
 class SavedPreview(BaseModel):
