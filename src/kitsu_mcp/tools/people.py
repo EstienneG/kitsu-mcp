@@ -3,9 +3,9 @@ from collections import defaultdict
 from kitsu_mcp.app import READ_ONLY, mcp
 from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import Person, PersonTask, Workload
+from kitsu_mcp.models import PeopleList, Person, PersonTask, PersonTaskBrief, PersonTaskList, Workload
 from kitsu_mcp.production import assigned_tasks, day, project_tasks
-from kitsu_mcp.validation import Limit
+from kitsu_mcp.validation import Detail, Limit, Offset
 
 
 def _person(p: dict, departments: dict[str, str], with_email: bool) -> Person:
@@ -21,8 +21,12 @@ def _person(p: dict, departments: dict[str, str], with_email: bool) -> Person:
 
 @mcp.tool(annotations=READ_ONLY, tags={"people"})
 def list_people(
-    project: str | None = None, include_inactive: bool = False, include_email: bool = False
-) -> list[Person]:
+    project: str | None = None,
+    include_inactive: bool = False,
+    include_email: bool = False,
+    limit: Limit = 100,
+    offset: Offset = 0,
+) -> PeopleList:
     """List people: the whole studio, or a project's team (project name or ID).
 
     Bots are left out; inactive accounts only with include_inactive. Emails are left out unless
@@ -35,7 +39,7 @@ def list_people(
     else:
         people = list(lookups.index("people").values())
     departments = {d["id"]: d["name"] for d in client.get("data/departments")}
-    return sorted(
+    found = sorted(
         (
             _person(p, departments, include_email)
             for p in people
@@ -43,17 +47,24 @@ def list_people(
         ),
         key=lambda p: (p.full_name or "").lower(),
     )
+    return PeopleList(total=len(found), people=found[offset : offset + limit])
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"people", "tasks"})
 def get_person_tasks(
-    person: str, done: bool = False, project: str | None = None, limit: Limit = 50
-) -> list[PersonTask]:
+    person: str,
+    done: bool = False,
+    project: str | None = None,
+    detail: Detail = "compact",
+    limit: Limit = 50,
+    offset: Offset = 0,
+) -> PersonTaskList:
     """List the tasks assigned to a person (name, email or ID): open ones, or done ones with done=True.
 
     Open and done follow the status roles (list_task_statuses), like workload and project_overview:
     CBB is done, omitted tasks are in neither list. Open tasks are sorted by due date; done tasks most
-    recent first. At most `limit` (default 50).
+    recent first. `total` counts all of them; limit/offset page through. detail="compact" (default)
+    leaves out sequence, estimate, time logged and last comment date; detail="full" includes them.
     """
     lookups = get_lookups()
     person_id = lookups.person(person)["id"]
@@ -79,7 +90,13 @@ def get_person_tasks(
         tasks.sort(key=lambda t: t.last_comment_date or "", reverse=True)
     else:
         tasks.sort(key=lambda t: (t.due_date is None, t.due_date or "", t.entity or ""))
-    return tasks[:limit]
+    page = tasks[offset : offset + limit]
+    rows: list[PersonTask | PersonTaskBrief] = (
+        [PersonTaskBrief(**t.model_dump(include=set(PersonTaskBrief.model_fields))) for t in page]
+        if detail == "compact"
+        else list(page)
+    )
+    return PersonTaskList(total=len(tasks), tasks=rows)
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"people", "tasks", "reporting"})

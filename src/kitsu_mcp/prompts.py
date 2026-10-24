@@ -44,9 +44,9 @@ def person_summary(person: str, project: str | None = None) -> str:
     """Summarize one person's current work."""
     scope = f" on project '{project}'" if project else ""
     return (
-        f"Summarize what {person} is working on{scope}. Call get_person_tasks (and with done=True for recent "
-        "completions). Report open tasks by status, anything overdue or in retake, estimate vs. time logged, "
-        "and what they finished recently."
+        f"Summarize what {person} is working on{scope}. Call get_person_tasks with detail='full' (and with "
+        "done=True for recent completions). Report open tasks by status, anything overdue or in retake, "
+        "estimate vs. time logged, and what they finished recently."
     )
 
 

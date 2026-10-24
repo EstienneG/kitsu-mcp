@@ -108,12 +108,12 @@ async def test_person_tools_follow_roles_like_workload(call, fake):
     tasks = {t["id"]: t for t in fake.data["tasks"]}
     tasks["t-forest-mod"]["task_status_id"] = "st-cbb"  # Bob: CBB is done here, not flagged done in Kitsu
     tasks["t-hero-mod"]["task_status_id"] = "st-omit"  # Alice: OMIT is flagged done in Kitsu, but dropped
-    bob_open = [t["id"] for t in await call("get_person_tasks", person="Bob Leroy")]
-    bob_done = [t["id"] for t in await call("get_person_tasks", person="Bob Leroy", done=True)]
+    bob_open = [t["id"] for t in (await call("get_person_tasks", person="Bob Leroy"))["tasks"]]
+    bob_done = [t["id"] for t in (await call("get_person_tasks", person="Bob Leroy", done=True))["tasks"]]
     assert bob_open == ["t-sh010-comp"] and bob_done == ["t-forest-mod"]
     workload = {w["person"]: w["open_tasks"] for w in await call("workload", project="p-1")}
     assert workload["Bob Leroy"] == len(bob_open)
-    alice_done = [t["id"] for t in await call("get_person_tasks", person="Alice Martin", done=True)]
+    alice_done = [t["id"] for t in (await call("get_person_tasks", person="Alice Martin", done=True))["tasks"]]
     assert alice_done == ["t-sh010-anim"]  # the omitted task is not a completion
     assert [t["id"] for t in await call("my_tasks")] == []  # Alice's only open task was omitted
 

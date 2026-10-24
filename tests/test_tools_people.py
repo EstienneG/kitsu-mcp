@@ -1,9 +1,9 @@
 async def test_list_people(call, fake):
     fake.data["people"].append({"id": "bot", "full_name": "CI Bot", "is_bot": True, "active": True})
     fake.data["people"].append({"id": "gone", "full_name": "Zed Old", "active": False})
-    assert [p["full_name"] for p in await call("list_people")] == ["Alice Martin", "Bob Leroy"]
-    assert len(await call("list_people", include_inactive=True)) == 3
-    assert len(await call("list_people", project="Demo Short")) == 2
+    assert [p["full_name"] for p in (await call("list_people"))["people"]] == ["Alice Martin", "Bob Leroy"]
+    assert (await call("list_people", include_inactive=True))["total"] == 3
+    assert (await call("list_people", project="Demo Short"))["total"] == 2
 
 
 async def test_my_tasks_only_open(call):
@@ -11,8 +11,11 @@ async def test_my_tasks_only_open(call):
 
 
 async def test_get_person_tasks(call):
-    assert [t["id"] for t in await call("get_person_tasks", person="Bob Leroy")] == ["t-sh010-comp", "t-forest-mod"]
-    assert [t["id"] for t in await call("get_person_tasks", person="alice", done=True)] == ["t-sh010-anim"]
+    assert [t["id"] for t in (await call("get_person_tasks", person="Bob Leroy"))["tasks"]] == [
+        "t-sh010-comp",
+        "t-forest-mod",
+    ]
+    assert [t["id"] for t in (await call("get_person_tasks", person="alice", done=True))["tasks"]] == ["t-sh010-anim"]
 
 
 async def test_workload(call):

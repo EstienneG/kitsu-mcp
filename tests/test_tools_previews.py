@@ -51,7 +51,7 @@ async def test_download_previews(call, fake, tmp_path):
 
 
 async def test_playlists(call):
-    playlists = await call("list_playlists", project="Demo Short")
+    playlists = (await call("list_playlists", project="Demo Short"))["playlists"]
     assert [(p["name"], p["task_type"]) for p in playlists] == [("Dailies", "Animation")]
     detail = await call("get_playlist", playlist_id="pl-1")
     assert detail["items"] == [{"entity_id": "s-1", "entity": "SH010", "preview_file_id": "pf-sh010"}]
@@ -69,7 +69,9 @@ async def test_list_playlists_reads_every_page(call, fake):
         {**template, "id": f"pl-{i}", "name": f"P{i}", "updated_at": f"2026-10-{i % 28 + 1:02d}T00:00:00"}
         for i in range(45)
     ]
-    playlists = await call("list_playlists", project="p-1")
+    result = await call("list_playlists", project="p-1", limit=500)
+    assert result["total"] == 45
+    playlists = result["playlists"]
     assert len(playlists) == 45
     assert len({p["id"] for p in playlists}) == 45
 
