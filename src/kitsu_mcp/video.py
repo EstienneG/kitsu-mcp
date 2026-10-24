@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Literal
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
+from kitsu_mcp import validation
 from kitsu_mcp.client import NotFoundError, get_client
 
 if TYPE_CHECKING:
@@ -87,9 +88,9 @@ def is_video(preview: dict) -> bool:
 
 
 def check_id(value: str, label: str = "ID") -> str:
-    """IDs end up in URLs and cache file names: reject anything but letters, digits, - and _."""
-    if not re.fullmatch(r"[\w-]{1,100}", value or ""):
-        raise ToolError(f"Invalid {label}: {value!r}")
+    """IDs end up in URLs and cache file names: they must be Kitsu IDs (UUIDs)."""
+    if not isinstance(value, str) or not validation.id_pattern.fullmatch(value):
+        raise ToolError(f"Invalid {label}: {value!r} (Kitsu IDs look like 'a1b2c3d4-...')")
     return value
 
 

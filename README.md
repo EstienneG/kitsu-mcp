@@ -41,6 +41,7 @@ The password is stored in plain text in the agent's config file (e.g. `~/.vibe/c
 | `KITSU_VIDEO_CACHE_DIR` | system temp | Where the video tools cache movies (`kitsu-mcp-videos/`) |
 | `KITSU_VIDEO_CACHE_MB` | `1024` | Movie cache size; least recently used movies are deleted past it |
 | `KITSU_VIDEO_MAX_MB` | `500` | Largest movie the video tools download |
+| `KITSU_OMITTED_STATUSES` | `omit,na,n/a,omitted,cancelled,canceled` | Status names meaning "dropped"; progress ratios leave them out |
 
 Variables can also come from a `.env` file in the working directory.
 
@@ -64,13 +65,13 @@ Project, task type, status and person arguments take names (case-insensitive) or
 
 | Area | Tools |
 |---|---|
-| Meta | `whoami`, `kitsu_get` (raw GET on any Zou route), `refresh_cache` |
+| Meta | `whoami`, `kitsu_get` (raw read of any Zou `data/` route), `refresh_cache` |
 | Projects | `list_projects`, `list_task_types`, `list_task_statuses`, `list_asset_types`, `project_overview` |
 | Assets | `list_assets` (type, name and per-task-type status filters), `get_asset`, `get_asset_cast_in` |
 | Shots | `list_episodes`, `list_sequences`, `list_shots`, `get_shot`, `get_shot_casting` |
-| Tasks | `search_tasks` (type, status, assignee, due dates, overdue, ...), `get_task`, `task_history`, `my_tasks` |
+| Tasks | `search_tasks` (type, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
 | People | `list_people`, `get_person_tasks`, `workload` |
-| Previews | `get_preview` (image), `get_preview_file`, `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
+| Previews | `recent_previews` (latest uploads), `get_preview` (image), `get_preview_file`, `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
 | Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | Write (opt-in) | `add_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time` |
 

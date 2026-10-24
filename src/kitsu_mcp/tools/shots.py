@@ -3,7 +3,7 @@ from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
 from kitsu_mcp.lookups import check_names, get_lookups
 from kitsu_mcp.models import CastAsset, CastIn, Named, Sequence, ShotDetail, ShotList, ShotSummary
-from kitsu_mcp.tools.assets import check_status_filters, matches_status_filters
+from kitsu_mcp.tools.assets import check_status_filters, matches_status_filters, statuses
 from kitsu_mcp.validation import Limit, Offset, object_id
 
 
@@ -22,6 +22,14 @@ def _frames(shot: dict, field: str) -> int | None:
         except (ValueError, OverflowError):
             return None
     return None
+
+
+def _fps(value) -> float | None:
+    """Zou stores fps as text ("24", "23.976")."""
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _text(value) -> str | None:
@@ -61,11 +69,14 @@ def list_shots(
     episode: str | None = None,
     task_status_filters: dict[str, list[str]] | None = None,
     name_contains: str | None = None,
+    compact: bool = True,
     limit: Limit = 100,
     offset: Offset = 0,
 ) -> ShotList:
     """List a project's shots with frame ranges and tasks, optionally filtered.
 
+    compact (default) gives each shot's tasks as {task type: status}; compact=False returns full task
+    rows (IDs, assignees, due dates, latest preview), several times larger. get_shot has the details.
     sequence / episode: names (case-insensitive) or IDs.
     task_status_filters: task type name -> allowed status short names; all must match,
     e.g. {"Animation": ["wip"], "Compositing": ["todo"]}.
@@ -100,7 +111,8 @@ def list_shots(
                 frame_in=_frames(shot, "frame_in"),
                 frame_out=_frames(shot, "frame_out"),
                 nb_frames=_frames(shot, "nb_frames"),
-                tasks=tasks,
+                tasks=None if compact else tasks,
+                statuses=statuses(tasks) if compact else None,
             )
         )
     results.sort(key=lambda s: (s.episode or "", s.sequence or "", s.name))
@@ -125,7 +137,7 @@ def get_shot(shot_id: str) -> ShotDetail:
         nb_frames=_frames(shot, "nb_frames"),
         project_id=shot.get("project_id"),
         description=shot.get("description"),
-        fps=shot.get("fps"),
+        fps=_fps(shot.get("fps")),
         data=shot.get("data"),
         tasks=[task_summary(t, lookups) for t in tasks],
     )

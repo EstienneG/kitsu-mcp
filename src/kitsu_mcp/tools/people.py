@@ -5,13 +5,14 @@ from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import Person, PersonTask, Workload
 from kitsu_mcp.production import day, project_tasks
+from kitsu_mcp.validation import Limit
 
 
-def _person(p: dict, departments: dict[str, str]) -> Person:
+def _person(p: dict, departments: dict[str, str], with_email: bool) -> Person:
     return Person(
         id=p["id"],
         full_name=p.get("full_name"),
-        email=p.get("email"),
+        email=p.get("email") if with_email else None,
         role=p.get("role"),
         position=p.get("position"),
         departments=[departments.get(d) or d for d in p.get("departments") or []],
@@ -19,10 +20,13 @@ def _person(p: dict, departments: dict[str, str]) -> Person:
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"people"})
-def list_people(project: str | None = None, include_inactive: bool = False) -> list[Person]:
+def list_people(
+    project: str | None = None, include_inactive: bool = False, include_email: bool = False
+) -> list[Person]:
     """List people: the whole studio, or a project's team (project name or ID).
 
-    Bots are left out; inactive accounts only with include_inactive.
+    Bots are left out; inactive accounts only with include_inactive. Emails are left out unless
+    include_email=True (tools that take a person accept their name).
     """
     client = get_client()
     lookups = get_lookups()
@@ -33,7 +37,7 @@ def list_people(project: str | None = None, include_inactive: bool = False) -> l
     departments = {d["id"]: d["name"] for d in client.get("data/departments")}
     return sorted(
         (
-            _person(p, departments)
+            _person(p, departments, include_email)
             for p in people
             if not p.get("is_bot") and (include_inactive or p.get("active", True))
         ),
@@ -42,8 +46,13 @@ def list_people(project: str | None = None, include_inactive: bool = False) -> l
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"people", "tasks"})
-def get_person_tasks(person: str, done: bool = False, project: str | None = None) -> list[PersonTask]:
-    """List the tasks assigned to a person (name, email or ID): open ones, or done ones with done=True."""
+def get_person_tasks(
+    person: str, done: bool = False, project: str | None = None, limit: Limit = 50
+) -> list[PersonTask]:
+    """List the tasks assigned to a person (name, email or ID): open ones, or done ones with done=True.
+
+    Open tasks are sorted by due date; done tasks most recent first. At most `limit` (default 50).
+    """
     lookups = get_lookups()
     person_id = lookups.person(person)["id"]
     project_id = lookups.project(project)["id"] if project else None
@@ -65,7 +74,11 @@ def get_person_tasks(person: str, done: bool = False, project: str | None = None
         for t in get_client().get(f"data/persons/{person_id}/{route}")
         if project_id is None or t.get("project_id") == project_id
     ]
-    return sorted(tasks, key=lambda t: (t.due_date is None, t.due_date or "", t.entity or ""))
+    if done:
+        tasks.sort(key=lambda t: t.last_comment_date or "", reverse=True)
+    else:
+        tasks.sort(key=lambda t: (t.due_date is None, t.due_date or "", t.entity or ""))
+    return tasks[:limit]
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"people", "tasks", "reporting"})

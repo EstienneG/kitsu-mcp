@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     """Size of the movie cache; the least recently used movies are deleted past it."""
     video_max_mb: int = Field(500, gt=0)
     """Largest movie the video tools will download."""
+    omitted_statuses: str = "omit,na,n/a,omitted,cancelled,canceled"
+    """Comma-separated task status short names or names that mean "dropped", not "finished".
+    Kitsu flags them as done; progress ratios count them apart."""
 
 
 @lru_cache

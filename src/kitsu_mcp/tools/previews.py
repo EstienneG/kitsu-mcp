@@ -16,9 +16,11 @@ from kitsu_mcp.models import (
     PlaylistDetail,
     PlaylistItem,
     PreviewFile,
+    RecentPreview,
+    RecentPreviews,
     SavedPreview,
 )
-from kitsu_mcp.validation import object_id
+from kitsu_mcp.validation import Limit, iso_date, object_id
 
 Size = Literal["thumbnail", "preview"]
 
@@ -120,6 +122,68 @@ def list_task_previews(task_id: str) -> list[PreviewFile]:
     return [_preview_file(p) for p in raw]
 
 
+@mcp.tool(annotations=READ_ONLY, tags={"previews", "video"})
+def recent_previews(
+    project: str,
+    task_type: str | None = None,
+    since: str | None = None,
+    videos_only: bool = False,
+    entity_name_contains: str | None = None,
+    limit: Limit = 20,
+) -> RecentPreviews:
+    """Latest uploads (previews) on a project, newest first, from its activity feed.
+
+    Answers "what was uploaded today?" or "show me the latest animation of SH020": filter by task type
+    (name or short name), since (YYYY-MM-DD), videos_only, or entity_name_contains, then pass a
+    preview_file_id to get_preview_file, get_video_contact_sheet or review_video.
+    """
+    lookups = get_lookups()
+    project_id = lookups.project(project)["id"]
+    params: dict = {"only_preview": "true"}
+    if task_type:
+        params["task_type_id"] = lookups.task_type(task_type)["id"]
+    if since:
+        params["after"] = iso_date(since, "since")
+    wanted = (entity_name_contains or "").lower()
+    found: list[RecentPreview] = []
+    total = 0
+    # Name and video filters apply on our side, so read a few pages of the feed to fill `limit`.
+    for page in range(1, _MAX_FEED_PAGES + 1):
+        feed = get_client().get(f"data/projects/{project_id}/news", params={**params, "page": page, "limit": 100})
+        total = feed.get("total") or total
+        for item in feed.get("data") or []:
+            if not item.get("preview_file_id"):
+                continue
+            is_movie = video.is_video({"extension": item.get("preview_file_extension")})
+            if (videos_only and not is_movie) or (
+                wanted and wanted not in (item.get("full_entity_name") or "").lower()
+            ):
+                continue
+            found.append(
+                RecentPreview(
+                    date=item.get("created_at"),
+                    entity=item.get("full_entity_name"),
+                    entity_id=item.get("task_entity_id"),
+                    task_id=item.get("task_id"),
+                    task_type=lookups.name("task_types", item.get("task_type_id")),
+                    status=lookups.name("task_statuses", item.get("task_status_id"), "short_name"),
+                    author=lookups.person_name(item.get("author_id")),
+                    preview_file_id=item["preview_file_id"],
+                    revision=item.get("preview_file_revision"),
+                    extension=item.get("preview_file_extension"),
+                    is_video=is_movie,
+                )
+            )
+            if len(found) == limit:
+                return RecentPreviews(total=total, previews=found)
+        if page >= (feed.get("nb_pages") or 1):
+            break
+    return RecentPreviews(total=total, previews=found)
+
+
+_MAX_FEED_PAGES = 5
+
+
 @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews"})
 def download_previews(
     project: str,
@@ -143,15 +207,19 @@ def download_previews(
     if entity_kind in ("shots", "both"):
         entities += [("shot", e) for e in client.get("data/shots", params={"project_id": project_id})]
 
-    saved, failed, skipped = [], [], 0
+    saved, failed = [], []
+    skips = {"no_preview": 0, "canceled": 0, "already_downloaded": 0}
     for kind, entity in entities:
         preview_file_id = entity.get("preview_file_id")
-        if not preview_file_id or entity.get("canceled"):
-            skipped += 1
+        if entity.get("canceled"):
+            skips["canceled"] += 1
+            continue
+        if not preview_file_id:
+            skips["no_preview"] += 1
             continue
         path = dest / f"{_safe_filename(entity['name'])}_{_safe_filename(entity['id'])}.png"
         if path.exists() and not overwrite:
-            skipped += 1
+            skips["already_downloaded"] += 1
             continue
         try:
             path.write_bytes(_preview_bytes(preview_file_id, size))
@@ -159,7 +227,7 @@ def download_previews(
             failed.append(FailedPreview(name=entity["name"], error=str(error)))
             continue
         saved.append(SavedPreview(kind=kind, id=entity["id"], name=entity["name"], path=str(path)))
-    return DownloadResult(saved=saved, skipped=skipped, failed=failed)
+    return DownloadResult(saved=saved, skipped=sum(skips.values()), **skips, failed=failed)
 
 
 def _playlist(p: dict) -> Playlist:
