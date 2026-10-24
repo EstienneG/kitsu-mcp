@@ -1,5 +1,5 @@
 """Tool modules. Importing this package registers every tool on `kitsu_mcp.app.mcp`."""
 
-from kitsu_mcp.tools import assets, meta, people, previews, projects, shots, tasks, video, write
+from kitsu_mcp.tools import assets, custom_fields, meta, people, previews, projects, shots, tasks, video, write
 
-__all__ = ["assets", "meta", "people", "previews", "projects", "shots", "tasks", "video", "write"]
+__all__ = ["assets", "custom_fields", "meta", "people", "previews", "projects", "shots", "tasks", "video", "write"]
