@@ -98,12 +98,12 @@ two-factor authentication cannot log in this way.
 
 ### Mistral connectors (AI Studio, Vibe Work, Le Chat)
 
-Mistral's web agents add the hosted server as a custom MCP connector:
+AI Studio, Vibe Work and Le Chat all use the hosted server through the same custom MCP connector:
 
-- **AI Studio:** Connectors → Add. **Le Chat:** Connectors → Custom MCP connector. **Vibe Work:** Connectors →
-  + Add Connector → Custom MCP Connector (an administrator adds it).
-- Name: `kitsu`. Server URL: `https://<your-server>/mcp`. Visibility, where offered: **Private**, so each
-  person's connector carries their own login.
+- **AI Studio:** Connectors → Add. **Vibe Work:** Connectors → + Add Connector → Custom MCP Connector.
+  **Le Chat:** Connectors → Custom MCP connector.
+- Each person adds their own connector. Name: `kitsu`. Server URL: `https://<your-server>/mcp`. Visibility:
+  **Private**, so the connector carries only their login.
 - Authentication: **Basic** with the person's Kitsu email and password. Where only a bearer token can be
   entered, use `email:password` as the token.
 
