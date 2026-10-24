@@ -1,14 +1,12 @@
 """Read-only MCP server for a Kitsu (Zou) instance.
 
-Configuration comes from environment variables or a `.env` file in the working directory:
-KITSU_HOST (e.g. https://example.cg-wire.com/api), KITSU_USER, KITSU_PASSWORD.
+Configuration: see kitsu_mcp.config (KITSU_HOST, KITSU_USER, KITSU_PASSWORD, ...).
 """
 
-import os
-from pathlib import Path
-
-import gazu
 from fastmcp import FastMCP
+
+from kitsu_mcp.client import get_client
+from kitsu_mcp.lookups import get_lookups
 
 mcp = FastMCP(
     "kitsu",
@@ -19,39 +17,13 @@ mcp = FastMCP(
     ),
 )
 
-_ready = False
-
-
-def _load_env() -> None:
-    env_file = Path.cwd() / ".env"
-    if not env_file.exists():
-        return
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, value = line.split("=", 1)
-            os.environ.setdefault(key.strip(), value.strip().strip("'\""))
-
-
-def _client():
-    global _ready
-    if not _ready:
-        _load_env()
-        missing = [k for k in ("KITSU_HOST", "KITSU_USER", "KITSU_PASSWORD") if not os.environ.get(k)]
-        if missing:
-            raise RuntimeError(f"Missing configuration: {', '.join(missing)}")
-        gazu.set_host(os.environ["KITSU_HOST"])
-        gazu.log_in(os.environ["KITSU_USER"], os.environ["KITSU_PASSWORD"])
-        _ready = True
-    return gazu.client
-
 
 def _get(path: str, params: dict | None = None):
-    return _client().get(path, params=params)
+    return get_client().get(path, params=params)
 
 
-def _index(path: str) -> dict:
-    return {item["id"]: item for item in _get(path)}
+def _index(kind: str) -> dict:
+    return get_lookups().index(kind)
 
 
 def _compact_task(task: dict, task_types: dict, statuses: dict, people: dict) -> dict:
@@ -112,10 +84,10 @@ def list_assets(
     task_status_filters: task type name -> allowed status short names; all must match,
     e.g. {"Modelling": ["APP", "wip"], "Sculpting": ["WRA"]}. Matching is case-insensitive.
     """
-    task_types = _index("data/task-types")
-    statuses = _index("data/task-status")
-    people = _index("data/persons")
-    asset_type_names = {t["id"]: t["name"] for t in _get("data/asset-types")}
+    task_types = _index("task_types")
+    statuses = _index("task_statuses")
+    people = _index("people")
+    asset_type_names = {i: t["name"] for i, t in _index("asset_types").items()}
 
     include = {n.lower() for n in asset_types or []}
     exclude = {n.lower() for n in exclude_asset_types or []}
@@ -147,9 +119,9 @@ def list_assets(
 def get_asset(asset_id: str) -> dict:
     """Get an asset's details and tasks."""
     asset = _get(f"data/assets/{asset_id}")
-    task_types = _index("data/task-types")
-    statuses = _index("data/task-status")
-    people = _index("data/persons")
+    task_types = _index("task_types")
+    statuses = _index("task_statuses")
+    people = _index("people")
     tasks = _get(f"data/assets/{asset_id}/tasks")
     return {
         **{k: asset.get(k) for k in ("id", "name", "description", "project_id", "entity_type_id", "data")},
