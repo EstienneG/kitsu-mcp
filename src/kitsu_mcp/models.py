@@ -5,11 +5,28 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class ServerInfo(BaseModel):
+    """How this server is set up: what an agent can and cannot do here."""
+
+    version: str
+    kitsu_host: str
+    write_tools: bool = Field(description="add_comment, set_task_status, ... available (KITSU_ALLOW_WRITE)")
+    video_tools: bool = Field(description="The video extra (PyAV, Pillow) is installed")
+    max_page_size: int
+    status_role_settings: dict[str, list[str]] = Field(
+        description="KITSU_*_STATUSES: status names given each role; list_task_statuses shows the result"
+    )
+    unmatched_status_settings: dict[str, list[str]] = Field(description="Configured names that match no status")
+    cache_ttl_seconds: float
+    video_max_mb: int
+
+
 class User(BaseModel):
     id: str
     full_name: str | None
     email: str | None
     role: str | None
+    server: ServerInfo | None = None
 
 
 class Project(BaseModel):
@@ -89,18 +106,23 @@ class TaskDetail(BaseModel):
     comments: list[Comment] | None = None
 
 
-class TaskRow(BaseModel):
-    """A task with its entity context, as returned by searches."""
+class TaskBrief(BaseModel):
+    """A task row with only what is needed to scan a list (detail="compact")."""
 
     id: str
-    entity_id: str
     entity: str | None
-    entity_kind: str = Field(description="asset or shot")
-    group: str | None = Field(description="Asset type, or episode/sequence for shots")
     task_type: str | None
     status: str | None
     assignees: list[str]
     due_date: str | None
+
+
+class TaskRow(TaskBrief):
+    """A task with its entity context, as returned by searches (detail="full")."""
+
+    entity_id: str
+    entity_kind: str = Field(description="asset or shot")
+    group: str | None = Field(description="Asset type, or episode/sequence for shots")
     estimation: float | None = Field(None, description="Minutes")
     duration: float | None = Field(None, description="Minutes logged")
     retake_count: int | None = None
@@ -118,7 +140,7 @@ class AssigneeGroup(BaseModel):
 
 class TaskList(BaseModel):
     total: int = Field(description="Matches before limit/offset")
-    tasks: list[TaskRow] = Field(default_factory=list)
+    tasks: list[TaskRow | TaskBrief] = Field(default_factory=list)
     groups: int | None = Field(default=None, description="With group_by: number of groups before limit/offset")
     by_assignee: list[AssigneeGroup] | None = Field(
         default=None, description="Set with group_by='assignee', instead of tasks"
@@ -233,18 +255,35 @@ class Person(BaseModel):
     departments: list[str] = Field(default_factory=list)
 
 
-class PersonTask(BaseModel):
+class PeopleList(BaseModel):
+    total: int = Field(description="Matches before limit/offset")
+    people: list[Person]
+
+
+class PersonTaskBrief(BaseModel):
+    """A person's task with only what is needed to scan a list (detail="compact")."""
+
     id: str
     project: str | None
     entity: str | None
     entity_type: str | None
-    sequence: str | None
     task_type: str | None
     status: str | None
     due_date: str | None
+
+
+class PersonTask(PersonTaskBrief):
+    """detail="full"."""
+
+    sequence: str | None
     estimation: float | None = Field(None, description="Minutes")
     duration: float | None = Field(None, description="Minutes logged")
     last_comment_date: str | None = None
+
+
+class PersonTaskList(BaseModel):
+    total: int = Field(description="Matches before limit/offset")
+    tasks: list[PersonTask | PersonTaskBrief]
 
 
 class Workload(BaseModel):
@@ -366,6 +405,11 @@ class Playlist(BaseModel):
     for_client: bool | None
     task_type: str | None
     updated_at: str | None
+
+
+class PlaylistList(BaseModel):
+    total: int = Field(description="Playlists before limit/offset")
+    playlists: list[Playlist]
 
 
 class PlaylistItem(BaseModel):

@@ -1,28 +1,81 @@
 import json
 import re
+from importlib import metadata
 from typing import Annotated, Any
+from urllib.parse import urlsplit, urlunsplit
 
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp import video
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
-from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import User
+from kitsu_mcp.lookups import ROLE_SETTINGS, get_lookups, names_in
+from kitsu_mcp.models import ServerInfo, User
 from kitsu_mcp.validation import MAX_LIMIT
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"meta"})
+@tool(annotations=READ_ONLY, tags={"meta"})
 def whoami() -> User:
-    """Return the Kitsu user the server is logged in as."""
-    user = get_client().get("auth/authenticated")["user"]
-    return User(id=user["id"], full_name=user.get("full_name"), email=user.get("email"), role=user.get("role"))
+    """The Kitsu user the server is logged in as, and how the server is set up (`server`): version,
+    Kitsu host, whether write and video tools are available, page size limit and the status-role
+    settings. A good first call."""
+    client = get_client()
+    user = client.get("auth/authenticated")["user"]
+    return User(
+        id=user["id"],
+        full_name=user.get("full_name"),
+        email=user.get("email"),
+        role=user.get("role"),
+        server=_server_info(client),
+    )
+
+
+def _server_info(client) -> ServerInfo:
+    settings = client.settings
+    lookups = get_lookups()
+    return ServerInfo(
+        version=_version(),
+        kitsu_host=_without_userinfo(settings.host),
+        write_tools=settings.allow_write,
+        video_tools=video.available(),
+        max_page_size=MAX_LIMIT,
+        status_role_settings={
+            f"KITSU_{name.upper()}": sorted(names_in(getattr(settings, name))) for name, _ in ROLE_SETTINGS
+        },
+        unmatched_status_settings=_unmatched(lookups),
+        cache_ttl_seconds=settings.cache_ttl,
+        video_max_mb=settings.video_max_mb,
+    )
+
+
+def _unmatched(lookups) -> dict[str, list[str]]:
+    """Best effort: whoami is a connectivity check and must not fail on the status lookup."""
+    try:
+        return lookups.unmatched_role_names()
+    except ToolError:
+        return {}
+
+
+def _without_userinfo(url: str) -> str:
+    """A host URL without any user:password@ part."""
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    return urlunsplit(parts._replace(netloc=parts.netloc.rsplit("@", 1)[1]))
+
+
+def _version() -> str:
+    try:
+        return metadata.version("kitsu-mcp")
+    except metadata.PackageNotFoundError:
+        return "unknown"
 
 
 _SAFE_ROUTE = re.compile(r"data(/[A-Za-z0-9_.-]+)*/?")
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"meta"})
+@tool(annotations=READ_ONLY, tags={"meta"})
 def kitsu_get(path: str, params: dict | None = None, max_items: Annotated[int, Field(ge=1, le=MAX_LIMIT)] = 100) -> Any:
     """Run a raw read-only GET on a Zou `data/` route, e.g. path="data/projects/open".
 
@@ -96,7 +149,7 @@ def _too_big(answer: Any) -> dict:
     }
 
 
-@mcp.tool(annotations={"readOnlyHint": True, "idempotentHint": True}, tags={"meta"})
+@tool(annotations={"readOnlyHint": True, "idempotentHint": True}, tags={"meta"})
 def refresh_cache() -> str:
     """Drop cached reference data (projects, task types, statuses, people) so the next call refetches it."""
     get_lookups().clear()

@@ -85,11 +85,11 @@ Project, task type, status and person arguments take names (case-insensitive) or
 |---|---|
 | Meta | `whoami`, `kitsu_get` (raw read of any Zou `data/` route), `refresh_cache` |
 | Projects | `list_projects`, `list_task_types`, `list_task_statuses`, `list_asset_types`, `project_overview` |
-| Assets | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `get_asset`, `get_asset_cast_in` |
-| Shots | `list_episodes`, `list_sequences`, `list_shots`, `get_shot`, `get_shot_casting` |
+| Assets | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `get_asset`, `get_casting` (either way) |
+| Shots | `list_episodes`, `list_sequences`, `list_shots`, `get_shot`, `get_casting` |
 | Tasks | `search_tasks` (type, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
 | People | `list_people`, `get_person_tasks`, `workload` |
-| Previews | `recent_previews` (latest uploads), `get_preview` (image), `get_preview_file`, `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
+| Previews | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
 | Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | Write (opt-in) | `add_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time` |
 
@@ -107,7 +107,7 @@ bundles ffmpeg, and Pillow), so no system ffmpeg is required:
 
 Use that as the command when registering the server (e.g. `-- uvx --from 'kitsu-mcp[video]' kitsu-mcp`
 for Claude Code). Without the extra the tools are still listed but answer with an error saying how
-to install it (`download_video` works either way). `get_preview` and `get_preview_file` say when a
+to install it (`download_video` works either way). `get_preview` says when a
 preview is a video.
 
 - Movies are fetched at Kitsu's low-resolution playback quality by default (`quality="original"` for

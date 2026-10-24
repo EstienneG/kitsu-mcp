@@ -461,7 +461,7 @@ async def test_without_extra_tools_stay_listed_and_previews_say_so(call, without
     names = {t.name for t in await mcp.list_tools()}
     assert {"get_video_info", "review_video", "download_video"} <= names
     assert not video.available()
-    meta = await call("get_preview_file", preview_file_id="pf-sh010")
+    meta = await call("get_preview", preview_file_id="pf-sh010", show=False)
     assert "kitsu-mcp[video]" in meta["note"]
     saved = await call("download_video", dest_dir=str(tmp_path), preview_file_id="pf-sh010")
     assert Path(saved["path"]).exists()
@@ -470,11 +470,11 @@ async def test_without_extra_tools_stay_listed_and_previews_say_so(call, without
 async def test_broken_preview(call, served):
     with pytest.raises(ToolError, match="marked broken"):
         await call("get_video_info", preview_file_id="pf-sh010-broken")
-    meta = await call("get_preview_file", preview_file_id="pf-sh010-broken")
+    meta = await call("get_preview", preview_file_id="pf-sh010-broken", show=False)
     assert meta["status"] == "broken" and "Broken" in meta["note"] and "get_video" not in meta["note"]
     served.calls.clear()
     with pytest.raises(ToolError, match="marked broken"):
-        await call("get_preview_file", preview_file_id="pf-sh010-broken", show=True)
+        await call("get_preview", preview_file_id="pf-sh010-broken")
     assert not any(path.startswith("pictures/") for _, path, _ in served.calls)
 
 

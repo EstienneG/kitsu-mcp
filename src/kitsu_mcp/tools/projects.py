@@ -1,6 +1,8 @@
 from collections import Counter, defaultdict
 
-from kitsu_mcp.app import READ_ONLY, mcp
+from fastmcp.exceptions import ToolError
+
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import (
@@ -16,7 +18,7 @@ from kitsu_mcp.models import (
 from kitsu_mcp.production import TaskRecord, day, project_entities, project_tasks
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"projects"})
+@tool(annotations=READ_ONLY, tags={"projects"})
 def list_projects(include_closed: bool = False) -> list[Project]:
     """List productions (open ones by default)."""
     lookups = get_lookups()
@@ -32,7 +34,7 @@ def list_projects(include_closed: bool = False) -> list[Project]:
     ]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"projects"})
+@tool(annotations=READ_ONLY, tags={"projects"})
 def list_task_types(project: str | None = None) -> list[TaskType]:
     """List task types (Modelling, Animation, ...) with the entity kind they apply to.
 
@@ -54,7 +56,7 @@ def list_task_types(project: str | None = None) -> list[TaskType]:
     ]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"projects"})
+@tool(annotations=READ_ONLY, tags={"projects"})
 def list_task_statuses() -> TaskStatuses:
     """List task statuses with their short names (wip, wfa, done, ...), Kitsu flags and role.
 
@@ -85,7 +87,7 @@ def list_task_statuses() -> TaskStatuses:
     return TaskStatuses(statuses=statuses, unmatched_settings=lookups.unmatched_role_names())
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"projects", "assets"})
+@tool(annotations=READ_ONLY, tags={"projects", "assets"})
 def list_asset_types(project: str) -> list[Named]:
     """List asset types used in a project (name or ID)."""
     project_id = get_lookups().project(project)["id"]
@@ -109,19 +111,33 @@ def _ratio(part: int, total: int) -> float:
     return round(part / total, 3) if total else 0.0
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"projects", "reporting"})
-def project_overview(project: str) -> ProjectOverview:
+@tool(annotations=READ_ONLY, tags={"projects", "reporting"})
+def project_overview(
+    project: str, task_types: list[str] | None = None, exclude_task_types: list[str] | None = None
+) -> ProjectOverview:
     """Where a production stands: entity and task counts, completion per task type, overdue tasks,
     tasks waiting for review, retakes, on hold, unassigned work and time logged vs. estimated.
 
     Counts follow each status's role (list_task_statuses shows them). Omitted tasks (OMIT, N/A, ...)
     are counted apart and left out of done_ratio, so dropped work does not inflate progress.
-    done_improvable counts done tasks that could still be improved (e.g. CBB, "could be better")."""
+    done_improvable counts done tasks that could still be improved (e.g. CBB, "could be better").
+    task_types / exclude_task_types (names or short names) limit the task counts and ratios, e.g.
+    exclude_task_types=["Animatic"] to leave admin or pre-production work out of progress; entity counts
+    (assets, shots) are unaffected."""
     client = get_client()
     lookups = get_lookups()
     info = client.get(f"data/projects/{lookups.project(project)['id']}")
+    keep = {lookups.task_type(t)["id"] for t in task_types or []}
+    drop = {lookups.task_type(t)["id"] for t in exclude_task_types or []}
+    if keep and keep <= drop:
+        raise ToolError("task_types and exclude_task_types cancel out: nothing would be counted")
     entities = project_entities(client, lookups, info["id"])
-    records = [task for entity in entities for task in entity.tasks()]
+    records = [
+        task
+        for entity in entities
+        for task in entity.tasks()
+        if (not keep or task.raw.get("task_type_id") in keep) and task.raw.get("task_type_id") not in drop
+    ]
 
     def status_of(r: TaskRecord) -> str | None:
         return r.raw.get("task_status_id")

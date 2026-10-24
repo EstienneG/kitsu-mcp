@@ -2,18 +2,27 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import comment, task_detail
 from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import AssigneeGroup, MyTask, StatusChange, TaskDetail, TaskHistory, TaskList, TaskRow
+from kitsu_mcp.models import (
+    AssigneeGroup,
+    MyTask,
+    StatusChange,
+    TaskBrief,
+    TaskDetail,
+    TaskHistory,
+    TaskList,
+    TaskRow,
+)
 from kitsu_mcp.production import EntityKind, TaskRecord, assigned_tasks, day, project_tasks
-from kitsu_mcp.validation import MAX_LIMIT, Limit, Offset, iso_date, object_id
+from kitsu_mcp.validation import MAX_LIMIT, Detail, Limit, Offset, iso_date, object_id
 
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"tasks"})
 def get_task(
     task_id: str, include_comments: bool = True, comment_limit: Annotated[int, Field(ge=1, le=200)] = 20
 ) -> TaskDetail:
@@ -26,7 +35,7 @@ def get_task(
     return result
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"tasks"})
 def search_tasks(
     project: str,
     task_types: list[str] | None = None,
@@ -43,6 +52,7 @@ def search_tasks(
     include_done: bool = True,
     include_omitted: bool = False,
     sort_by: SortKey = "due_date",
+    detail: Detail = "compact",
     group_by: Literal["assignee"] | None = None,
     tasks_per_group: Annotated[int, Field(ge=1, le=MAX_LIMIT)] = 20,
     limit: Limit = 100,
@@ -57,6 +67,8 @@ def search_tasks(
     on hold); waiting_feedback = role waiting_review; include_done=False drops done tasks; omitted tasks
     (OMIT, N/A, ...) are left out unless include_omitted=True or asked for by status.
     Results are sorted by `sort_by` (missing values last); `total` counts all matches.
+    detail="compact" (default) rows carry id, entity, task type, status, assignees and due date;
+    detail="full" adds entity IDs, groups, estimates, time logged, retakes, last comment and preview.
     group_by="assignee": instead of task rows, one compact line per task grouped by person (lighter
     for "who owns what"); each group lists at most tasks_per_group tasks (its count and overdue stay
     exact, `more` says how many are not listed). `total` still counts tasks, `groups` counts people, and
@@ -96,7 +108,13 @@ def search_tasks(
     if group_by == "assignee":
         groups = _by_assignee(pairs, tasks_per_group)
         return TaskList(total=len(pairs), groups=len(groups), by_assignee=groups[offset : offset + limit])
-    return TaskList(total=len(pairs), tasks=[row for row, _ in pairs[offset : offset + limit]])
+    page = [row for row, _ in pairs[offset : offset + limit]]
+    rows: list[TaskRow | TaskBrief] = (
+        [TaskBrief(**row.model_dump(include=set(TaskBrief.model_fields))) for row in page]
+        if detail == "compact"
+        else list(page)
+    )
+    return TaskList(total=len(pairs), tasks=rows)
 
 
 def _by_assignee(pairs: list[tuple[TaskRow, bool]], per_group: int) -> list[AssigneeGroup]:
@@ -125,7 +143,7 @@ def _by_assignee(pairs: list[tuple[TaskRow, bool]], per_group: int) -> list[Assi
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"tasks"})
 def task_history(task_id: str) -> TaskHistory:
     """Status changes of a task over time (from its comments), plus time logged vs. estimate."""
     task_id = object_id(task_id, "task", "search_tasks")
@@ -151,7 +169,7 @@ def task_history(task_id: str) -> TaskHistory:
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"tasks"})
 def my_tasks() -> list[MyTask]:
     """List open tasks assigned to the logged-in user (open per the status roles, like workload)."""
     client = get_client()

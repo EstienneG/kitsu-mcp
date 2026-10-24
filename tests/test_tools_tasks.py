@@ -7,7 +7,7 @@ async def test_search_all_tasks_sorted_by_due_date_missing_last(call):
 
 
 async def test_search_row_has_entity_context(call):
-    row = (await call("search_tasks", project="p-1", task_types=["COMP"]))["tasks"][0]
+    row = (await call("search_tasks", project="p-1", task_types=["COMP"], detail="full"))["tasks"][0]
     assert row["entity"] == "SH010"
     assert row["entity_kind"] == "shot"
     assert row["group"] == "SQ010"

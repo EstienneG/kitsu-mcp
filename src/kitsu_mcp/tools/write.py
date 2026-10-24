@@ -4,7 +4,7 @@ from datetime import date
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.app import mcp
+from kitsu_mcp.app import tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_detail
 from kitsu_mcp.lookups import get_lookups
@@ -41,7 +41,7 @@ def _comment(task_id: str, text: str, status: str | None) -> tuple[dict, str]:
     return task, get_lookups().name("task_statuses", status_id, "short_name") or status_id
 
 
-@mcp.tool(annotations=ADDITIVE, tags=WRITE)
+@tool(annotations=ADDITIVE, tags=WRITE)
 def add_comment(task_id: str, text: str, status: str | None = None) -> WriteResult:
     """Post a comment on a task as the logged-in user, optionally changing its status (short name)."""
     if not text.strip():
@@ -51,7 +51,7 @@ def add_comment(task_id: str, text: str, status: str | None = None) -> WriteResu
     return _result(f"Comment posted{f'; status set to {status_name}' if changed else ''}.", task_id)
 
 
-@mcp.tool(annotations={**ADDITIVE, "destructiveHint": True}, tags=WRITE)
+@tool(annotations={**ADDITIVE, "destructiveHint": True}, tags=WRITE)
 def set_task_status(task_id: str, status: str, comment: str = "") -> WriteResult:
     """Change a task's status (short name, e.g. wip, wfa, done), with an optional comment.
 
@@ -64,7 +64,7 @@ def set_task_status(task_id: str, status: str, comment: str = "") -> WriteResult
     return _result(f"Status changed from {previous} to {status_name}.", task_id)
 
 
-@mcp.tool(annotations=ADDITIVE_IDEMPOTENT, tags=WRITE)
+@tool(annotations=ADDITIVE_IDEMPOTENT, tags=WRITE)
 def assign_task(task_id: str, person: str) -> WriteResult:
     """Add a person (name, email or ID) to a task's assignees."""
     record = get_lookups().person(person)
@@ -72,7 +72,7 @@ def assign_task(task_id: str, person: str) -> WriteResult:
     return _result(f"Assigned {record.get('full_name')}.", task_id)
 
 
-@mcp.tool(annotations=OVERWRITE, tags=WRITE)
+@tool(annotations=OVERWRITE, tags=WRITE)
 def update_task_schedule(
     task_id: str,
     start_date: str | None = None,
@@ -95,7 +95,7 @@ def update_task_schedule(
     return _result(f"Updated {', '.join(changes)}.", task_id)
 
 
-@mcp.tool(annotations=ADDITIVE, tags=WRITE)
+@tool(annotations=ADDITIVE, tags=WRITE)
 def log_time(task_id: str, minutes: int, day: str | None = None, person: str | None = None) -> WriteResult:
     """Add time spent on a task (minutes) for a day (YYYY-MM-DD, default today), as the logged-in user by default."""
     if not 0 < minutes <= 24 * 60:

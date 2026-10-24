@@ -6,7 +6,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
 from kitsu_mcp import video
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import (
@@ -15,12 +15,13 @@ from kitsu_mcp.models import (
     Playlist,
     PlaylistDetail,
     PlaylistItem,
+    PlaylistList,
     PreviewFile,
     RecentPreview,
     RecentPreviews,
     SavedPreview,
 )
-from kitsu_mcp.validation import Limit, iso_date, object_id
+from kitsu_mcp.validation import Limit, Offset, iso_date, object_id
 
 Size = Literal["thumbnail", "preview"]
 
@@ -70,40 +71,36 @@ def _video_note() -> str:
     return note if video.available() else f"{note} {video.INSTALL_HINT}"
 
 
-def _with_video_hint(image: Image, preview_file_id: str) -> Image | list[Image | str]:
-    """Pair a poster image with a pointer to the video tools when the preview is a movie."""
+@tool(annotations=READ_ONLY, tags={"previews"})
+def get_preview(
+    entity_id: str | None = None,
+    preview_file_id: str | None = None,
+    show: bool = True,
+    size: Size = "thumbnail",
+) -> PreviewFile | Image | list[Image | str] | str:
+    """A preview: an asset or shot's current one (entity_id), or a given upload (preview_file_id).
+
+    show=True (default) returns the image; show=False its metadata (revision, format, status,
+    validation, is_video). size: "thumbnail" (small, cheap) or "preview" (full resolution, large).
+    For a video the image is its poster frame, and the result says which video tools show more.
+    Preview file IDs appear in comments (get_task), task previews (list_task_previews) and playlists.
+    """
+    if bool(entity_id) == bool(preview_file_id):
+        raise ToolError("Pass exactly one of entity_id or preview_file_id")
+    client = get_client()
+    if entity_id:
+        entity_id = object_id(entity_id, "asset or shot", "list_assets or list_shots")
+        preview_file_id = client.get(f"data/entities/{entity_id}").get("preview_file_id")
+        if not preview_file_id:
+            return "This entity has no preview."
+    preview_file_id = object_id(preview_file_id or "", "preview file", "list_task_previews")
     try:
-        is_movie = video.is_video(get_client().get(f"data/preview-files/{preview_file_id}"))
+        record = client.get(f"data/preview-files/{preview_file_id}")
     except ToolError:
-        return image  # the image is what was asked for; the hint is a bonus
-    return [image, VIDEO_HINT] if is_movie else image
-
-
-@mcp.tool(annotations=READ_ONLY, tags={"previews"})
-def get_preview(entity_id: str, size: Size = "thumbnail") -> Image | list[Image | str] | str:
-    """Show the current preview image of an asset or shot.
-
-    size: "thumbnail" (small, cheap) or "preview" (full resolution, large). For a video this is its
-    poster frame, and the result says which video tools show more.
-    """
-    entity_id = object_id(entity_id, "asset or shot", "list_assets or list_shots")
-    preview_file_id = get_client().get(f"data/entities/{entity_id}").get("preview_file_id")
-    if not preview_file_id:
-        return "This entity has no preview."
-    return _with_video_hint(Image(data=_preview_bytes(preview_file_id, size), format="png"), preview_file_id)
-
-
-@mcp.tool(annotations=READ_ONLY, tags={"previews"})
-def get_preview_file(
-    preview_file_id: str, show: bool = False, size: Size = "thumbnail"
-) -> PreviewFile | Image | list[Image | str]:
-    """Metadata of a preview file (revision, format, validation), or its image with show=True.
-
-    Preview file IDs appear in comments (get_task) and playlists. is_video tells whether it is a
-    movie; for movies show=True gives the poster frame, and the video tools show the rest.
-    """
-    preview_file_id = object_id(preview_file_id, "preview file", "list_task_previews")
-    record = get_client().get(f"data/preview-files/{preview_file_id}")
+        if not show or not entity_id:
+            raise
+        # The entity's image is what was asked for; its metadata (video hint, broken flag) is a bonus.
+        return Image(data=_preview_bytes(preview_file_id, size), format="png")
     if not show:
         return _preview_file(record)
     if video.is_broken(record):
@@ -112,7 +109,7 @@ def get_preview_file(
     return [image, VIDEO_HINT] if video.is_video(record) else image
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews", "tasks"})
+@tool(annotations=READ_ONLY, tags={"previews", "tasks"})
 def list_task_previews(task_id: str) -> list[PreviewFile]:
     """All preview files uploaded on a task, newest revision first. A revision can hold several files;
     `position` 1 is its main one."""
@@ -122,7 +119,7 @@ def list_task_previews(task_id: str) -> list[PreviewFile]:
     return [_preview_file(p) for p in raw]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews", "video"})
+@tool(annotations=READ_ONLY, tags={"previews", "video"})
 def recent_previews(
     project: str,
     task_type: str | None = None,
@@ -135,7 +132,7 @@ def recent_previews(
 
     Answers "what was uploaded today?" or "show me the latest animation of SH020": filter by task type
     (name or short name), since (YYYY-MM-DD), videos_only, or entity_name_contains, then pass a
-    preview_file_id to get_preview_file, get_video_contact_sheet or review_video.
+    preview_file_id to get_preview, get_video_contact_sheet or review_video.
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
@@ -184,7 +181,7 @@ def recent_previews(
 _MAX_FEED_PAGES = 5
 
 
-@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews"})
+@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews"})
 def download_previews(
     project: str,
     dest_dir: str,
@@ -244,9 +241,9 @@ def _playlist(p: dict) -> Playlist:
 _MAX_PLAYLIST_PAGES = 50
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews", "playlists"})
-def list_playlists(project: str) -> list[Playlist]:
-    """List a project's review playlists, most recently updated first."""
+@tool(annotations=READ_ONLY, tags={"previews", "playlists"})
+def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> PlaylistList:
+    """List a project's review playlists, most recently updated first. `total` counts them all."""
     project_id = get_lookups().project(project)["id"]
     raw_playlists: dict[str, dict] = {}
     # The route is paginated (20 per page) and signals the end with an empty page.
@@ -256,11 +253,11 @@ def list_playlists(project: str) -> list[Playlist]:
         if not new:
             break
         raw_playlists.update(new)
-    playlists = [_playlist(p) for p in raw_playlists.values()]
-    return sorted(playlists, key=lambda p: p.updated_at or "", reverse=True)
+    playlists = sorted((_playlist(p) for p in raw_playlists.values()), key=lambda p: p.updated_at or "", reverse=True)
+    return PlaylistList(total=len(playlists), playlists=playlists[offset : offset + limit])
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"previews", "playlists"})
+@tool(annotations=READ_ONLY, tags={"previews", "playlists"})
 def get_playlist(playlist_id: str) -> PlaylistDetail:
     """A playlist with its entities and the preview file shown for each."""
     playlist_id = object_id(playlist_id, "playlist", "list_playlists")

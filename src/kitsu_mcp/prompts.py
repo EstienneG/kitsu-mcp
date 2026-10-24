@@ -22,8 +22,9 @@ def review_queue(project: str) -> str:
     """List what is waiting for a supervisor's review."""
     return (
         f"Find everything waiting for review on the Kitsu project '{project}'.\n"
-        "Call search_tasks with waiting_feedback=True and sort_by='last_comment_date'. Group the result by task "
-        "type, oldest request first, and show for each the entity, assignee and how long it has waited. "
+        "Call search_tasks with waiting_feedback=True, sort_by='last_comment_date' and detail='full'. "
+        "Group the result by task type, oldest request first, and show for each the entity, assignee and "
+        "how long it has waited. "
         "For the three oldest, call get_task and quote the artist's latest comment; when the task has a "
         "last_preview_file_id that is a video, review_video shows the frames the comments point at."
     )
@@ -44,9 +45,9 @@ def person_summary(person: str, project: str | None = None) -> str:
     """Summarize one person's current work."""
     scope = f" on project '{project}'" if project else ""
     return (
-        f"Summarize what {person} is working on{scope}. Call get_person_tasks (and with done=True for recent "
-        "completions). Report open tasks by status, anything overdue or in retake, estimate vs. time logged, "
-        "and what they finished recently."
+        f"Summarize what {person} is working on{scope}. Call get_person_tasks with detail='full' (and with "
+        "done=True for recent completions). Report open tasks by status, anything overdue or in retake, "
+        "estimate vs. time logged, and what they finished recently."
     )
 
 
