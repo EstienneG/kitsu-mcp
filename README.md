@@ -1,6 +1,7 @@
 # kitsu-mcp
 
-MCP server (FastMCP + Gazu) for a Kitsu/Zou instance. Runs locally over stdio. Read-only by default;
+MCP server (FastMCP + Gazu) for a Kitsu/Zou instance. Runs locally over stdio, or hosted over HTTP as a
+Le Chat / AI Studio connector where each person logs in with their own Kitsu account. Read-only by default;
 write tools are opt-in.
 
 ## Install
@@ -28,12 +29,43 @@ Then register the server with your agent, using your Kitsu login.
 
 The password is stored in plain text in the agent's config file (e.g. `~/.vibe/config.toml`).
 
+## Hosted connector (Le Chat, AI Studio)
+
+Le Chat and AI Studio run in Mistral's cloud, so they need the server at a public HTTPS URL. One server serves
+everyone: each person adds their own private connector with their Kitsu login, and every call runs as them,
+with their Kitsu permissions.
+
+**Run it.** Only `KITSU_HOST` is needed (no shared login):
+
+    docker build -t kitsu-mcp .
+    docker run -p 8000:8000 -e KITSU_HOST=https://your-studio.cg-wire.com/api kitsu-mcp
+
+or `kitsu-mcp --http` (`--host`, `--port`, or `HOST` / `PORT`). The MCP endpoint is `/mcp` and `/health`
+answers for health checks. Deploy the image on any host that terminates HTTPS (Fly.io, Render, ...).
+
+**HTTPS is required.** Callers send their Kitsu password with every request, so the server refuses to listen
+on anything but localhost unless you confirm TLS terminates in front of it (`--behind-tls` or
+`KITSU_BEHIND_TLS=true`, set in the Docker image). It never logs credentials, keeps them only in memory
+(hashed as cache keys), and drops idle sessions after an hour.
+
+**Each user** (AI Studio → Connectors → Add, or Le Chat → Connectors → Custom MCP connector):
+- URL: `https://<your-server>/mcp`, visibility **Private**
+- Authentication: **Basic**, with their Kitsu email and password. Where only a bearer token can be entered,
+  use `email:password` as the token.
+
+Differences from stdio: `download_previews` and `download_video` are hidden (they would write to the server's
+disk, not the user's); give people the `url` (Kitsu page) or `download_url` (original upload) instead, which
+open in their own Kitsu browser session. The
+video tools cache movies per user, and `KITSU_VIDEO_CACHE_MB` caps all users' movies together. Write tools
+follow `KITSU_ALLOW_WRITE` as over stdio. Kitsu accounts with two-factor authentication cannot log in this
+way.
+
 ## Configuration
 
 | Variable | Default | |
 |---|---|---|
 | `KITSU_HOST` | required | Zou API URL, ending in `/api` |
-| `KITSU_USER` / `KITSU_PASSWORD` | required | Kitsu login |
+| `KITSU_USER` / `KITSU_PASSWORD` | required over stdio | Kitsu login (over HTTP each caller sends their own) |
 | `KITSU_ALLOW_WRITE` | `false` | Expose the write tools below |
 | `KITSU_CACHE_TTL` | `300` | Seconds to cache projects, task types, statuses, people |
 | `KITSU_TIMEOUT` | `30` | Per-request timeout (seconds) |
@@ -73,7 +105,8 @@ done-but-improvable.
 Layout (`src/kitsu_mcp/`): `config.py` settings, `client.py` HTTP client (login, re-login, retries,
 error mapping), `lookups.py` cached reference data and name resolution, `models.py` output schemas,
 `formatters.py` payload → model conversion, `production.py` project-wide task views, `tools/` one
-module per domain, `resources.py`, `prompts.py`.
+module per domain, `resources.py`, `prompts.py`, `auth.py` per-caller credentials, `http.py` HTTP mode
+(hidden local tools, `/health`, TLS guard), `links.py` Kitsu web links.
 
 Release: bump `version` in `pyproject.toml`, then `uv build && uv publish`.
 

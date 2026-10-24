@@ -312,7 +312,7 @@ def _revision_at(videos: list[dict], comment: dict) -> int | None:
     return max(earlier) if earlier else None
 
 
-@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags=VIDEO)
+@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags=VIDEO | {"local"})
 def download_video(
     dest_dir: str,
     preview_file_id: str | None = None,
@@ -324,8 +324,8 @@ def download_video(
 
     Writes local files only; Kitsu is not modified. The file is named <original name>_<preview file id>.<ext>.
     An existing file is left alone (skipped=True) unless overwrite=True. quality="low" is Kitsu's
-    web-playback encode, "original" the uploaded file. Does not need the video extra. To hand a movie
-    to someone, give them its `download_url` (get_preview with show=False).
+    web-playback encode, "original" the uploaded file. Does not need the video extra. Only on a local
+    server; to hand a movie to someone, give them its `download_url` (get_preview with show=False).
     """
     preview = video.resolve_preview(preview_file_id, entity_id)
     dest = Path(dest_dir).expanduser()
