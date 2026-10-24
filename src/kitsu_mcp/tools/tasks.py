@@ -54,7 +54,8 @@ def search_tasks(
     waiting_feedback: in a status that requests feedback (waiting for review/approval).
     Results are sorted by `sort_by` (missing values last); `total` counts all matches.
     group_by="assignee": instead of task rows, one compact line per task grouped by person (lighter
-    for "who owns what"); limit/offset then apply to the groups.
+    for "who owns what"); `total` still counts tasks, `groups` counts people, and limit/offset page
+    through the people.
     """
     due_before = iso_date(due_before, "due_before") if due_before else None
     due_after = iso_date(due_after, "due_after") if due_after else None
@@ -88,7 +89,7 @@ def search_tasks(
     pairs.sort(key=lambda p: (getattr(p[0], sort_by) is None, getattr(p[0], sort_by) or "", p[0].entity or ""))
     if group_by == "assignee":
         groups = _by_assignee(pairs)
-        return TaskList(total=len(pairs), by_assignee=groups[offset : offset + limit])
+        return TaskList(total=len(pairs), groups=len(groups), by_assignee=groups[offset : offset + limit])
     return TaskList(total=len(pairs), tasks=[row for row, _ in pairs[offset : offset + limit]])
 
 

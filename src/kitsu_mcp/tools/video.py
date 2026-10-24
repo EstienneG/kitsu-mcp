@@ -103,6 +103,8 @@ def get_video_frames(
     HH:MM:SS:FF), times ("1.5s", "0:02.5") or percentages of the duration ("50%"). max_side: longest
     side of each image in pixels (64-1280). Use quality="original" for full detail.
     """
+    if not frames or len(frames) > video.MAX_FRAMES:  # before downloading anything
+        video.parse_moments(frames, 1.0, 1)
     _, path, probe = _open(preview_file_id, entity_id, quality)
     wanted = video.parse_moments(frames, probe.fps, probe.frame_count)
     images = video.grab(path, wanted, probe)
@@ -231,6 +233,8 @@ def review_video(
     videos = video.task_videos(task_id)
     if preview_file_id:
         preview = video.resolve_preview(preview_file_id, None)
+        if preview.get("task_id") not in (None, task_id):
+            raise ToolError(f"Preview file {preview_file_id} belongs to task {preview['task_id']}, not {task_id}")
     else:
         latest = video.latest_revisions(task_id, 1)
         if not latest:
@@ -251,7 +255,8 @@ def review_video(
                 elsewhere.add(ref_revision)
                 if ref.revision is not None or not include_other_revisions:
                     continue  # a frame of another revision's timeline
-            frames.append(ref.frame)
+            if 1 <= ref.frame <= probe.frame_count:
+                frames.append(ref.frame)
         formatted = format_comment(raw).model_dump(exclude={"preview_ids"})
         if not (formatted.get("text") or "").strip() and not frames:
             continue

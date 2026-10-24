@@ -2,7 +2,9 @@
 
 Decoding needs the optional `video` extra (PyAV, which bundles ffmpeg, and Pillow). Both are imported
 lazily so the base install works without them; `require()` turns their absence into a clear ToolError.
-Frames are numbered from 1, like Kitsu's player; timecodes are HH:MM:SS:FF of the frame's start.
+Frames are numbered from 1, like Kitsu's player; timecodes are HH:MM:SS:FF of the frame's start. Frame
+numbers are positions on the movie's nominal frame rate grid (time x fps), which is what timecodes count;
+for variable frame rate footage they can differ from a count of decoded frames.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import os
 import re
 import tempfile
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -159,24 +162,52 @@ def original_size(preview: dict) -> int | None:
 
 def movie_route(preview: dict, quality: Quality) -> str:
     preview_id = check_id(preview["id"], "preview file ID")
-    if quality == "low":
-        return f"movies/low/preview-files/{preview_id}.mp4"
-    return f"movies/originals/preview-files/{preview_id}.{check_id(extension(preview) or 'mp4', 'extension')}"
+    folder = "low" if quality == "low" else "originals"
+    return f"movies/{folder}/preview-files/{preview_id}.{file_extension(preview, quality)}"
 
 
 def file_extension(preview: dict, quality: Quality) -> str:
-    return "mp4" if quality == "low" else (extension(preview) or "mp4")
+    """Extension of the movie file: the low-res encode is always mp4. Kitsu's value ends up in URLs and
+    file names, so it must be a short alphanumeric extension."""
+    if quality == "low":
+        return "mp4"
+    ext = extension(preview) or "mp4"
+    if not re.fullmatch(r"[a-z0-9]{1,8}", ext):
+        raise ToolError(f"Unexpected file extension {ext!r} on preview file {preview.get('id')}")
+    return ext
 
 
 # --- download cache ------------------------------------------------------------------------------
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
+_recent: dict[Path, float] = {}
+"""Cache files handed out by fetch() and when: a tool decodes them after fetching (compare_revisions
+holds two), so eviction leaves recently fetched files alone."""
+IN_USE_SECONDS = 600
 
 
 def _key_lock(key: str) -> threading.Lock:
     with _locks_guard:
+        if len(_locks) > 1000:  # forget idle locks so the table cannot grow without bound
+            for name, lock in list(_locks.items()):
+                if not lock.locked():
+                    del _locks[name]
         return _locks.setdefault(key, threading.Lock())
+
+
+def _mark_used(path: Path) -> None:
+    now = time.monotonic()
+    with _locks_guard:
+        _recent[path] = now
+        for old in [p for p, t in _recent.items() if now - t > IN_USE_SECONDS]:
+            del _recent[old]
+
+
+def _in_use(path: Path) -> bool:
+    with _locks_guard:
+        stamp = _recent.get(path)
+    return stamp is not None and time.monotonic() - stamp <= IN_USE_SECONDS
 
 
 def cache_dir() -> Path:
@@ -192,39 +223,48 @@ def max_download_bytes() -> int:
 
 def fetch(preview: dict, quality: Quality = "low") -> Path:
     """Local path of a preview's movie, downloading it into the cache on first use."""
-    directory = cache_dir()
-    path = directory / f"{check_id(preview['id'])}_{quality}.{file_extension(preview, quality)}"
+    path = cache_dir() / f"{check_id(preview['id'])}_{quality}.{file_extension(preview, quality)}"
     with _key_lock(str(path)):
         if path.exists():
             os.utime(path)  # mark as recently used
-            return path
-        limit = max_download_bytes()
-        known = original_size(preview) if quality == "original" else None
-        if known and known > limit:
-            raise ToolError(
-                f"The original movie is {known / 2**20:.0f} MB, over the {limit / 2**20:.0f} MB cap "
-                "(KITSU_VIDEO_MAX_MB); use quality='low'"
-            )
-        partial = directory / f".{path.name}.{uuid.uuid4().hex}.part"
-        route = movie_route(preview, quality)
-        try:
-            get_client().download(route, partial, max_bytes=limit)
-            partial.replace(path)
-        except NotFoundError as error:
-            hint = " Try quality='original'." if quality == "low" else ""
-            raise ToolError(f"Kitsu has no {quality} movie for preview file {preview['id']}.{hint}") from error
-        finally:
-            partial.unlink(missing_ok=True)
+        else:
+            _download(preview, quality, path)
+        _mark_used(path)
+    # Also on cache hits, so a cache over budget shrinks once its files are no longer in use.
     evict(keep=path)
     return path
 
 
+def _download(preview: dict, quality: Quality, path: Path) -> None:
+    """Download a movie to `path` through a temporary file (never leaves a partial file behind)."""
+    limit = max_download_bytes()
+    known = original_size(preview) if quality == "original" else None
+    if known and known > limit:
+        raise ToolError(
+            f"The original movie is {known / 2**20:.0f} MB, over the {limit / 2**20:.0f} MB cap "
+            "(KITSU_VIDEO_MAX_MB); use quality='low'"
+        )
+    partial = path.with_name(f".{path.name}.{uuid.uuid4().hex}.part")
+    try:
+        get_client().download(movie_route(preview, quality), partial, max_bytes=limit)
+        partial.replace(path)
+    except NotFoundError as error:
+        hint = " Try quality='original'." if quality == "low" else ""
+        raise ToolError(f"Kitsu has no {quality} movie for preview file {preview['id']}.{hint}") from error
+    finally:
+        partial.unlink(missing_ok=True)
+
+
 def evict(keep: Path | None = None) -> None:
-    """Delete the least recently used movies until the cache fits KITSU_VIDEO_CACHE_MB."""
+    """Delete the least recently used movies until the cache fits KITSU_VIDEO_CACHE_MB.
+
+    Files fetched in the last IN_USE_SECONDS may still be decoding and are kept, so the cache can go
+    over budget for a while; they are evicted on a later call.
+    """
     budget = get_client().settings.video_cache_mb * 2**20
     files = []
     for f in cache_dir().iterdir():
-        if f.is_file() and not f.name.startswith(".") and f != keep:
+        if f.is_file() and not f.name.startswith(".") and f != keep and not _in_use(f):
             try:
                 stat = f.stat()
             except FileNotFoundError:
@@ -234,7 +274,10 @@ def evict(keep: Path | None = None) -> None:
     for _, size, f in sorted(files):
         if total <= budget:
             break
-        f.unlink(missing_ok=True)  # open readers keep their handle on POSIX
+        try:
+            f.unlink(missing_ok=True)  # open readers keep their handle on POSIX
+        except OSError:
+            continue  # e.g. open on Windows; try again next time
         total -= size
 
 
@@ -267,7 +310,8 @@ def probe(path: Path) -> Probe:
             if stream.duration is not None and stream.time_base is not None:
                 duration = float(stream.duration * stream.time_base)
             elif container.duration is not None:
-                duration = container.duration / 1_000_000
+                # The container's duration runs from time 0, so it includes a non-zero start offset.
+                duration = max(container.duration - (container.start_time or 0), 0) / 1_000_000
             else:
                 duration = 0.0
             frame_count = stream.frames or round(duration * fps)
@@ -325,8 +369,8 @@ def parse_moment(spec: int | float | str, fps: float, frame_count: int) -> int:
         frame = frame_at(spec, fps)
     else:
         text = spec.strip().lower()
-        if m := re.fullmatch(r"(?:f|fr|frame)?\s*#?\s*(\d+)", text):
-            frame = int(m[1])
+        if m := re.fullmatch(r"(?:f|fr|frame)?\s*#?\s*(\d+)(?:\.0+)?", text):
+            frame = int(m[1])  # "37" and "37.0" are frames, like the numbers 37 and 37.0
         elif m := re.fullmatch(r"(\d+(?:\.\d+)?)\s*%", text):
             percent = float(m[1])
             if percent > 100:
@@ -382,14 +426,25 @@ class Reference:
 
 _KITSU_TAG = re.compile(r"v(\d+) (?:\d+:)?\d+:\d+[.:]\d+ \((\d+)\)")
 _TEXT_TIMECODE = re.compile(r"(?<![\d:])(\d{1,2}:\d{2}:\d{2}[:;]\d{1,2})(?![\d:])")
-_TEXT_FRAME = re.compile(r"\b(?:frames?|frm|fr|f)\s*#?\s*(\d{1,6})\b", re.IGNORECASE)
-_TEXT_SECONDS = re.compile(r"(?<![\w.:])(\d+(?:\.\d+)?)\s*(?:s|sec|secs|seconds?)\b", re.IGNORECASE)
+# "frame 12", "frames 12-20", "frames 3, 4 et 5", "fr 12", "f12", "f 12" (a bare f only lowercase and not
+# in a word or URL path, so "F1 car" and "x.com/f12" are not frames).
+_TEXT_FRAME = re.compile(
+    r"(?:(?<![\w/])(?i:frames?|frm|fr)\s*#?\s*|(?<![\w/])f\s?#?)"
+    # Further numbers in a list or range, unless they are really a time ("f 12, 2.5s").
+    r"(\d{1,6}(?:\s*(?:[-–,]|\bto\b|\bà\b|\bet\b|\band\b)\s*\d{1,6}(?![.,]\d|\s*(?i:s|sec|:)\b|\d))*)\b"
+)
+_FRAME_NUMBER = re.compile(r"\d{1,6}")
+# "1.5s", "1,5 s", "2 sec", "10 secondes"; not "s'il" / "s’il".
+_TEXT_SECONDS = re.compile(r"(?<![\w.,:/])(\d+(?:[.,]\d+)?)\s*(?i:secondes?|seconds?|secs?|s)(?![\w'’])")
+# "at 0:02", "à 1:30", "vers 0:05", "around 0:02.5": a M:SS movie time only after such a word, so clock
+# times ("à 12:30 on fait la review") are rare false positives and usually past the movie's end anyway.
+_TEXT_CLOCK = re.compile(r"(?i:\b(?:at|à|a|vers|around|to)\s+)(\d{1,2}:\d{2}(?:[.,]\d+)?)(?![\d:])")
 
 
 def find_references(text: str | None, fps: float, frame_count: int) -> list[Reference]:
     """Frames a comment points at: Kitsu's `v6 00:00:01:12 (37)` tags, timecodes, 'frame 37', '1.5s'.
 
-    Out-of-range references are dropped.
+    Out-of-range references are dropped, except Kitsu tags (they may be about another revision).
     """
     refs: list[Reference] = []
     if not text:
@@ -397,15 +452,26 @@ def find_references(text: str | None, fps: float, frame_count: int) -> list[Refe
     for m in _KITSU_TAG.finditer(text):
         refs.append(Reference(frame=int(m[2]), source=m[0], revision=int(m[1])))
     rest = _KITSU_TAG.sub(" ", text)
-    for pattern in (_TEXT_TIMECODE, _TEXT_FRAME, _TEXT_SECONDS):
+    for pattern in (_TEXT_TIMECODE, _TEXT_FRAME, _TEXT_SECONDS, _TEXT_CLOCK):
         for m in pattern.finditer(rest):
-            spec = m[1] if pattern is not _TEXT_SECONDS else f"{m[1]}s"
-            try:
-                refs.append(Reference(frame=parse_moment(spec, fps, frame_count), source=m[0].strip()))
-            except ToolError:
-                continue
+            for spec in _specs(pattern, m[1]):
+                try:
+                    refs.append(Reference(frame=parse_moment(spec, fps, frame_count), source=m[0].strip()))
+                except ToolError:
+                    continue
         rest = pattern.sub(" ", rest)
-    return [r for r in refs if 1 <= r.frame <= frame_count]
+    # Kitsu tags name their own revision, so keep them even past this movie's end: review_video lists
+    # them under refers_to_other_revisions.
+    return [r for r in refs if r.revision is not None or 1 <= r.frame <= frame_count]
+
+
+def _specs(pattern: re.Pattern, found: str) -> list[str]:
+    """parse_moment inputs for one match: frame lists and ranges give their numbers (a range its two ends)."""
+    if pattern is _TEXT_FRAME:
+        return _FRAME_NUMBER.findall(found)
+    if pattern is _TEXT_SECONDS:
+        return [f"{found.replace(',', '.')}s"]
+    return [found.replace(",", ".")]
 
 
 def annotation_frames(preview: dict, fps: float) -> list[int]:
@@ -448,8 +514,7 @@ def grab(path: Path, frames: list[int], info: Probe) -> dict[int, PILImage]:
                 target = frame - 1
                 # Seek unless the target is a short decode ahead of where we are.
                 if decoder is None or target <= position or target - position > 2 * info.fps:
-                    container.seek(start + int(target / info.fps / time_base), stream=stream, backward=True)
-                    decoder = container.decode(stream)
+                    decoder, position = _seek(container, stream, start, time_base, target, info.fps)
                 for decoded in decoder:
                     last = decoded
                     if decoded.pts is None:
@@ -469,6 +534,32 @@ def grab(path: Path, frames: list[int], info: Probe) -> dict[int, PILImage]:
     if missing:
         raise ToolError(f"Could not decode frames {missing}")
     return images
+
+
+def _seek(container, stream, start: int, time_base: float, target: int, fps: float):
+    """A decoder positioned at or before `target` (0-based), and the index of the frame before it.
+
+    Seeks to the keyframe before the target. Some formats (MPEG-TS) land after the requested time, even
+    when seeking to the very start; then fall back to decoding from the beginning of the file.
+    """
+    for back in (0.0, 4.0):
+        container.seek(start + int(max(target / fps - back, 0.0) / time_base), stream=stream, backward=True)
+        decoder = container.decode(stream)
+        first = next(decoder, None)
+        if first is None:
+            break
+        landed = 0 if first.pts is None else round((first.pts - start) * time_base * fps)
+        if landed <= target:
+            return _chain(first, decoder), landed - 1
+    # Seeking on the stream cannot reach the target: rewind the whole input (container time 0, which
+    # MPEG-TS honours) and decode from the first frame.
+    container.seek(0)
+    return container.decode(stream), -1
+
+
+def _chain(first, rest):
+    yield first
+    yield from rest
 
 
 # --- images --------------------------------------------------------------------------------------

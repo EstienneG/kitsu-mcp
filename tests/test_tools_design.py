@@ -52,3 +52,17 @@ async def test_download_previews_reports_why_entities_were_skipped(call, fake, t
     result = await call("download_previews", project="p-1", dest_dir=str(tmp_path), size="thumbnail")
     assert (result["no_preview"], result["canceled"], result["already_downloaded"]) == (2, 1, 1)
     assert result["skipped"] == 4 and [s["id"] for s in result["saved"]] == ["a-hero"]
+
+
+async def test_group_by_reports_group_count(call):
+    result = await call("search_tasks", project="p-1", include_done=False, group_by="assignee", limit=1)
+    assert (result["total"], result["groups"], len(result["by_assignee"])) == (4, 3, 1)
+
+
+async def test_list_task_types_includes_types_used_but_not_declared(call, fake):
+    fake.data["projects"][0]["task_types"] = ["tt-model"]  # Animation and Compositing are used, not declared
+    assert sorted(t["name"] for t in await call("list_task_types", project="p-1")) == [
+        "Animation",
+        "Compositing",
+        "Modeling",
+    ]

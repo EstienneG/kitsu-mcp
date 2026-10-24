@@ -375,11 +375,25 @@ async def test_movie_is_downloaded_once_per_quality(call, served):
     assert cached == ["pf-sh010_low.mp4", "pf-sh010_original.mp4"]
 
 
-async def test_cache_evicts_least_recently_used(call, served):
-    served.settings.video_cache_mb = 0  # only the movie in use is kept
+async def test_cache_evicts_least_recently_used(call, served, monkeypatch):
+    served.settings.video_cache_mb = 0  # only movies in use are kept
     await call("get_video_info", preview_file_id="pf-sh010")
     await call("get_video_info", preview_file_id="pf-sh010-v1")
+    # Both were fetched moments ago and may still be decoding: kept despite the budget.
+    assert sorted(p.name for p in served.settings.video_cache_dir.iterdir()) == [
+        "pf-sh010-v1_low.mp4",
+        "pf-sh010_low.mp4",
+    ]
+    monkeypatch.setattr(video, "IN_USE_SECONDS", -1)  # the grace period has passed
+    await call("get_video_info", preview_file_id="pf-sh010-v1")
     assert [p.name for p in served.settings.video_cache_dir.iterdir()] == ["pf-sh010-v1_low.mp4"]
+
+
+async def test_compare_revisions_with_a_tiny_cache(served):
+    """Fetching B must not evict A before A is decoded."""
+    served.settings.video_cache_mb = 0
+    texts, pictures = await images("compare_revisions", task_id="t-sh010-anim", n=2)
+    assert json.loads(texts[0])["a"]["revision"] == 1 and len(pictures) == 1
 
 
 def test_evict_keeps_recent_files(served):
@@ -467,3 +481,107 @@ async def test_broken_preview(call, served):
 async def test_get_video_frames_merges_duplicates(served):
     _, pictures = await images("get_video_frames", preview_file_id="pf-sh010", frames=[25, "00:00:01:00", 25.0])
     assert len(pictures) == 1
+
+
+@pytest.mark.parametrize(
+    "text, frames",
+    [
+        # 24 fps, 72 frames: 1.5 s = frame 37, 2.5 s = frame 61
+        ("à 1,5 s le perso saute", [37]),
+        ("vers 2,5 sec la main glisse", [61]),
+        ("à 1.5s le perso saute", [37]),
+        ("2 secondes plus tard", [49]),
+        ("10 secondes", []),  # past the 3 s movie
+        ("1 s'il te plaît", []),  # French "s'il", not seconds
+        ("F1 car, et https://x.com/f12 en référence", []),
+        ("frame 12-20 bouge", [12, 20]),
+        ("frames 3 and 4", [3, 4]),
+        ("frames 3, 4 et 5", [3, 4, 5]),
+        ("at 0:02 the arm pops", [49]),
+        ("à 12:30 on fait la review", []),  # a clock time, not a movie time (past the end anyway)
+        ("v2.1 du rig", []),
+        ("image 12", []),
+        ("12 frames too long", []),
+        ("f12 et frame 30", [12, 30]),
+        ("check 00:00:01:00", [25]),
+    ],
+)
+def test_find_references_in_realistic_comments(text, frames):
+    assert [r.frame for r in video.find_references(text, 24.0, 72)] == frames
+
+
+@pytest.mark.parametrize(
+    "name, start",
+    [
+        ("plain.mp4", 0.0),
+        ("plain.mov", 0.0),
+        ("plain.mkv", 0.0),
+        ("plain.ts", 0.0),
+        ("late.mp4", 2.0),
+        ("late.mkv", 2.0),
+    ],
+)
+def test_frames_are_exact_across_containers_and_start_offsets(tmp_path, name, start):
+    """MPEG-TS seeks land after the target and MKV durations include the start offset; both are handled."""
+    path = make_movie(tmp_path / name, frames=60, start_seconds=start)
+    info = video.probe(path)
+    assert (info.frame_count, round(info.duration, 2)) == (60, 2.5)
+    wanted = [1, 2, 17, 30, 59, 60]
+    one_by_one = {f: video.grab(path, [f], info)[f] for f in wanted}
+    batch = video.grab(path, wanted, info)
+    for f in wanted:
+        raw = (0, 0, one_by_one[f].width, one_by_one[f].height)  # decoded frames have no caption bar
+        assert frame_shown(one_by_one[f], raw) == f and frame_shown(batch[f], raw) == f
+
+
+async def test_original_quality_with_production_ids(call, served, monkeypatch):
+    """The fake's readable IDs are widened in conftest; this runs with the real UUID-only check."""
+    from kitsu_mcp import validation
+
+    monkeypatch.setattr(validation, "id_pattern", validation.UUID)
+    uuid = "1258b106-125e-499a-a19b-a3a3410638e3"
+    preview = served.data["preview_files"].pop("pf-sh010")
+    served.data["preview_files"][uuid] = {**preview, "id": uuid}
+    served.movies[f"movies/originals/preview-files/{uuid}.mp4"] = served.movies[ORIGINAL_V2]
+    info = await call("get_video_info", preview_file_id=uuid, quality="original")
+    assert info["quality"] == "original" and info["frame_count"] == 72
+
+
+def test_unexpected_extensions_are_refused():
+    for ext in ("../../x", "mp4/../a", "a" * 9):
+        with pytest.raises(ToolError, match="Unexpected file extension"):
+            video.file_extension({"id": "x", "extension": ext}, "original")
+    assert video.file_extension({"id": "x", "extension": "MOV"}, "original") == "mov"
+
+
+async def test_get_video_frames_checks_count_before_downloading(call, served):
+    served.calls.clear()
+    with pytest.raises(ToolError, match="At most 16"):
+        await call("get_video_frames", preview_file_id="pf-sh010", frames=list(range(1, 18)))
+    assert not any(path.startswith("movies/") for _, path, _ in served.calls)
+
+
+async def test_review_video_checks_the_preview_belongs_to_the_task(call, served):
+    with pytest.raises(ToolError, match="belongs to task t-sh010-anim"):
+        await call("review_video", task_id="t-hero-mod", preview_file_id="pf-sh010")
+
+
+def test_decimal_text_frame_numbers():
+    assert video.parse_moment("37.0", 24.0, 72) == video.parse_moment(37.0, 24.0, 72) == 37
+
+
+async def test_review_video_lists_other_revision_tags_past_the_end(served):
+    served.data["comments"]["t-sh010-anim"] = [
+        {
+            "id": "c",
+            "created_at": "2026-09-01T00:00:00",
+            "text": "v1 00:00:09:00 (217) and v2 00:00:09:00 (217)",
+            "previews": [],
+        }
+    ]
+    texts, _ = await images("review_video", task_id="t-sh010-anim")
+    summary = json.loads(texts[0])
+    comment = summary["comments"][0]
+    # v1's frame 217 is past v2's end but still reported as being about v1; v2's own 217 is out of range.
+    assert comment["refers_to_other_revisions"] == [1] and comment["frames"] == []
+    assert summary["frames_shown"] == []
