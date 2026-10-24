@@ -521,6 +521,7 @@ class FakeClient:
                 "entity_type_name": "Shot" if t["entity_id"].startswith("s-") else "Character",
                 "sequence_name": "SQ010" if t["entity_id"].startswith("s-") else None,
                 "task_type_name": self._by_id("task_types")[t["task_type_id"]]["name"],
+                "task_status_id": t["task_status_id"],
                 "task_status_short_name": statuses[t["task_status_id"]]["short_name"],
                 "due_date": t["due_date"],
                 "estimation": t["estimation"],
@@ -528,7 +529,8 @@ class FakeClient:
                 "last_comment_date": t["last_comment_date"],
             }
             for t in self.data["tasks"]
-            if person_id in t["assignees"] and statuses[t["task_status_id"]]["is_done"] == done
+            # Zou splits the two routes by Kitsu's own done flag, not by what the status means.
+            if person_id in t["assignees"] and bool(statuses[t["task_status_id"]].get("is_done")) == done
         ]
 
     def _route(self, path: str, params: dict) -> Any:  # noqa: C901 - a router is a long switch

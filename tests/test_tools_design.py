@@ -88,3 +88,20 @@ async def test_kitsu_get_caps_answer_size(call, fake):
     result = await call("kitsu_get", path="data/persons", max_items=60)
     assert result["truncated"] is True and result["returned"] < 60
     assert len(str(result["items"])) < 60_000
+
+
+async def test_kitsu_get_bounds_lists_inside_dicts(call, fake, monkeypatch):
+    feed = {"data": [{"id": f"n{i}", "text": "x" * 200} for i in range(500)], "total": 500}
+    monkeypatch.setattr(fake, "_route", lambda path, params: feed)
+    result = await call("kitsu_get", path="data/projects/p-1/news", max_items=20)
+    assert result["total"] == 500
+    assert result["data"]["truncated"] is True and result["data"]["returned"] == 20
+
+
+async def test_kitsu_get_never_returns_a_huge_single_item(call, fake, monkeypatch):
+    monkeypatch.setattr(fake, "_route", lambda path, params: [{"id": "big", "blob": "x" * 200_000}, {"id": "small"}])
+    result = await call("kitsu_get", path="data/whatever")
+    assert result["truncated"] is True and result["returned"] == 0 and len(str(result)) < 5_000
+    monkeypatch.setattr(fake, "_route", lambda path, params: {"blob": "x" * 200_000})
+    result = await call("kitsu_get", path="data/whatever")
+    assert result["truncated"] is True and "preview" not in result

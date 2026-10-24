@@ -81,7 +81,7 @@ class Lookups:
     def role_and_source(self, status_id: str | None) -> tuple[Role, str]:
         """The role and where it comes from: a setting name (e.g. "KITSU_DONE_STATUSES") or "kitsu flags"."""
         status = self.index("task_statuses").get(status_id or "", {})
-        names = {str(status.get("short_name") or "").lower(), str(status.get("name") or "").lower()} - {""}
+        names = {" ".join(str(status.get(f) or "").split()).lower() for f in ("short_name", "name")} - {""}
         for setting, role in _ROLE_SETTINGS:
             if names & _names(getattr(self.client.settings, setting)):
                 return role, f"KITSU_{setting.upper()}"
@@ -101,13 +101,14 @@ class Lookups:
         Defaults list several spellings on purpose (pause, paused, ...), so they are not reported.
         """
         statuses = self.index("task_statuses").values()
-        known = {str(s.get(f) or "").lower() for s in statuses for f in ("short_name", "name")}
+        known = {" ".join(str(s.get(f) or "").split()).lower() for s in statuses for f in ("short_name", "name")}
         settings = self.client.settings
         defaults = type(settings).model_fields
         unmatched = {
-            f"KITSU_{setting.upper()}": sorted(_names(getattr(settings, setting)) - known)
+            f"KITSU_{setting.upper()}": sorted(
+                _names(getattr(settings, setting)) - known - _names(defaults[setting].default or "")
+            )
             for setting, _ in _ROLE_SETTINGS
-            if getattr(settings, setting) != defaults[setting].default
         }
         return {setting: names for setting, names in unmatched.items() if names}
 
@@ -150,7 +151,8 @@ class Lookups:
 
 
 def _names(setting: str) -> set[str]:
-    return {n.strip().lower() for n in setting.split(",") if n.strip()}
+    """Normalized names in a comma-separated setting: lower case, single spaces."""
+    return {" ".join(n.split()).lower() for n in setting.split(",") if n.strip()}
 
 
 def _describe(kind: str, record: Record) -> str:

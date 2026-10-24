@@ -100,3 +100,29 @@ async def test_list_task_statuses_shows_roles(call, fake):
     assert by_short["wfa"]["role"] == "waiting_review"
     # Defaults list spellings this fake studio lacks on purpose; only user-set names are reported.
     assert result["unmatched_settings"] == {}
+
+
+async def test_person_tools_follow_roles_like_workload(call, fake):
+    """Zou splits a person's tasks by Kitsu's done flag; the tools must split them by role instead."""
+    fake.data["statuses"] += STATUSES
+    tasks = {t["id"]: t for t in fake.data["tasks"]}
+    tasks["t-forest-mod"]["task_status_id"] = "st-cbb"  # Bob: CBB is done here, not flagged done in Kitsu
+    tasks["t-hero-mod"]["task_status_id"] = "st-omit"  # Alice: OMIT is flagged done in Kitsu, but dropped
+    bob_open = [t["id"] for t in await call("get_person_tasks", person="Bob Leroy")]
+    bob_done = [t["id"] for t in await call("get_person_tasks", person="Bob Leroy", done=True)]
+    assert bob_open == ["t-sh010-comp"] and bob_done == ["t-forest-mod"]
+    workload = {w["person"]: w["open_tasks"] for w in await call("workload", project="p-1")}
+    assert workload["Bob Leroy"] == len(bob_open)
+    alice_done = [t["id"] for t in await call("get_person_tasks", person="Alice Martin", done=True)]
+    assert alice_done == ["t-sh010-anim"]  # the omitted task is not a completion
+    assert [t["id"] for t in await call("my_tasks")] == []  # Alice's only open task was omitted
+
+
+def test_unmatched_ignores_default_spellings_and_spacing(lookups):
+    lookups.client.settings.on_hold_statuses = "stand by, standby, pause, paused, blocked, on hold, sb"
+    assert lookups.unmatched_role_names() == {"KITSU_ON_HOLD_STATUSES": ["sb"]}
+
+
+def test_names_match_despite_extra_spaces(lookups):
+    lookups.client.settings.on_hold_statuses = "Stand  By"
+    assert lookups.role("st-standby") == "on_hold"

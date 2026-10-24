@@ -94,6 +94,15 @@ def project_entities(
     return entities
 
 
+def assigned_tasks(client: KitsuClient, lookups: Lookups, person_id: str, done: bool) -> list[dict]:
+    """A person's open or done tasks by status role. Zou splits its two routes by Kitsu's own done flag,
+    which disagrees with the roles (CBB is not flagged done, OMIT is), so read both and split again."""
+    raw = client.get(f"data/persons/{person_id}/tasks") + client.get(f"data/persons/{person_id}/done-tasks")
+    wanted = {"done"} if done else OPEN_ROLES
+    unique = {t["id"]: t for t in raw}
+    return [t for t in unique.values() if lookups.role(t.get("task_status_id")) in wanted]
+
+
 def project_tasks(client: KitsuClient, lookups: Lookups, project_id: str, kind: EntityKind = "any") -> list[TaskRecord]:
     """All tasks on a project's (non-canceled) assets and/or shots."""
     return [task for entity in project_entities(client, lookups, project_id, kind) for task in entity.tasks()]
