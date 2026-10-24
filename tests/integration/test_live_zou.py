@@ -94,3 +94,15 @@ async def test_tasks_and_people(call):
     assert len(await call("my_tasks")) == 2
     assert (await call("get_person_tasks", person="admin@example.com"))["total"] == 2
     assert await call("workload", project=PROJECT)
+
+
+async def test_activity_search_and_timesheet(call):
+    activity = await call("project_activity", project=PROJECT, since="2020-01-01")
+    assert any("splines" in str(i) or i["task_type"] == "Animation" for i in activity["items"])
+    assert "Super Admin" in activity["authors"]
+    assert (await call("my_notifications", unread_only=False))["total"] >= 0
+    hits = await call("search", query="sh01", project=PROJECT)
+    assert ("shot", "SQ01 / SH010") in {(h["kind"], h["name"]) for h in hits["hits"]}
+    assert ("asset", "Hero") in {(h["kind"], h["name"]) for h in (await call("search", query="hero"))["hits"]}
+    sheet = await call("timesheet", start="2020-01-01", end="2030-12-31")
+    assert sheet["person"] == "Super Admin" and sheet["total_minutes"] >= 0

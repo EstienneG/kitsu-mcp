@@ -26,12 +26,14 @@ SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_dat
 def get_task(
     task_id: str, include_comments: bool = True, comment_limit: Annotated[int, Field(ge=1, le=200)] = 20
 ) -> TaskDetail:
-    """Get a task with its entity, status, assignees and latest comments (newest first)."""
+    """Get a task with its entity, status, assignees and latest comments (newest first), with their
+    replies and who acknowledged them. Comment IDs are for reply_to_comment and acknowledge_comment."""
     task_id = object_id(task_id, "task", "search_tasks")
     client = get_client()
     result = task_detail(client.get(f"data/tasks/{task_id}/full"))
     if include_comments:
-        result.comments = [comment(c) for c in client.get(f"data/tasks/{task_id}/comments")[:comment_limit]]
+        lookups = get_lookups()
+        result.comments = [comment(c, lookups) for c in client.get(f"data/tasks/{task_id}/comments")[:comment_limit]]
     return result
 
 

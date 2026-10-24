@@ -246,6 +246,74 @@ def log_time(
     return _finish(plan, task_id, dry_run)
 
 
+def _comment(task_id: str, comment_id: str) -> dict:
+    comment_id = object_id(comment_id, "comment", "get_task")
+    for record in get_client().get(f"data/tasks/{task_id}/comments"):
+        if record.get("id") == comment_id:
+            return record
+    raise ToolError(f"Comment {comment_id} is not on task {task_id}; get_task lists the task's comments and their IDs")
+
+
+def _excerpt(text: str | None) -> str:
+    text = " ".join((text or "").split())
+    return f'"{text[:60]}{"..." if len(text) > 60 else ""}"' if text else "(no text)"
+
+
+@tool(annotations=ADDITIVE, tags=WRITE)
+def reply_to_comment(task_id: str, comment_id: str, text: str, dry_run: bool = False) -> WriteResult | DryRunResult:
+    """Reply to a comment on a task, as the logged-in user (comment IDs come from get_task or my_notifications).
+    A reply does not change the task's status; use add_comment for that.
+
+    dry_run=True: check everything with reads only and return the plan instead of posting: `would`, the exact
+    `requests` and `warnings`. Show it to the user before writing.
+    """
+    if not text.strip():
+        raise ToolError("Reply text is empty")
+    task_id = object_id(task_id, "task", "search_tasks")
+    task = _task(task_id)
+    record = _comment(task_id, comment_id)
+    author = (record.get("person") or {}).get("full_name") or "someone"
+    plan = Plan(
+        "reply_to_comment",
+        would=f"Reply on {_label(task)} to {author}'s comment {_excerpt(record.get('text'))}",
+        message="Reply posted.",
+    )
+    plan.request("POST", f"data/tasks/{task_id}/comments/{record['id']}/reply", {"text": text})
+    plan.before = {"replies": len(record.get("replies") or [])}
+    plan.after = {"replies": len(record.get("replies") or []) + 1}
+    return _finish(plan, task_id, dry_run)
+
+
+@tool(annotations=ADDITIVE_IDEMPOTENT, tags=WRITE)
+def acknowledge_comment(task_id: str, comment_id: str, dry_run: bool = False) -> WriteResult | DryRunResult:
+    """Acknowledge a comment on a task as the logged-in user ("seen", as with Kitsu's acknowledge button).
+    Does nothing if the user already acknowledged it.
+
+    dry_run=True: check everything with reads only and return the plan instead of writing. Show it to the
+    user first.
+    """
+    task_id = object_id(task_id, "task", "search_tasks")
+    task = _task(task_id)
+    record = _comment(task_id, comment_id)
+    user = current_user()
+    acknowledged = record.get("acknowledgements") or []
+    plan = Plan(
+        "acknowledge_comment",
+        would=f"Acknowledge the comment {_excerpt(record.get('text'))} on {_label(task)}",
+        message="Comment acknowledged.",
+    )
+    plan.before = {"acknowledged": user["id"] in acknowledged}
+    plan.after = {"acknowledged": True}
+    if user["id"] in acknowledged:
+        # Zou's route toggles: sending it again would remove the acknowledgement.
+        plan.would = f"Nothing: you already acknowledged this comment on {_label(task)}"
+        plan.warnings.append("Already acknowledged: no request is sent.")
+        plan.message = "Already acknowledged; nothing changed."
+    else:
+        plan.request("POST", f"data/tasks/{task_id}/comments/{record['id']}/ack", {})
+    return _finish(plan, task_id, dry_run)
+
+
 MAX_PLAYLIST_ADDS = 50
 
 

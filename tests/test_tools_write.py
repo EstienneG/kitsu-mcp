@@ -8,6 +8,8 @@ from tests.fakes import ALICE, BOB, ST_DONE, ST_WFA, TT_ANIM
 
 WRITE_TOOLS = {
     "add_comment",
+    "reply_to_comment",
+    "acknowledge_comment",
     "set_task_status",
     "assign_task",
     "update_task_schedule",
@@ -427,6 +429,18 @@ DRY_RUNS = [
         {"task_total": 600, "person_day": 0},
         {"task_total": 690, "person_day": 90},
     ),
+    (
+        "reply_to_comment",
+        {"task_id": "t-hero-mod", "comment_id": "c-2", "text": "Looks good"},
+        {"replies": 0},
+        {"replies": 1},
+    ),
+    (
+        "acknowledge_comment",
+        {"task_id": "t-hero-mod", "comment_id": "c-2"},
+        {"acknowledged": False},
+        {"acknowledged": True},
+    ),
 ]
 
 
@@ -590,3 +604,36 @@ def test_plan_with_failed_check_sends_nothing(fake):
     with pytest.raises(ToolError, match="Not allowed. Nothing was sent."):
         plan.send()
     assert writes(fake) == []
+
+
+# --- replies and acknowledgements ------------------------------------------------------------------------------
+
+
+async def test_reply_to_comment(call, fake, writable):
+    result = await call("reply_to_comment", task_id="t-hero-mod", comment_id="c-2", text="Looks good")
+    assert result["ok"] and result["message"] == "Reply posted."
+    assert writes(fake) == [("POST", "data/tasks/t-hero-mod/comments/c-2/reply", {"text": "Looks good"})]
+    task = await call("get_task", task_id="t-hero-mod", comment_limit=1)
+    assert task["comments"][0]["replies"][0]["text"] == "Looks good"
+    assert task["status"] == "wfa"  # a reply leaves the status alone
+
+
+async def test_reply_checks_the_comment_belongs_to_the_task(call, fake, writable):
+    with pytest.raises(ToolError, match="not on task"):
+        await call("reply_to_comment", task_id="t-sh010-anim", comment_id="c-2", text="Hi")
+    with pytest.raises(ToolError, match="empty"):
+        await call("reply_to_comment", task_id="t-hero-mod", comment_id="c-2", text=" ")
+    assert writes(fake) == []
+
+
+async def test_acknowledge_comment_never_toggles_it_back(call, fake, writable):
+    """Zou's ack route toggles: a second call must not send it again (that would un-acknowledge)."""
+    first = await call("acknowledge_comment", task_id="t-hero-mod", comment_id="c-2")
+    assert first["message"] == "Comment acknowledged."
+    again = await call("acknowledge_comment", task_id="t-hero-mod", comment_id="c-2")
+    assert again["message"] == "Already acknowledged; nothing changed."
+    assert len(writes(fake)) == 1
+    task = await call("get_task", task_id="t-hero-mod", comment_limit=1)
+    assert task["comments"][0]["acknowledged_by"] == ["Alice Martin"]
+    plan = await call("acknowledge_comment", task_id="t-hero-mod", comment_id="c-2", dry_run=True)
+    assert plan["requests"] == [] and plan["before"] == {"acknowledged": True}

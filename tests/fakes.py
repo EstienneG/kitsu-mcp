@@ -406,6 +406,50 @@ def seed() -> dict[str, Any]:
         "casting": casting,
         "playlists": playlists,
         "episodes": [],
+        "edits": [{"id": "ed-trailer", "name": "Trailer Cut", "project_id": "p-1"}],
+        "concepts": [{"id": "co-hero", "name": "Hero sketch v2", "project_id": "p-1"}],
+        "notifications": [
+            {
+                "id": "n-1",
+                "notification_type": "comment",
+                "read": False,
+                "created_at": "2026-10-14T09:00:00",
+                "project_id": "p-1",
+                "project_name": "Demo Short",
+                "full_entity_name": "SQ010 / SH010",
+                "task_id": "t-sh010-comp",
+                "task_type_id": TT_COMP,
+                "task_status_id": ST_RETAKE,
+                "author_id": BOB,
+                "comment_id": "c-comp-1",
+                "comment_text": "Edges flicker, please fix",
+                "reply_text": "",
+            },
+            {
+                "id": "n-0",
+                "notification_type": "assignation",
+                "read": True,
+                "created_at": "2026-10-01T09:00:00",
+                "project_id": "p-1",
+                "project_name": "Demo Short",
+                "full_entity_name": "Hero",
+                "task_id": "t-hero-mod",
+                "task_type_id": TT_MODEL,
+                "task_status_id": ST_WIP,
+                "author_id": BOB,
+                "comment_id": None,
+                "comment_text": "",
+                "reply_text": "",
+            },
+        ],
+        "time_spents": [
+            # Past days only: write tests log time on 2026-10-14 and expect an empty day.
+            {"task_id": "t-hero-mod", "person_id": ALICE, "date": "2026-10-12", "duration": 240},
+            {"task_id": "t-hero-mod", "person_id": ALICE, "date": "2026-10-13", "duration": 180},
+            {"task_id": "t-sh010-anim", "person_id": ALICE, "date": "2026-10-13", "duration": 60},
+            {"task_id": "t-sh010-anim", "person_id": ALICE, "date": "2026-09-01", "duration": 500},
+            {"task_id": "t-forest-mod", "person_id": BOB, "date": "2026-10-13", "duration": 120},
+        ],
         "me": ALICE,
     }
 
@@ -499,6 +543,24 @@ class FakeClient:
             }
             self.data["comments"].setdefault(task["id"], []).insert(0, new)
             return new
+        if m := re.fullmatch(r"data/tasks/([^/]+)/comments/([^/]+)/(reply|ack)", path):
+            self._task_or_404(m[1], path)
+            target = next((c for c in self.data["comments"].get(m[1], []) if c["id"] == m[2]), None)
+            if target is None:
+                raise ToolError(f"Not found: {path}")
+            if m[3] == "reply":
+                reply = {
+                    "id": f"r-{len(self.calls)}",
+                    "created_at": "2026-10-15T12:00:00",
+                    "text": data["text"],
+                    "person": self._by_id("people")[self.data["me"]],
+                }
+                target.setdefault("replies", []).append(reply)
+                return reply
+            # Zou toggles the acknowledgement.
+            acks = target.setdefault("acknowledgements", [])
+            acks.remove(self.data["me"]) if self.data["me"] in acks else acks.append(self.data["me"])
+            return target
         if path == "data/playlists/":
             playlist = {
                 "id": f"pl-new-{len(self.calls)}",
@@ -564,6 +626,8 @@ class FakeClient:
                 items.append(
                     {
                         "created_at": c["created_at"],
+                        "comment_id": c["id"],
+                        "change": c.get("change", True),
                         "task_id": task_id,
                         "task_type_id": task["task_type_id"],
                         "task_status_id": c.get("task_status_id"),
@@ -665,8 +729,13 @@ class FakeClient:
             page = int(params.get("page", 1))
             playlists = [r for r in d["playlists"] if r["project_id"] == m[1]]
             return playlists[(page - 1) * 20 : page * 20]
-        if m := re.fullmatch(r"data/projects/([^/]+)/(sequences|episodes)", path):
-            return [r for r in d[m[2]] if r["project_id"] == m[1]]
+        if m := re.fullmatch(r"data/projects/([^/]+)/(sequences|episodes|edits|concepts)", path):
+            return [r for r in d.get(m[2], []) if r["project_id"] == m[1]]
+        if path == "data/user/notifications":
+            return d.get("notifications", [])
+        if m := re.fullmatch(r"data/persons/([^/]+)/time-spents", path):
+            start, end = params["start_date"], params["end_date"]
+            return [e for e in d.get("time_spents", []) if e["person_id"] == m[1] and start <= e["date"] <= end]
         if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors", path):
             return [f for f in d["custom_fields"] if f["project_id"] == m[1]]
         if m := re.fullmatch(r"data/projects/([^/]+)/team", path):

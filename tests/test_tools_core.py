@@ -59,11 +59,14 @@ async def test_get_task_with_comments(call):
     assert task["status"] == "wfa"
     assert task["comments"] == [
         {
+            "id": "c-2",
             "date": "2026-10-02T10:00:00",
             "author": "Alice Martin",
             "status": "wfa",
             "text": "Ready for review",
             "preview_ids": ["pf-hero"],
+            "replies": [],
+            "acknowledged_by": [],
         }
     ]
 
