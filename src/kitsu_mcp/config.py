@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     # order, so a status in two lists takes the first.
     omitted_statuses: str = "omit,na,n/a,omitted,cancelled,canceled"
     """Dropped, not finished: left out of progress and open work (Kitsu flags them done)."""
-    done_statuses: str = "cbb"
-    """Finished, even if Kitsu flags them otherwise. CBB ("could be better") is done but improvable."""
+    done_statuses: str = ""
+    """Finished, even if Kitsu flags them otherwise, e.g. "cbb" for a "could be better" status flagged retake."""
     on_hold_statuses: str = "stand by,standby,pause,paused,blocked,on hold"
     """Open but paused: never counted as overdue or in progress."""
     review_statuses: str = ""

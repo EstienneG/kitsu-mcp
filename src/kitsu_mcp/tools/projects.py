@@ -123,7 +123,8 @@ def project_overview(
 
     Counts follow each status's role (list_task_statuses shows them). Omitted tasks (OMIT, N/A, ...)
     are counted apart and left out of done_ratio, so dropped work does not inflate progress.
-    done_improvable counts done tasks that could still be improved (e.g. CBB, "could be better").
+    done_improvable counts tasks whose status is done by role but not flagged done in Kitsu (statuses
+    the studio set as done, such as a "could be better" status), with those statuses.
     task_types / exclude_task_types (names or short names) limit the task counts and ratios, e.g.
     exclude_task_types=["Animatic"] to leave admin or pre-production work out of progress. departments
     (names or IDs) keeps tasks whose task type belongs to one of them, as in search_tasks and workload.
@@ -153,7 +154,7 @@ def project_overview(
     omitted = [r for r in records if roles[id(r)] == "omitted"]
     done_records = [r for r in records if roles[id(r)] == "done"]
     open_records = [r for r in records if r.is_open(lookups)]
-    # Done by role but not by Kitsu's own flag: finished, could still be improved (CBB, ...).
+    # Done by role but not by Kitsu's own flag: finished, could still be improved (e.g. a "could be better").
     kitsu_done = {i for i, s in lookups.index("task_statuses").items() if s.get("is_done")}
     improvable = [r for r in done_records if status_of(r) not in kitsu_done]
     by_type: dict[str, list[TaskRecord]] = defaultdict(list)

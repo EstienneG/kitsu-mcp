@@ -62,7 +62,7 @@ def get_person_tasks(
     """List the tasks assigned to a person (name, email or ID): open ones, or done ones with done=True.
 
     Open and done follow the status roles (list_task_statuses), like workload and project_overview:
-    CBB is done, omitted tasks are in neither list. Open tasks are sorted by due date; done tasks most
+    omitted tasks are in neither list. Open tasks are sorted by due date; done tasks most
     recent first. `total` counts all of them; limit/offset page through. detail="compact" (default)
     leaves out sequence, estimate, time logged and last comment date; detail="full" includes them.
     """

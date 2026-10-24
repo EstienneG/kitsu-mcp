@@ -340,7 +340,9 @@ class ProjectOverview(BaseModel):
     omitted: int = Field(0, description="Dropped tasks (OMIT, N/A, ...), left out of done_ratio")
     omitted_statuses: list[str] = Field(default_factory=list, description="Statuses counted as omitted")
     done_ratio: float = Field(description="Finished tasks / (tasks - omitted)")
-    done_improvable: int = Field(0, description="Done tasks that could still be improved (e.g. CBB)")
+    done_improvable: int = Field(
+        0, description="Done by role but not flagged done in Kitsu (e.g. a 'could be better' status)"
+    )
     done_improvable_statuses: list[str] = Field(default_factory=list)
     overdue: int = Field(description="Open tasks past their due date, not on hold")
     waiting_feedback: int = Field(description="Open tasks waiting for review/approval")
