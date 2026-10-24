@@ -3,7 +3,7 @@
 All notable changes. Versions follow [semantic versioning](https://semver.org); before 1.0, a minor version may
 change behaviour (called out under **Changed**).
 
-## Unreleased
+## 0.3.2 — 2026-10-24
 
 ### Added
 - `project_activity`: what changed on a project since a date (comments, status changes, uploads), filtered by
