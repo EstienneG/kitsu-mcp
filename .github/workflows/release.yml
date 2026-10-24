@@ -1,7 +1,9 @@
 name: Release
 
-# Push a tag like v0.2.0 (matching `version` in pyproject.toml) to publish the Docker image to
-# ghcr.io/<owner>/kitsu-mcp with tags 0.2.0, 0.2 and latest.
+# Push a tag like v0.2.0 (matching `version` in pyproject.toml) to publish the package to PyPI and the
+# Docker image to ghcr.io/<owner>/kitsu-mcp with tags 0.2.0, 0.2 and latest.
+# PyPI uses trusted publishing (no token): the project's publisher on PyPI must name this repository,
+# the workflow release.yml and the environment pypi.
 on:
   push:
     tags: ["v*.*.*"]
@@ -24,6 +26,21 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest
+
+  pypi:
+    needs: check
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/kitsu-mcp
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv build
+      - run: uv publish --trusted-publishing always
 
   image:
     needs: check

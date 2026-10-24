@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
-    { name = "EstienneG", email = "estienne.goigoux@mistral.ai" }
+    { name = "EstienneG", email = "enneitse@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -15,6 +15,10 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
 ]
+
+[project.urls]
+Repository = "https://github.com/EstienneG/kitsu-mcp"
+Issues = "https://github.com/EstienneG/kitsu-mcp/issues"
 
 [project.scripts]
 kitsu-mcp = "kitsu_mcp:main"
