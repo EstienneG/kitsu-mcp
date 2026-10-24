@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import comment, task_detail
 from kitsu_mcp.lookups import get_lookups
@@ -22,7 +22,7 @@ from kitsu_mcp.validation import MAX_LIMIT, Detail, Limit, Offset, iso_date, obj
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"tasks"})
 def get_task(
     task_id: str, include_comments: bool = True, comment_limit: Annotated[int, Field(ge=1, le=200)] = 20
 ) -> TaskDetail:
@@ -35,7 +35,7 @@ def get_task(
     return result
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"tasks"})
 def search_tasks(
     project: str,
     task_types: list[str] | None = None,
@@ -143,7 +143,7 @@ def _by_assignee(pairs: list[tuple[TaskRow, bool]], per_group: int) -> list[Assi
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"tasks"})
 def task_history(task_id: str) -> TaskHistory:
     """Status changes of a task over time (from its comments), plus time logged vs. estimate."""
     task_id = object_id(task_id, "task", "search_tasks")
@@ -169,7 +169,7 @@ def task_history(task_id: str) -> TaskHistory:
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"tasks"})
 def my_tasks() -> list[MyTask]:
     """List open tasks assigned to the logged-in user (open per the status roles, like workload)."""
     client = get_client()

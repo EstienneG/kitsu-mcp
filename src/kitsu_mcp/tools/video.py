@@ -8,7 +8,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
 from kitsu_mcp import video
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import comment as format_comment
 from kitsu_mcp.models import SavedVideo, VideoInfo
@@ -56,7 +56,7 @@ def _sheet(path: Path, probe: Probe, frames: list[int], fmt: ImageFormat, prefix
     return video.encode(video.grid(list(cells), columns, probe.height / probe.width), fmt)
 
 
-@mcp.tool(annotations=READ_ONLY, tags=VIDEO)
+@tool(annotations=READ_ONLY, tags=VIDEO)
 def get_video_info(
     preview_file_id: str | None = None, entity_id: str | None = None, quality: Quality = "low"
 ) -> VideoInfo:
@@ -70,7 +70,7 @@ def get_video_info(
     return _info(preview, path, probe, quality)
 
 
-@mcp.tool(annotations=READ_ONLY, tags=VIDEO)
+@tool(annotations=READ_ONLY, tags=VIDEO)
 def get_video_contact_sheet(
     preview_file_id: str | None = None,
     entity_id: str | None = None,
@@ -88,7 +88,7 @@ def get_video_contact_sheet(
     return _sheet(path, probe, video.even_frames(n, probe.frame_count), format)
 
 
-@mcp.tool(annotations=READ_ONLY, tags=VIDEO)
+@tool(annotations=READ_ONLY, tags=VIDEO)
 def get_video_frames(
     frames: list[Moment],
     preview_file_id: str | None = None,
@@ -122,7 +122,7 @@ def _latest_two(task_id: str) -> tuple[dict, dict]:
     return latest[1], latest[0]
 
 
-@mcp.tool(annotations=READ_ONLY, tags=VIDEO | {"tasks"})
+@tool(annotations=READ_ONLY, tags=VIDEO | {"tasks"})
 def compare_revisions(
     preview_file_a: str | None = None,
     preview_file_b: str | None = None,
@@ -207,7 +207,7 @@ def _within(frame: int, probe: Probe) -> int | None:
     return frame if 1 <= frame <= probe.frame_count else None
 
 
-@mcp.tool(annotations=READ_ONLY, tags=VIDEO | {"tasks"})
+@tool(annotations=READ_ONLY, tags=VIDEO | {"tasks"})
 def review_video(
     task_id: str,
     preview_file_id: str | None = None,
@@ -311,7 +311,7 @@ def _revision_at(videos: list[dict], comment: dict) -> int | None:
     return max(earlier) if earlier else None
 
 
-@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags=VIDEO)
+@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags=VIDEO)
 def download_video(
     dest_dir: str,
     preview_file_id: str | None = None,

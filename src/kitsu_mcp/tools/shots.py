@@ -1,4 +1,4 @@
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
 from kitsu_mcp.lookups import check_names, get_lookups
@@ -37,14 +37,14 @@ def _text(value) -> str | None:
     return value if value and value != "None" else None
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"shots"})
 def list_episodes(project: str) -> list[Named]:
     """List a project's episodes (TV shows only; empty for shorts and features)."""
     project_id = get_lookups().project(project)["id"]
     return [Named(id=e["id"], name=e["name"]) for e in get_client().get(f"data/projects/{project_id}/episodes")]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"shots"})
 def list_sequences(project: str, episode: str | None = None) -> list[Sequence]:
     """List a project's sequences, optionally only those of one episode (name or ID)."""
     client = get_client()
@@ -62,7 +62,7 @@ def list_sequences(project: str, episode: str | None = None) -> list[Sequence]:
     return sorted(sequences, key=lambda s: (s.episode or "", s.name))
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"shots"})
 def list_shots(
     project: str,
     sequence: str | None = None,
@@ -119,7 +119,7 @@ def list_shots(
     return ShotList(total=len(results), shots=results[offset : offset + limit])
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"shots"})
 def get_shot(shot_id: str) -> ShotDetail:
     """Get a shot's details (frame range, fps, custom data) and tasks."""
     shot_id = object_id(shot_id, "shot", "list_shots")
@@ -143,7 +143,7 @@ def get_shot(shot_id: str) -> ShotDetail:
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
+@tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
 def get_shot_casting(shot_id: str) -> list[CastAsset]:
     """List the assets cast in a shot (the breakdown)."""
     shot_id = object_id(shot_id, "shot", "list_shots")
@@ -161,7 +161,7 @@ def get_shot_casting(shot_id: str) -> list[CastAsset]:
     ]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
+@tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
 def get_asset_cast_in(asset_id: str) -> list[CastIn]:
     """List the shots an asset is cast in."""
     asset_id = object_id(asset_id, "asset", "list_assets")

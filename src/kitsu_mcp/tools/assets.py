@@ -1,4 +1,4 @@
-from kitsu_mcp.app import READ_ONLY, mcp
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
 from kitsu_mcp.lookups import Lookups, check_names, get_lookups
@@ -46,7 +46,7 @@ def matches_status_filters(tasks: list, status_filters: dict[str, list[str]] | N
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"assets"})
+@tool(annotations=READ_ONLY, tags={"assets"})
 def list_assets(
     project: str,
     asset_types: list[str] | None = None,
@@ -98,7 +98,7 @@ def list_assets(
     return AssetList(total=len(results), assets=results[offset : offset + limit])
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"assets"})
+@tool(annotations=READ_ONLY, tags={"assets"})
 def get_asset(asset_id: str) -> AssetDetail:
     """Get an asset's details and tasks."""
     asset_id = object_id(asset_id, "asset", "list_assets")
