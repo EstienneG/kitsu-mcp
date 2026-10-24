@@ -2,6 +2,7 @@
 
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 import gazu
@@ -14,6 +15,7 @@ from gazu.exception import (
     NotAllowedException,
     NotAuthenticatedException,
     ParameterException,
+    PreviewFileProcessingException,
     RouteNotFoundException,
     ServerErrorException,
     ValidationException,
@@ -23,6 +25,24 @@ from kitsu_mcp.config import Settings, get_settings
 
 # requests.JSONDecodeError: a proxy answered 503/504 with an HTML page (gazu only raises on 500/502).
 _TRANSIENT = (ServerErrorException, requests.ConnectionError, requests.Timeout, requests.JSONDecodeError)
+
+
+class NotFoundError(ToolError):
+    """Kitsu answered 404: wrong ID, or a route this instance does not have."""
+
+
+class FileTooLargeError(ToolError):
+    """A download went past its size cap and was stopped."""
+
+
+def size_guard(path: str, max_bytes: int | None):
+    """Progress callback for downloads that stops them once they exceed `max_bytes`."""
+
+    def check(bytes_read: int, total: int) -> None:
+        if max_bytes is not None and max(bytes_read, total) > max_bytes:
+            raise FileTooLargeError(f"{path} is larger than the {max_bytes / 2**20:.0f} MB download cap")
+
+    return check
 
 
 class KitsuClient:
@@ -90,6 +110,11 @@ class KitsuClient:
     def get_bytes(self, path: str) -> bytes:
         return self._call("GET", path, raw.get_file_data_from_url, path)
 
+    def download(self, path: str, dest: Path, max_bytes: int | None = None) -> int:
+        """Stream a file to `dest` (waiting for previews Kitsu is still processing); returns its size."""
+        self._call("GET", path, raw.download, path, str(dest), progress_callback=size_guard(path, max_bytes))
+        return dest.stat().st_size
+
     def post(self, path: str, data: Any) -> Any:
         return self._call("POST", path, raw.post, path, data, retry=False)
 
@@ -112,7 +137,9 @@ def _apply_timeout(session: requests.Session, timeout: float) -> None:
 
 def _tool_error(error: Exception, method: str, path: str) -> ToolError:
     if isinstance(error, RouteNotFoundException):
-        return ToolError(f"Not found: {path} (wrong ID, or the route does not exist)")
+        return NotFoundError(f"Not found: {path} (wrong ID, or the route does not exist)")
+    if isinstance(error, PreviewFileProcessingException):
+        return ToolError(f"Kitsu is still processing {path}; try again in a minute")
     if isinstance(error, NotAllowedException):
         return ToolError(f"Permission denied for {method} {path}")
     if isinstance(error, (NotAuthenticatedException, AuthFailedException)):
