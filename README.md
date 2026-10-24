@@ -192,16 +192,23 @@ them).
 
 | Area | Tools |
 |---|---|
-| Meta | `whoami`, `kitsu_get` (raw read of any Zou `data/` route), `refresh_cache` |
+| Meta | `whoami`, `search` (assets, shots, sequences, episodes, edits, concepts and people by name), `kitsu_get` (raw read of any Zou `data/` route), `refresh_cache` |
+| Activity | `project_activity` (comments, status changes and uploads since a date, by person or task type), `my_notifications` (the user's Kitsu inbox) |
 | Projects | `list_projects`, `list_task_types`, `list_task_statuses`, `list_asset_types`, `project_overview` |
 | Assets | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `get_asset`, `get_casting` (either way) |
 | Shots | `list_episodes`, `list_sequences`, `list_shots`, `get_shot`, `get_casting` |
 | Custom fields | `list_custom_fields` (a project's custom columns: type, choices, departments); values show up by display name in `get_asset` / `get_shot` (and `detail="full"` lists), and `list_assets` / `list_shots` filter on them with `custom_field_filters` |
-| Tasks | `search_tasks` (type, department, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
-| People | `list_people`, `get_person_tasks`, `workload` |
+| Tasks | `search_tasks` (type, department, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task` (with comments, replies and acknowledgements), `task_history`, `my_tasks` |
+| People | `list_people`, `get_person_tasks`, `workload`, `timesheet` (time logged per day and task over a period) |
 | Previews | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
 | Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
-| Write (opt-in) | `add_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview) |
+| Write (opt-in) | `add_comment`, `reply_to_comment`, `acknowledge_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview) |
+
+**Context cost.** Clients send every tool's name, description and arguments to the model at the start of a
+conversation. With all 48 tools (writes enabled) that is about 9,000 tokens (about 7,100 read-only), plus about
+200 for the server instructions; results come on top, and list tools return compact rows to keep them small.
+A test keeps the tool list under a fixed budget. To trim it, hide tool groups your agent does not need: most
+clients let you turn individual tools off, and write tools stay hidden unless `KITSU_ALLOW_WRITE=true`.
 
 **Links:** detail results carry a `url` to the Kitsu page (asset, shot, task, preview in the player, playlist),
 and preview metadata a `download_url` to the original upload. They open in a browser signed in to Kitsu, so

@@ -6,6 +6,15 @@ change behaviour (called out under **Changed**).
 ## Unreleased
 
 ### Added
+- `project_activity`: what changed on a project since a date (comments, status changes, uploads), filtered by
+  person, task type or name, with a count per person.
+- `my_notifications`: the user's Kitsu inbox, unread first.
+- `search`: find assets, shots, sequences, episodes, edits, concepts and people by name, across projects.
+- `timesheet`: time a person logged over a period, per day and per task.
+- Write tools `reply_to_comment` and `acknowledge_comment`, with dry runs. Acknowledging never toggles an
+  acknowledgement off.
+- `get_task` comments carry their ID, replies and who acknowledged them; `my_day` starts from notifications.
+- README: the tool list's context cost, and a test that keeps it under a budget.
 - Compatibility: supported Zou and gazu versions in the README, and CI integration tests that run the read
   tools against real Zou 1.0.43 and 1.0.97 (`tests/integration`).
 - `CHANGELOG.md`, `SECURITY.md` and `CONTRIBUTING.md`.

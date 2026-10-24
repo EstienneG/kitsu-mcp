@@ -55,3 +55,28 @@ def test_tool_functions_are_callable_directly(fake):
 
     fake.data["projects"] = []
     assert list_projects() == []
+
+
+# What clients put in the model's context before any call: every tool's name, description and input schema.
+# 37.1k characters (about 9k tokens) with write tools on, as of 48 tools. Raise this deliberately, with the
+# README's "Context cost" paragraph, when a new tool earns its place.
+TOOL_LIST_BUDGET_CHARS = 41_000
+
+
+async def test_tool_list_stays_within_its_context_budget():
+    import json
+
+    mcp.enable(tags={"write"})
+    try:
+        tools = await mcp.list_tools()
+    finally:
+        mcp.disable(tags={"write"})
+    size = sum(
+        len(
+            json.dumps(
+                {"name": t.name, "description": t.description, "input_schema": t.parameters}, separators=(",", ":")
+            )
+        )
+        for t in tools
+    )
+    assert size <= TOOL_LIST_BUDGET_CHARS, f"tool list is {size} characters, over the {TOOL_LIST_BUDGET_CHARS} budget"
