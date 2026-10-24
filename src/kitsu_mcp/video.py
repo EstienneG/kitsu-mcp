@@ -9,6 +9,7 @@ for variable frame rate footage they can differ from a count of decoded frames.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import math
 import os
@@ -220,9 +221,12 @@ def cache_dir() -> Path:
     fetched for one person is never served to another without Kitsu checking their access."""
     client = get_client()
     path = _cache_root()
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
     if client.credentials is not None:
-        path = path / "users" / client.credentials.key[:32]
-    path.mkdir(parents=True, exist_ok=True)
+        users = path / "users"
+        users.mkdir(mode=0o700, exist_ok=True)
+        path = users / client.credentials.user_key[:32]
+        path.mkdir(mode=0o700, exist_ok=True)
     return path
 
 
@@ -298,6 +302,9 @@ def evict(keep: Path | None = None) -> None:
         except OSError:
             continue  # e.g. open on Windows; try again next time
         total -= size
+        if f.parent.parent.name == "users":
+            with contextlib.suppress(OSError):
+                f.parent.rmdir()  # a user's folder once empty (fails harmlessly if not)
 
 
 # --- probing and frame addressing ----------------------------------------------------------------
