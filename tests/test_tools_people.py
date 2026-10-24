@@ -26,6 +26,7 @@ async def test_workload(call):
         "estimation": 720,
         "logged": 60,
         "next_due": "2026-10-10",
+        "on_hold": 0,
     }
     assert rows["Alice Martin"]["waiting_feedback"] == 1
     assert rows["(unassigned)"]["open_tasks"] == 1
@@ -49,6 +50,7 @@ async def test_project_overview(call):
         "task_type": "Animation",
         "total": 2,
         "done": 1,
+        "omitted": 0,
         "done_ratio": 0.5,
         "statuses": [{"status": "done", "count": 1}, {"status": "todo", "count": 1}],
     }
@@ -59,3 +61,23 @@ async def test_project_overview_counts_entities_without_tasks(call, fake):
     fake.data["assets"].append({**fake.data["assets"][1], "id": "a-cut", "name": "Cut", "canceled": True})
     overview = await call("project_overview", project="p-1")
     assert (overview["assets"], overview["tasks"]) == (3, 5)
+
+
+async def test_project_overview_leaves_omitted_tasks_out_of_progress(call, fake):
+    """OMIT is a done status in Kitsu, but a dropped task is not progress."""
+    fake.data["statuses"].append({"id": "st-omit", "name": "OMIT", "short_name": "OMIT", "is_done": True})
+    sh020 = next(t for t in fake.data["tasks"] if t["id"] == "t-sh020-anim")
+    sh020["task_status_id"] = "st-omit"
+    overview = await call("project_overview", project="p-1")
+    # 5 tasks: 1 done (sh010 anim), 1 omitted -> 1 / 4
+    assert (overview["omitted"], overview["done_ratio"]) == (1, 0.25)
+    animation = next(t for t in overview["by_task_type"] if t["task_type"] == "Animation")
+    assert (animation["done"], animation["omitted"], animation["done_ratio"]) == (1, 1, 1.0)
+    assert overview["fps"] == 24.0
+
+
+async def test_list_task_types_for_a_project(call, fake):
+    fake.data["projects"][0]["task_types"] = ["tt-model", "tt-anim", "tt-comp"]
+    names = [t["name"] for t in await call("list_task_types", project="Demo Short")]
+    assert sorted(names) == ["Animation", "Compositing", "Modeling"]  # archived "Old" left out
+    assert len(await call("list_task_types")) == 3

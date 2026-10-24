@@ -5,7 +5,7 @@ from datetime import date
 from typing import Literal
 
 from kitsu_mcp.client import KitsuClient
-from kitsu_mcp.lookups import Lookups
+from kitsu_mcp.lookups import DUE_ROLES, OPEN_ROLES, Lookups, Role
 from kitsu_mcp.models import TaskRow
 
 EntityKind = Literal["asset", "shot", "any"]
@@ -47,14 +47,20 @@ class TaskRecord:
             duration=task.get("duration"),
             retake_count=task.get("retake_count"),
             last_comment_date=task.get("last_comment_date"),
+            last_preview_file_id=task.get("last_preview_file_id"),
         )
 
-    def is_done(self, lookups: Lookups) -> bool:
-        return lookups.status_flag(self.raw.get("task_status_id"), "is_done")
+    def role(self, lookups: Lookups) -> Role:
+        return lookups.role(self.raw.get("task_status_id"))
+
+    def is_open(self, lookups: Lookups) -> bool:
+        """Still to do: not done and not omitted (on-hold tasks are open)."""
+        return self.role(lookups) in OPEN_ROLES
 
     def is_overdue(self, lookups: Lookups) -> bool:
+        """Due date passed on a task still being worked on (not done, omitted or on hold)."""
         due = day(self.raw.get("due_date"))
-        return due is not None and due < today().isoformat() and not self.is_done(lookups)
+        return due is not None and due < today().isoformat() and self.role(lookups) in DUE_ROLES
 
 
 @dataclass
@@ -86,6 +92,15 @@ def project_entities(
                 group = "/".join(p for p in (shot.get("episode_name"), shot.get("sequence_name")) if p) or None
                 entities.append(EntityRecord(shot, "shot", group))
     return entities
+
+
+def assigned_tasks(client: KitsuClient, lookups: Lookups, person_id: str, done: bool) -> list[dict]:
+    """A person's open or done tasks by status role. Zou splits its two routes by Kitsu's own done flag,
+    which disagrees with the roles (CBB is not flagged done, OMIT is), so read both and split again."""
+    raw = client.get(f"data/persons/{person_id}/tasks") + client.get(f"data/persons/{person_id}/done-tasks")
+    wanted = {"done"} if done else OPEN_ROLES
+    unique = {t["id"]: t for t in raw}
+    return [t for t in unique.values() if lookups.role(t.get("task_status_id")) in wanted]
 
 
 def project_tasks(client: KitsuClient, lookups: Lookups, project_id: str, kind: EntityKind = "any") -> list[TaskRecord]:

@@ -47,3 +47,13 @@ def pinned_today(monkeypatch):
     from kitsu_mcp import production
 
     monkeypatch.setattr(production, "today", lambda: date(2026, 10, 15))
+
+
+@pytest.fixture(autouse=True)
+def readable_ids(monkeypatch):
+    """The fake data uses readable IDs (t-hero-mod) instead of UUIDs; let object_id accept them."""
+    import re
+
+    from kitsu_mcp import validation
+
+    monkeypatch.setattr(validation, "id_pattern", re.compile(f"{validation.UUID.pattern}|[a-z0-9]+(?:-[a-z0-9]+)*"))

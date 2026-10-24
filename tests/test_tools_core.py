@@ -24,7 +24,7 @@ async def test_list_asset_types_accepts_project_name(call):
 
 
 async def test_list_assets_filters(call):
-    result = await call("list_assets", project="p-1", asset_types=["character"])
+    result = await call("list_assets", project="p-1", asset_types=["character"], detail="full")
     assert [a["name"] for a in result["assets"]] == ["Hero"]
     assert result["assets"][0]["tasks"][0] == {
         "id": "t-hero-mod",
@@ -32,6 +32,8 @@ async def test_list_assets_filters(call):
         "status": "wfa",
         "assignees": ["Alice Martin"],
         "due_date": "2026-10-01",
+        "last_comment_date": None,
+        "last_preview_file_id": None,
     }
     result = await call("list_assets", project="p-1", task_status_filters={"modeling": ["WIP"]})
     assert [a["name"] for a in result["assets"]] == ["Forest"]

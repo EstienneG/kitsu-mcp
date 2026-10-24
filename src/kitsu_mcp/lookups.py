@@ -1,8 +1,9 @@
 """Cached reference data (task types, statuses, people, ...) and name → record resolvers."""
 
+import difflib
 import threading
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp.exceptions import ToolError
 
@@ -10,6 +11,21 @@ from kitsu_mcp.client import KitsuClient, get_client
 from kitsu_mcp.config import get_settings
 
 Record = dict[str, Any]
+
+Role = Literal["omitted", "done", "on_hold", "retake", "waiting_review", "wip", "todo"]
+OPEN_ROLES: frozenset[str] = frozenset({"on_hold", "retake", "waiting_review", "wip", "todo"})
+"""Roles of tasks still to do. Omitted and done are closed."""
+DUE_ROLES: frozenset[str] = OPEN_ROLES - {"on_hold"}
+"""Open roles whose due date counts: a paused task is not overdue."""
+
+# Settings that assign roles, in precedence order, with the role they assign.
+_ROLE_SETTINGS: tuple[tuple[str, Role], ...] = (
+    ("omitted_statuses", "omitted"),
+    ("done_statuses", "done"),
+    ("on_hold_statuses", "on_hold"),
+    ("retake_statuses", "retake"),
+    ("review_statuses", "waiting_review"),
+)
 
 _SOURCES = {
     "projects": "data/projects",
@@ -57,11 +73,44 @@ class Lookups:
             return None
         return self.index(kind).get(record_id, {}).get(field)
 
-    def status_flag(self, status_id: str | None, flag: str) -> bool:
-        """A boolean flag of a task status: is_done, is_wip, is_retake, is_feedback_request."""
-        if not status_id:
-            return False
-        return bool(self.index("task_statuses").get(status_id, {}).get(flag))
+    def role(self, status_id: str | None) -> Role:
+        """What a task status means here: exactly one role, from the KITSU_*_STATUSES settings first, then
+        Kitsu's flags (done > retake > feedback request > in progress). Every count and filter uses this."""
+        return self.role_and_source(status_id)[0]
+
+    def role_and_source(self, status_id: str | None) -> tuple[Role, str]:
+        """The role and where it comes from: a setting name (e.g. "KITSU_DONE_STATUSES") or "kitsu flags"."""
+        status = self.index("task_statuses").get(status_id or "", {})
+        names = {" ".join(str(status.get(f) or "").split()).lower() for f in ("short_name", "name")} - {""}
+        for setting, role in _ROLE_SETTINGS:
+            if names & _names(getattr(self.client.settings, setting)):
+                return role, f"KITSU_{setting.upper()}"
+        if status.get("is_done"):
+            return "done", "kitsu flags"
+        if status.get("is_retake"):
+            return "retake", "kitsu flags"
+        if status.get("is_feedback_request"):
+            return "waiting_review", "kitsu flags"
+        if status.get("is_wip"):
+            return "wip", "kitsu flags"
+        return "todo", "kitsu flags"
+
+    def unmatched_role_names(self) -> dict[str, list[str]]:
+        """Names in KITSU_*_STATUSES settings the user changed that match no status (likely typos).
+
+        Defaults list several spellings on purpose (pause, paused, ...), so they are not reported.
+        """
+        statuses = self.index("task_statuses").values()
+        known = {" ".join(str(s.get(f) or "").split()).lower() for s in statuses for f in ("short_name", "name")}
+        settings = self.client.settings
+        defaults = type(settings).model_fields
+        unmatched = {
+            f"KITSU_{setting.upper()}": sorted(
+                _names(getattr(settings, setting)) - known - _names(defaults[setting].default or "")
+            )
+            for setting, _ in _ROLE_SETTINGS
+        }
+        return {setting: names for setting, names in unmatched.items() if names}
 
     def person_name(self, person_id: str | None) -> str | None:
         if not person_id:
@@ -79,10 +128,11 @@ class Lookups:
             return matches[0]
         label = _LABELS[kind]
         if matches:
-            raise ToolError(f"Ambiguous {label} '{ref}': matches IDs {', '.join(m['id'] for m in matches)}")
-        options = sorted({str(r.get(fields[0])) for r in records.values() if r.get(fields[0])})
-        shown = ", ".join(options[:50]) + (" ..." if len(options) > 50 else "")
-        raise ToolError(f"Unknown {label} '{ref}'. Valid values: {shown}")
+            described = "; ".join(_describe(kind, m) for m in matches)
+            raise ToolError(f"Ambiguous {label} '{ref}', pass one of these IDs instead: {described}")
+        raise ToolError(
+            unknown_message(label, ref, [str(r.get(f)) for r in records.values() for f in fields if r.get(f)])
+        )
 
     def project(self, ref: str) -> Record:
         return self.resolve("projects", ref)
@@ -98,6 +148,42 @@ class Lookups:
 
     def asset_type(self, ref: str) -> Record:
         return self.resolve("asset_types", ref)
+
+
+def _names(setting: str) -> set[str]:
+    """Normalized names in a comma-separated setting: lower case, single spaces."""
+    return {" ".join(n.split()).lower() for n in setting.split(",") if n.strip()}
+
+
+def _describe(kind: str, record: Record) -> str:
+    if kind == "people":
+        details = ", ".join(str(record[k]) for k in ("email", "position") if record.get(k))
+        return (
+            f"{record.get('full_name')} ({details}) = {record['id']}"
+            if details
+            else f"{record.get('full_name')} = {record['id']}"
+        )
+    return f"{record.get('name') or record.get('short_name')} = {record['id']}"
+
+
+def unknown_message(label: str, ref: str, options: list[str]) -> str:
+    """'Unknown x' with the closest matches first, then (some of) the valid values."""
+    unique = sorted(set(options), key=str.lower)
+    by_lower = {o.lower(): o for o in unique}
+    wanted = ref.strip().lower()
+    close = [by_lower[m] for m in difflib.get_close_matches(wanted, list(by_lower), n=3, cutoff=0.6)]
+    close += [o for o in unique if wanted and wanted in o.lower() and o not in close][: 3 - len(close)]
+    hint = f" Did you mean: {', '.join(close)}?" if close else ""
+    shown = ", ".join(unique[:50]) + (" ..." if len(unique) > 50 else "")
+    return f"Unknown {label} '{ref}'.{hint} Valid values: {shown}"
+
+
+def check_names(label: str, given: list[str] | None, known: set[str]) -> None:
+    """Raise if any of `given` (case-insensitive) is not in `known`, so a typo is not an empty result."""
+    lowered = {k.lower(): k for k in known if k}
+    for name in given or []:
+        if name.lower() not in lowered:
+            raise ToolError(unknown_message(label, name, list(lowered.values())))
 
 
 _lookups: Lookups | None = None

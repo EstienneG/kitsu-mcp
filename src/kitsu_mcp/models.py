@@ -30,10 +30,19 @@ class TaskStatus(BaseModel):
     id: str
     name: str
     short_name: str
+    role: str = Field(description="What it means here: omitted, done, on_hold, retake, waiting_review, wip or todo")
+    role_source: str = Field(description='"kitsu flags", or the KITSU_*_STATUSES setting that set the role')
     is_done: bool | None = None
     is_wip: bool | None = None
     is_retake: bool | None = None
     is_feedback_request: bool | None = None
+
+
+class TaskStatuses(BaseModel):
+    statuses: list[TaskStatus]
+    unmatched_settings: dict[str, list[str]] = Field(
+        default_factory=dict, description="Names in KITSU_*_STATUSES settings that match no status (typos?)"
+    )
 
 
 class Named(BaseModel):
@@ -48,7 +57,9 @@ class TaskSummary(BaseModel):
     task_type: str | None
     status: str | None
     assignees: list[str]
-    due_date: str | None
+    due_date: str | None = Field(description="YYYY-MM-DD")
+    last_comment_date: str | None = None
+    last_preview_file_id: str | None = Field(None, description="Latest upload; video tools accept it")
 
 
 class Comment(BaseModel):
@@ -63,15 +74,18 @@ class TaskDetail(BaseModel):
     id: str
     project: str | None
     entity: str | None
+    entity_id: str | None = None
     entity_type: str | None
     task_type: str | None
     status: str | None
     assignees: list[str]
-    due_date: str | None
+    due_date: str | None = Field(description="YYYY-MM-DD")
     start_date: str | None = None
     estimation: float | None = Field(None, description="Minutes")
     duration: float | None = Field(None, description="Minutes logged")
     retake_count: int | None = None
+    last_comment_date: str | None = None
+    last_preview_file_id: str | None = Field(None, description="Latest upload; video tools accept it")
     comments: list[Comment] | None = None
 
 
@@ -91,11 +105,24 @@ class TaskRow(BaseModel):
     duration: float | None = Field(None, description="Minutes logged")
     retake_count: int | None = None
     last_comment_date: str | None = None
+    last_preview_file_id: str | None = None
+
+
+class AssigneeGroup(BaseModel):
+    assignee: str
+    count: int = Field(description="All of this person's matching tasks")
+    overdue: int
+    tasks: list[str] = Field(description="'entity / task type (status, due date)', at most tasks_per_group")
+    more: int = Field(0, description="Tasks not listed in `tasks` (raise tasks_per_group to see them)")
 
 
 class TaskList(BaseModel):
     total: int = Field(description="Matches before limit/offset")
-    tasks: list[TaskRow]
+    tasks: list[TaskRow] = Field(default_factory=list)
+    groups: int | None = Field(default=None, description="With group_by: number of groups before limit/offset")
+    by_assignee: list[AssigneeGroup] | None = Field(
+        default=None, description="Set with group_by='assignee', instead of tasks"
+    )
 
 
 class StatusChange(BaseModel):
@@ -131,7 +158,8 @@ class AssetSummary(BaseModel):
     id: str
     name: str
     type: str | None
-    tasks: list[TaskSummary]
+    tasks: list[TaskSummary] | None = None
+    statuses: dict[str, str | None] | None = Field(default=None, description='detail="compact": task type -> status')
 
 
 class AssetList(BaseModel):
@@ -164,7 +192,8 @@ class ShotSummary(BaseModel):
     frame_in: int | None
     frame_out: int | None
     nb_frames: int | None
-    tasks: list[TaskSummary]
+    tasks: list[TaskSummary] | None = None
+    statuses: dict[str, str | None] | None = Field(default=None, description='detail="compact": task type -> status')
 
 
 class ShotList(BaseModel):
@@ -175,7 +204,7 @@ class ShotList(BaseModel):
 class ShotDetail(ShotSummary):
     project_id: str | None
     description: str | None
-    fps: str | None
+    fps: float | None
     data: dict[str, Any] | None
 
 
@@ -198,7 +227,7 @@ class CastIn(BaseModel):
 class Person(BaseModel):
     id: str
     full_name: str | None
-    email: str | None
+    email: str | None = None
     role: str | None
     position: str | None = None
     departments: list[str] = Field(default_factory=list)
@@ -222,8 +251,9 @@ class Workload(BaseModel):
     person: str
     open_tasks: int
     overdue: int
-    waiting_feedback: int = Field(description="Tasks in a feedback-request status (e.g. waiting for approval)")
+    waiting_feedback: int = Field(description="Open tasks waiting for review/approval")
     retakes: int
+    on_hold: int = Field(0, description="Open tasks paused (STAND BY, PAUSE, BLOCKED, ...)")
     estimation: float = Field(description="Minutes estimated over open tasks")
     logged: float = Field(description="Minutes logged over open tasks")
     next_due: str | None
@@ -237,8 +267,9 @@ class StatusCount(BaseModel):
 class TaskTypeProgress(BaseModel):
     task_type: str
     total: int
-    done: int
-    done_ratio: float
+    done: int = Field(description="Finished tasks (status role done), not counting omitted ones")
+    omitted: int = Field(0, description="Dropped tasks (OMIT, N/A, ...), left out of done_ratio")
+    done_ratio: float = Field(description="done / (total - omitted)")
     statuses: list[StatusCount]
 
 
@@ -247,15 +278,20 @@ class ProjectOverview(BaseModel):
     production_type: str | None
     start_date: str | None
     end_date: str | None
-    fps: str | None
+    fps: float | None
     resolution: str | None
     assets: int
     shots: int
     tasks: int
-    done_ratio: float
-    overdue: int
-    waiting_feedback: int
+    omitted: int = Field(0, description="Dropped tasks (OMIT, N/A, ...), left out of done_ratio")
+    omitted_statuses: list[str] = Field(default_factory=list, description="Statuses counted as omitted")
+    done_ratio: float = Field(description="Finished tasks / (tasks - omitted)")
+    done_improvable: int = Field(0, description="Done tasks that could still be improved (e.g. CBB)")
+    done_improvable_statuses: list[str] = Field(default_factory=list)
+    overdue: int = Field(description="Open tasks past their due date, not on hold")
+    waiting_feedback: int = Field(description="Open tasks waiting for review/approval")
     retakes: int
+    on_hold: int = Field(0, description="Open tasks paused (STAND BY, PAUSE, BLOCKED, ...)")
     unassigned_open: int
     estimation: float = Field(description="Minutes estimated over all tasks")
     logged: float = Field(description="Minutes logged over all tasks")
@@ -265,6 +301,7 @@ class ProjectOverview(BaseModel):
 class PreviewFile(BaseModel):
     id: str
     revision: int | None
+    position: int | None = Field(None, description="Order within the revision; 1 is the main file")
     extension: str | None
     is_movie: bool | None
     original_name: str | None
@@ -273,6 +310,32 @@ class PreviewFile(BaseModel):
     width: int | None
     height: int | None
     created_at: str | None
+    is_video: bool = Field(
+        default=False, description="A movie, detected from the extension (is_movie is unreliable); see the video tools"
+    )
+    duration: float | None = Field(default=None, description="Seconds, for movies")
+    note: str | None = None
+
+
+class RecentPreview(BaseModel):
+    """An upload from the project's activity feed."""
+
+    date: str | None
+    entity: str | None = Field(description="Full entity name, e.g. 'SQ010 / SH020'")
+    entity_id: str | None
+    task_id: str | None
+    task_type: str | None
+    status: str | None = Field(description="Task status set with the upload")
+    author: str | None
+    preview_file_id: str
+    revision: int | None
+    extension: str | None
+    is_video: bool
+
+
+class RecentPreviews(BaseModel):
+    total: int = Field(description="Uploads matching the filters in Kitsu (may exceed what is returned)")
+    previews: list[RecentPreview]
 
 
 class SavedPreview(BaseModel):
@@ -289,7 +352,10 @@ class FailedPreview(BaseModel):
 
 class DownloadResult(BaseModel):
     saved: list[SavedPreview]
-    skipped: int = Field(description="Entities without a preview, canceled, or already downloaded")
+    skipped: int = Field(description="All entities not downloaded: the sum of the next three counts")
+    no_preview: int = 0
+    canceled: int = 0
+    already_downloaded: int = Field(0, description="File already in dest_dir (pass overwrite=True to replace)")
     failed: list[FailedPreview]
 
 
@@ -310,6 +376,35 @@ class PlaylistItem(BaseModel):
 
 class PlaylistDetail(Playlist):
     items: list[PlaylistItem]
+
+
+class VideoInfo(BaseModel):
+    preview_file_id: str
+    task_id: str | None
+    revision: int | None
+    original_name: str | None
+    extension: str | None
+    quality: str = Field(description="Which file was probed: low (Kitsu's web-playback encode) or original")
+    file_bytes: int
+    codec: str | None
+    width: int
+    height: int
+    fps: float
+    duration: float = Field(description="Seconds")
+    frame_count: int = Field(description="Frames are numbered 1..frame_count, like Kitsu's player")
+    kitsu_width: int | None = None
+    kitsu_height: int | None = None
+    kitsu_duration: float | None = None
+    original_file_size: int | None = Field(None, description="Bytes of the uploaded file")
+    annotated_frames: list[int] = Field(default_factory=list, description="Frames with drawings in Kitsu")
+
+
+class SavedVideo(BaseModel):
+    preview_file_id: str
+    path: str
+    quality: str
+    bytes: int
+    skipped: bool = Field(default=False, description="The file already existed and overwrite was False")
 
 
 class WriteResult(BaseModel):

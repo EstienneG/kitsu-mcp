@@ -2,10 +2,12 @@
 
 import copy
 import re
+from pathlib import Path
 from typing import Any
 
 from fastmcp.exceptions import ToolError
 
+from kitsu_mcp.client import NotFoundError, size_guard
 from kitsu_mcp.config import Settings
 
 PROJECT = "p-1"
@@ -181,6 +183,38 @@ def seed() -> dict[str, Any]:
                 "previews": [],
             },
         ],
+        "t-sh010-anim": [
+            {
+                "id": "c-anim-3",
+                "created_at": "2026-08-31T09:00:00",
+                "text": "Approved, the v1 00:00:01:12 (37) fix works.",
+                "person": {"id": BOB, "full_name": "Bob Leroy"},
+                "person_id": BOB,
+                "task_status": {"id": ST_DONE, "short_name": "done"},
+                "task_status_id": ST_DONE,
+                "previews": [],
+            },
+            {
+                "id": "c-anim-2",
+                "created_at": "2026-08-30T10:00:00",
+                "text": "v2: fixed the arm at frame 30",
+                "person": {"id": ALICE, "full_name": "Alice Martin"},
+                "person_id": ALICE,
+                "task_status": {"id": ST_WFA, "short_name": "wfa"},
+                "task_status_id": ST_WFA,
+                "previews": [{"id": "pf-sh010", "revision": 2}],
+            },
+            {
+                "id": "c-anim-1",
+                "created_at": "2026-08-20T10:00:00",
+                "text": "Arm pops at 00:00:01:00 and again around 2.5s; see drawing.",
+                "person": {"id": BOB, "full_name": "Bob Leroy"},
+                "person_id": BOB,
+                "task_status": {"id": ST_RETAKE, "short_name": "retake"},
+                "task_status_id": ST_RETAKE,
+                "previews": [{"id": "pf-sh010-v1", "revision": 1}],
+            },
+        ],
     }
     preview_files = {
         "pf-hero": {
@@ -199,15 +233,76 @@ def seed() -> dict[str, Any]:
         "pf-sh010": {
             "id": "pf-sh010",
             "task_id": "t-sh010-anim",
-            "revision": 1,
+            "revision": 2,
             "extension": "mp4",
-            "original_name": "sh010_anim_v001",
+            "original_name": "sh010_anim_v002",
             "is_movie": True,
             "status": "ready",
             "width": 1920,
             "height": 1080,
+            "duration": 3.0,
+            "position": 1,
+            "file_size": 9000,
+            "annotations": None,
+            "data": {"original_file_size": 4000},
             "created_at": "2026-08-30T10:00:00",
             "validation_status": "neutral",
+        },
+        "pf-sh010-v2b": {
+            "id": "pf-sh010-v2b",
+            "task_id": "t-sh010-anim",
+            "revision": 2,
+            "position": 2,
+            "extension": "mp4",
+            "original_name": "sh010_anim_v002_render",
+            "is_movie": False,
+            "status": "ready",
+            "width": 1920,
+            "height": 1080,
+            "duration": 3.0,
+            "file_size": 9500,
+            "annotations": None,
+            "data": {},
+            "created_at": "2026-08-30T10:05:00",
+            "validation_status": "neutral",
+        },
+        "pf-sh010-broken": {
+            "id": "pf-sh010-broken",
+            "task_id": "t-sh010-anim",
+            "revision": 3,
+            "position": 1,
+            "extension": "mp4",
+            "original_name": "sh010_anim_v003",
+            "is_movie": False,
+            "status": "broken",
+            "width": 0,
+            "height": 0,
+            "duration": 0,
+            "file_size": 0,
+            "annotations": None,
+            "data": {},
+            "created_at": "2026-09-01T10:00:00",
+            "validation_status": "neutral",
+        },
+        "pf-sh010-v1": {
+            "id": "pf-sh010-v1",
+            "task_id": "t-sh010-anim",
+            "revision": 1,
+            "extension": "mov",
+            "original_name": "sh010_anim_v001",
+            "is_movie": False,  # Kitsu's flag is unreliable: the extension says it is a movie
+            "status": "ready",
+            "width": 1920,
+            "height": 1080,
+            "duration": 2.0,
+            # Kitsu stores drawings by time; 1.0 s at 24 fps is frame 25, 2.0 s would be past the end.
+            "annotations": [
+                {"time": 1.0, "drawing": {"objects": [{"type": "path"}]}},
+                {"time": 0.5, "drawing": {"objects": []}},
+            ],
+            "data": {},
+            "created_at": "2026-08-20T10:00:00",
+            "validation_status": "rejected",
         },
     }
     casting = {
@@ -261,6 +356,8 @@ class FakeClient:
         self.data = data or seed()
         self.settings = Settings(host="http://kitsu.test/api", user="u", password="p")  # type: ignore[arg-type]
         self.calls: list[tuple[str, str, Any]] = []
+        self.movies: dict[str, bytes] = {}
+        """Movie files by route (e.g. movies/low/preview-files/<id>.mp4), served by download()."""
 
     # --- helpers -----------------------------------------------------------------
     def _by_id(self, kind: str) -> dict[str, dict]:
@@ -307,6 +404,18 @@ class FakeClient:
     def get_bytes(self, path: str) -> bytes:
         self.calls.append(("GET", path, None))
         return b"\x89PNG fake " + path.encode()
+
+    def download(self, path: str, dest: Path, max_bytes: int | None = None) -> int:
+        """Serve `movies` (route → bytes), honouring the size cap like the real client."""
+        self.calls.append(("GET", path, None))
+        if path not in self.movies:
+            raise NotFoundError(f"Not found: {path} (wrong ID, or the route does not exist)")
+        data = self.movies[path]
+        with dest.open("wb") as target:
+            for start in range(0, len(data), 8192):
+                target.write(data[start : start + 8192])
+                size_guard(path, max_bytes)(min(start + 8192, len(data)), 0)
+        return len(data)
 
     def post(self, path: str, data: Any) -> Any:
         """Apply the writes the tools send, the way Zou does, so tests see their effect."""
@@ -357,6 +466,50 @@ class FakeClient:
     def user_id(self) -> str:
         return self.data["me"]
 
+    def _news(self, project_id: str, params: dict) -> dict:
+        """Zou's activity feed: one item per comment, newest first, paged; filters as Zou applies them."""
+        tasks = self._by_id("tasks")
+        items = []
+        for task_id, comments in self.data["comments"].items():
+            task = tasks.get(task_id)
+            if task is None or task["project_id"] != project_id:
+                continue
+            for c in comments:
+                preview = (c.get("previews") or [{}])[0]
+                record = self.data["preview_files"].get(preview.get("id"), {})
+                entity = self._entity(task["entity_id"])
+                items.append(
+                    {
+                        "created_at": c["created_at"],
+                        "task_id": task_id,
+                        "task_type_id": task["task_type_id"],
+                        "task_status_id": c.get("task_status_id"),
+                        "author_id": c.get("person_id"),
+                        "task_entity_id": task["entity_id"],
+                        "full_entity_name": f"{entity.get('sequence_name')} / {entity['name']}"
+                        if entity.get("sequence_name")
+                        else entity["name"],
+                        "preview_file_id": preview.get("id"),
+                        "preview_file_revision": preview.get("revision"),
+                        "preview_file_extension": record.get("extension"),
+                    }
+                )
+        if params.get("only_preview") == "true":
+            items = [i for i in items if i["preview_file_id"]]
+        if params.get("task_type_id"):
+            items = [i for i in items if i["task_type_id"] == params["task_type_id"]]
+        if params.get("after"):
+            items = [i for i in items if i["created_at"] > params["after"]]
+        items.sort(key=lambda i: i["created_at"], reverse=True)
+        limit, page = int(params.get("limit", 50)), int(params.get("page", 1))
+        return {
+            "data": items[(page - 1) * limit : page * limit],
+            "total": len(items),
+            "nb_pages": max(1, -(-len(items) // limit)),
+            "page": page,
+            "limit": limit,
+        }
+
     def _person_tasks(self, person_id: str, done: bool) -> list[dict]:
         statuses = self._by_id("statuses")
         return [
@@ -368,6 +521,7 @@ class FakeClient:
                 "entity_type_name": "Shot" if t["entity_id"].startswith("s-") else "Character",
                 "sequence_name": "SQ010" if t["entity_id"].startswith("s-") else None,
                 "task_type_name": self._by_id("task_types")[t["task_type_id"]]["name"],
+                "task_status_id": t["task_status_id"],
                 "task_status_short_name": statuses[t["task_status_id"]]["short_name"],
                 "due_date": t["due_date"],
                 "estimation": t["estimation"],
@@ -375,7 +529,8 @@ class FakeClient:
                 "last_comment_date": t["last_comment_date"],
             }
             for t in self.data["tasks"]
-            if person_id in t["assignees"] and statuses[t["task_status_id"]]["is_done"] == done
+            # Zou splits the two routes by Kitsu's own done flag, not by what the status means.
+            if person_id in t["assignees"] and bool(statuses[t["task_status_id"]].get("is_done")) == done
         ]
 
     def _route(self, path: str, params: dict) -> Any:  # noqa: C901 - a router is a long switch
@@ -420,6 +575,8 @@ class FakeClient:
         if m := re.fullmatch(r"data/projects/([^/]+)/asset-types", path):
             used = {a["asset_type_id"] for a in d["assets"] if a["project_id"] == m[1]}
             return [t for t in d["asset_types"] if t["id"] in used]
+        if m := re.fullmatch(r"data/projects/([^/]+)/news", path):
+            return self._news(m[1], params)
         if m := re.fullmatch(r"data/projects/([^/]+)/playlists", path):
             # Zou pages playlists 20 at a time; past the end it returns an empty page.
             page = int(params.get("page", 1))
