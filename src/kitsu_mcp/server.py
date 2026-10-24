@@ -1,6 +1,6 @@
 """Read-only MCP server for a Kitsu (Zou) instance.
 
-Configuration comes from environment variables or a `.env` file next to this script:
+Configuration comes from environment variables or a `.env` file in the working directory:
 KITSU_HOST (e.g. https://example.cg-wire.com/api), KITSU_USER, KITSU_PASSWORD.
 """
 
@@ -23,7 +23,7 @@ _ready = False
 
 
 def _load_env() -> None:
-    env_file = Path(__file__).with_name(".env")
+    env_file = Path.cwd() / ".env"
     if not env_file.exists():
         return
     for line in env_file.read_text().splitlines():
@@ -211,6 +211,3 @@ def kitsu_get(path: str, params: dict | None = None):
     """
     return _get(path.lstrip("/").removeprefix("api/"), params)
 
-
-if __name__ == "__main__":
-    mcp.run()
