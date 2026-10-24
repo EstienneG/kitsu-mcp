@@ -1,4 +1,6 @@
-from kitsu_mcp.app import READ_ONLY, mcp
+from fastmcp.exceptions import ToolError
+
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
 from kitsu_mcp.lookups import check_names, get_lookups
@@ -37,14 +39,14 @@ def _text(value) -> str | None:
     return value if value and value != "None" else None
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"shots"})
 def list_episodes(project: str) -> list[Named]:
     """List a project's episodes (TV shows only; empty for shorts and features)."""
     project_id = get_lookups().project(project)["id"]
     return [Named(id=e["id"], name=e["name"]) for e in get_client().get(f"data/projects/{project_id}/episodes")]
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"shots"})
 def list_sequences(project: str, episode: str | None = None) -> list[Sequence]:
     """List a project's sequences, optionally only those of one episode (name or ID)."""
     client = get_client()
@@ -62,7 +64,7 @@ def list_sequences(project: str, episode: str | None = None) -> list[Sequence]:
     return sorted(sequences, key=lambda s: (s.episode or "", s.name))
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"shots"})
 def list_shots(
     project: str,
     sequence: str | None = None,
@@ -119,7 +121,7 @@ def list_shots(
     return ShotList(total=len(results), shots=results[offset : offset + limit])
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"shots"})
 def get_shot(shot_id: str) -> ShotDetail:
     """Get a shot's details (frame range, fps, custom data) and tasks."""
     shot_id = object_id(shot_id, "shot", "list_shots")
@@ -143,28 +145,27 @@ def get_shot(shot_id: str) -> ShotDetail:
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
-def get_shot_casting(shot_id: str) -> list[CastAsset]:
-    """List the assets cast in a shot (the breakdown)."""
-    shot_id = object_id(shot_id, "shot", "list_shots")
+@tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
+def get_casting(shot_id: str | None = None, asset_id: str | None = None) -> list[CastAsset] | list[CastIn]:
+    """Casting (the breakdown), either way: the assets cast in a shot (shot_id), or the shots an asset
+    is cast in (asset_id)."""
+    if bool(shot_id) == bool(asset_id):
+        raise ToolError("Pass exactly one of shot_id or asset_id")
     client = get_client()
-    project_id = client.get(f"data/shots/{shot_id}")["project_id"]
-    return [
-        CastAsset(
-            asset_id=c["asset_id"],
-            name=c.get("asset_name") or c.get("name"),
-            asset_type=c.get("asset_type_name"),
-            occurrences=c.get("nb_occurences"),
-            label=c.get("label"),
-        )
-        for c in client.get(f"data/projects/{project_id}/entities/{shot_id}/casting")
-    ]
-
-
-@mcp.tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
-def get_asset_cast_in(asset_id: str) -> list[CastIn]:
-    """List the shots an asset is cast in."""
-    asset_id = object_id(asset_id, "asset", "list_assets")
+    if shot_id:
+        shot_id = object_id(shot_id, "shot", "list_shots")
+        project_id = client.get(f"data/shots/{shot_id}")["project_id"]
+        return [
+            CastAsset(
+                asset_id=c["asset_id"],
+                name=c.get("asset_name") or c.get("name"),
+                asset_type=c.get("asset_type_name"),
+                occurrences=c.get("nb_occurences"),
+                label=c.get("label"),
+            )
+            for c in client.get(f"data/projects/{project_id}/entities/{shot_id}/casting")
+        ]
+    asset_id = object_id(asset_id or "", "asset", "list_assets")
     return [
         CastIn(
             shot_id=c["shot_id"],
@@ -173,5 +174,5 @@ def get_asset_cast_in(asset_id: str) -> list[CastIn]:
             episode=_text(c.get("episode_name")),
             occurrences=c.get("nb_occurences"),
         )
-        for c in get_client().get(f"data/assets/{asset_id}/cast-in")
+        for c in client.get(f"data/assets/{asset_id}/cast-in")
     ]

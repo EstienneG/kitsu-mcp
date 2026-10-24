@@ -19,7 +19,7 @@ DUE_ROLES: frozenset[str] = OPEN_ROLES - {"on_hold"}
 """Open roles whose due date counts: a paused task is not overdue."""
 
 # Settings that assign roles, in precedence order, with the role they assign.
-_ROLE_SETTINGS: tuple[tuple[str, Role], ...] = (
+ROLE_SETTINGS: tuple[tuple[str, Role], ...] = (
     ("omitted_statuses", "omitted"),
     ("done_statuses", "done"),
     ("on_hold_statuses", "on_hold"),
@@ -82,8 +82,8 @@ class Lookups:
         """The role and where it comes from: a setting name (e.g. "KITSU_DONE_STATUSES") or "kitsu flags"."""
         status = self.index("task_statuses").get(status_id or "", {})
         names = {" ".join(str(status.get(f) or "").split()).lower() for f in ("short_name", "name")} - {""}
-        for setting, role in _ROLE_SETTINGS:
-            if names & _names(getattr(self.client.settings, setting)):
+        for setting, role in ROLE_SETTINGS:
+            if names & names_in(getattr(self.client.settings, setting)):
                 return role, f"KITSU_{setting.upper()}"
         if status.get("is_done"):
             return "done", "kitsu flags"
@@ -106,9 +106,9 @@ class Lookups:
         defaults = type(settings).model_fields
         unmatched = {
             f"KITSU_{setting.upper()}": sorted(
-                _names(getattr(settings, setting)) - known - _names(defaults[setting].default or "")
+                names_in(getattr(settings, setting)) - known - names_in(defaults[setting].default or "")
             )
-            for setting, _ in _ROLE_SETTINGS
+            for setting, _ in ROLE_SETTINGS
         }
         return {setting: names for setting, names in unmatched.items() if names}
 
@@ -150,7 +150,7 @@ class Lookups:
         return self.resolve("asset_types", ref)
 
 
-def _names(setting: str) -> set[str]:
+def names_in(setting: str) -> set[str]:
     """Normalized names in a comma-separated setting: lower case, single spaces."""
     return {" ".join(n.split()).lower() for n in setting.split(",") if n.strip()}
 

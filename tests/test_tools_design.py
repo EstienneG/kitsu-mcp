@@ -1,5 +1,8 @@
 """Output-shape features: compact lists, grouping, feedback filter, dates, emails, skip counts."""
 
+import pytest
+from fastmcp.exceptions import ToolError
+
 
 async def test_list_shots_and_assets_compact(call):
     shots = await call("list_shots", project="p-1")
@@ -35,15 +38,19 @@ async def test_task_dates_are_days_and_tasks_carry_ids(call, fake):
 
 
 async def test_list_people_hides_emails_by_default(call):
-    assert all(p["email"] is None for p in await call("list_people"))
-    assert {p["email"] for p in await call("list_people", include_email=True)} == {
+    assert all(p["email"] is None for p in (await call("list_people"))["people"])
+    assert {p["email"] for p in (await call("list_people", include_email=True))["people"]} == {
         "alice@example.com",
         "bob@example.com",
     }
 
 
 async def test_get_person_tasks_limit(call):
-    assert len(await call("get_person_tasks", person="Bob Leroy", limit=1)) == 1
+    page = await call("get_person_tasks", person="Bob Leroy", limit=1, offset=1)
+    assert page["total"] == 2 and [t["id"] for t in page["tasks"]] == ["t-forest-mod"]
+    assert set(page["tasks"][0]) == {"id", "project", "entity", "entity_type", "task_type", "status", "due_date"}
+    full = await call("get_person_tasks", person="Bob Leroy", detail="full")
+    assert "estimation" in full["tasks"][0] and "sequence" in full["tasks"][0]
 
 
 async def test_download_previews_reports_why_entities_were_skipped(call, fake, tmp_path):
@@ -105,3 +112,139 @@ async def test_kitsu_get_never_returns_a_huge_single_item(call, fake, monkeypatc
     monkeypatch.setattr(fake, "_route", lambda path, params: {"blob": "x" * 200_000})
     result = await call("kitsu_get", path="data/whatever")
     assert result["truncated"] is True and "preview" not in result
+
+
+async def test_asset_types_match_project_names_by_containment(call, fake):
+    """Projects name types differently ("Characters - PFE 2028"); a shorter name still finds them."""
+    fake.data["asset_types"].append({"id": "at-char-pfe", "name": "Character - PFE 2028"})
+    fake.data["assets"][0]["asset_type_id"] = "at-char-pfe"
+    fake.data["assets"][0]["asset_type_name"] = "Character - PFE 2028"
+    result = await call("list_assets", project="p-1", asset_types=["character"])
+    assert [a["name"] for a in result["assets"]] == ["Hero"]
+    excluded = await call("list_assets", project="p-1", exclude_asset_types=["Character"])
+    assert [a["name"] for a in excluded["assets"]] == ["Forest"]
+
+
+async def test_asset_type_exact_name_wins_over_containment(call, fake):
+    fake.data["asset_types"].append({"id": "at-char-2", "name": "Character Props"})
+    fake.data["assets"].append(
+        {
+            **fake.data["assets"][0],
+            "id": "a-cp",
+            "name": "Hat",
+            "asset_type_id": "at-char-2",
+            "asset_type_name": "Character Props",
+        }
+    )
+    result = await call("list_assets", project="p-1", asset_types=["Character"])
+    assert [a["name"] for a in result["assets"]] == ["Hero"]
+
+
+async def test_search_tasks_compact_rows(call):
+    compact = await call("search_tasks", project="p-1", task_types=["COMP"])
+    assert set(compact["tasks"][0]) == {"id", "entity", "task_type", "status", "assignees", "due_date"}
+    full = await call("search_tasks", project="p-1", task_types=["COMP"], detail="full")
+    assert {"entity_id", "group", "estimation", "last_preview_file_id"} <= set(full["tasks"][0])
+
+
+async def test_list_people_and_playlists_page(call):
+    people = await call("list_people", limit=1, offset=1)
+    assert people["total"] == 2 and [p["full_name"] for p in people["people"]] == ["Bob Leroy"]
+    playlists = await call("list_playlists", project="p-1", limit=1)
+    assert playlists["total"] == 1 and len(playlists["playlists"]) == 1
+
+
+async def test_project_overview_task_type_filters(call):
+    everything = await call("project_overview", project="p-1")
+    shots_only = await call("project_overview", project="p-1", exclude_task_types=["Modeling"])
+    assert (everything["tasks"], shots_only["tasks"]) == (5, 3)
+    assert shots_only["assets"] == everything["assets"]  # entity counts are not filtered
+    assert {t["task_type"] for t in shots_only["by_task_type"]} == {"Animation", "Compositing"}
+    anim = await call("project_overview", project="p-1", task_types=["ANIM"])
+    assert (anim["tasks"], anim["done_ratio"]) == (2, 0.5)
+
+
+async def test_whoami_describes_the_server(call, fake):
+    result = await call("whoami")
+    assert result["full_name"] == "Alice Martin"  # unchanged user fields
+    server = result["server"]
+    assert server["kitsu_host"] == "http://kitsu.test/api" and server["write_tools"] is False
+    assert server["max_page_size"] == 500 and server["version"]
+    assert server["status_role_settings"]["KITSU_DONE_STATUSES"] == ["cbb"]
+    assert "password" not in str(result).lower() and server["kitsu_host"] != "p"
+
+
+@pytest.mark.parametrize(
+    "wanted, project, expected",
+    [
+        (["Set"], ["Set Dressing", "Asset Set", "Sunset"], {"set dressing"}),
+        (["FX"], ["SFX", "FX"], {"fx"}),
+        (["FX"], ["SFX"], None),  # no whole-word match: an error for an include filter
+        (["character"], ["Characters"], {"characters"}),
+        (["Characters"], ["Characters - PFE 2028"], {"characters - pfe 2028"}),
+    ],
+)
+def test_match_types_by_whole_words(wanted, project, expected):
+    from kitsu_mcp.tools.assets import match_types
+
+    if expected is None:
+        with pytest.raises(ToolError):
+            match_types(wanted, project, set(project), strict=True)
+    else:
+        assert match_types(wanted, project, set(project), strict=True) == expected
+
+
+async def test_excluding_a_studio_type_the_project_lacks_is_fine(call, fake):
+    """Agents reuse exclude lists across projects; only names unknown studio-wide are errors."""
+    fake.data["asset_types"].append({"id": "at-prop", "name": "Prop"})  # in the studio, not in p-1
+    result = await call("list_assets", project="p-1", exclude_asset_types=["Environment", "Prop"])
+    assert [a["name"] for a in result["assets"]] == ["Hero"]
+    with pytest.raises(ToolError, match="Unknown asset type in this project 'Vehicle'"):
+        await call("list_assets", project="p-1", exclude_asset_types=["Vehicle"])
+
+
+async def test_include_and_exclude_cancelling_out_is_an_error(call):
+    with pytest.raises(ToolError, match="cancel out"):
+        await call("list_assets", project="p-1", asset_types=["Character"], exclude_asset_types=["character"])
+
+
+async def test_get_preview_by_entity_survives_a_metadata_failure(call, fake, monkeypatch):
+    original = fake._route
+
+    def route(path, params):
+        if path == "data/preview-files/pf-hero":
+            raise ToolError("Not found: data/preview-files/pf-hero")
+        return original(path, params)
+
+    monkeypatch.setattr(fake, "_route", route)
+    from fastmcp import Client
+
+    from kitsu_mcp.server import mcp
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_preview", {"entity_id": "a-hero"})
+    assert [c.type for c in result.content] == ["image"]
+
+
+async def test_whoami_survives_a_status_lookup_failure(call, fake, monkeypatch):
+    original = fake._route
+
+    def route(path, params):
+        if path == "data/task-status":
+            raise ToolError("Kitsu error")
+        return original(path, params)
+
+    monkeypatch.setattr(fake, "_route", route)
+    assert (await call("whoami"))["server"]["unmatched_status_settings"] == {}
+
+
+def test_server_info_hides_credentials_in_the_host():
+    from kitsu_mcp.tools.meta import _without_userinfo
+
+    assert _without_userinfo("https://bob:secret@kitsu.example.com:8443/api") == "https://kitsu.example.com:8443/api"
+    assert _without_userinfo("http://kitsu.test/api") == "http://kitsu.test/api"
+
+
+async def test_overview_filters_cancelling_out_is_an_error(call):
+    with pytest.raises(ToolError, match="cancel out"):
+        await call("project_overview", project="p-1", task_types=["ANIM"], exclude_task_types=["Animation"])

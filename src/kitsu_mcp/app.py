@@ -1,5 +1,7 @@
 """The shared FastMCP instance. Tool modules register on it when imported."""
 
+import inspect
+
 from fastmcp import FastMCP
 
 mcp = FastMCP(
@@ -17,3 +19,26 @@ mcp = FastMCP(
 )
 
 READ_ONLY = {"readOnlyHint": True, "openWorldHint": True}
+
+
+# One small schema for every data tool instead of a detailed one per tool: clients still get structured
+# results (fastmcp's `.data`, `structured_content`), while the tool list stays about half the size.
+_GENERIC_OUTPUT = {"type": "object", "properties": {"result": {}}, "x-fastmcp-wrap-result": True}
+
+
+def tool(**kwargs):
+    """Register a tool on `mcp` with a generic output schema instead of a detailed one.
+
+    Detailed output schemas were half of what every session paid in context before any call; the field
+    notes that matter are in the docstrings. Tools that can return images keep no schema at all, since
+    images cannot be structured content. The decorated function itself is returned unchanged, so other
+    modules (resources) can still call it directly.
+    """
+
+    def register(fn):
+        returns = str(inspect.signature(fn).return_annotation)
+        schema = None if "Image" in returns else _GENERIC_OUTPUT
+        mcp.tool(output_schema=schema, **kwargs)(fn)
+        return fn
+
+    return register

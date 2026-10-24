@@ -1,4 +1,8 @@
-from kitsu_mcp.app import READ_ONLY, mcp
+import re
+
+from fastmcp.exceptions import ToolError
+
+from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
 from kitsu_mcp.formatters import task_summary
 from kitsu_mcp.lookups import Lookups, check_names, get_lookups
@@ -22,6 +26,37 @@ def check_status_filters(status_filters: dict[str, list[str]] | None, lookups: L
         check_names("task status", allowed, statuses)
 
 
+def match_types(
+    wanted: list[str] | None, project_types: list[str], studio_types: set[str], *, strict: bool
+) -> set[str]:
+    """Lower-case names of the project's asset types that `wanted` refers to.
+
+    For each name: the type with exactly that name, else every type that starts with it as whole words
+    ("Characters" matches "Characters - PFE 2028", "Set" matches "Set Dressing" but not "Asset"). A name
+    that matches no project type is an error when `strict` (an include filter), and for an exclude filter
+    only when no type in the whole studio has that name (excluding a type a project lacks is harmless).
+    """
+    matched: set[str] = set()
+    lowered = {" ".join(t.split()).lower(): t for t in project_types}
+    studio = {" ".join(t.split()).lower() for t in studio_types}
+    for name in wanted or []:
+        key = " ".join(name.split()).lower()
+        hits = {key} if key in lowered else {t for t in lowered if key and _starts_with_words(t, key)}
+        if hits:
+            matched |= hits
+        elif strict or (key not in studio and not any(_starts_with_words(t, key) for t in studio)):
+            if not project_types:
+                raise ToolError(f"Unknown asset type '{name}': this project has no asset types")
+            check_names("asset type in this project", [name], set(project_types))
+    return matched
+
+
+def _starts_with_words(name: str, prefix: str) -> bool:
+    """True if `name` begins with `prefix` (or its plural/singular) followed by a word boundary."""
+    stem = prefix.removesuffix("s") if len(prefix) > 3 else prefix
+    return re.match(rf"{re.escape(stem)}s?(?!\w)", name) is not None
+
+
 def matches_status_filters(tasks: list, status_filters: dict[str, list[str]] | None) -> bool:
     """True if, for every task type in the filter, the entity has a task of that type in an allowed status."""
     if not status_filters:
@@ -32,7 +67,7 @@ def matches_status_filters(tasks: list, status_filters: dict[str, list[str]] | N
     )
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"assets"})
+@tool(annotations=READ_ONLY, tags={"assets"})
 def list_assets(
     project: str,
     asset_types: list[str] | None = None,
@@ -48,20 +83,25 @@ def list_assets(
     detail="compact" (default) gives each asset's tasks as {task type: status}; detail="full" returns
     full task rows (IDs, assignees, due dates, latest preview), several times larger. get_asset has the details.
     project: project name or ID.
-    asset_types / exclude_asset_types: asset type names (e.g. ["Environment"]).
+    asset_types / exclude_asset_types: asset type names, matched against the types this project uses:
+    an exact name, else every type starting with it as whole words ("Characters" also matches
+    "Characters - PFE 2028"). Excluding a type the project does not use is fine.
     task_status_filters: task type name -> allowed status short names; all must match,
     e.g. {"Modelling": ["APP", "wip"], "Sculpting": ["WRA"]}. Matching is case-insensitive.
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
-    known_types = {t["name"] for t in lookups.index("asset_types").values()}
-    check_names("asset type", (asset_types or []) + (exclude_asset_types or []), known_types)
     check_status_filters(task_status_filters, lookups)
-    include = {n.lower() for n in asset_types or []}
-    exclude = {n.lower() for n in exclude_asset_types or []}
+    client = get_client()
+    project_types = [t["name"] for t in client.get(f"data/projects/{project_id}/asset-types")]
+    studio_types = {t["name"] for t in lookups.index("asset_types").values()}
+    include = match_types(asset_types, project_types, studio_types, strict=True)
+    exclude = match_types(exclude_asset_types, project_types, studio_types, strict=False)
+    if include and include <= exclude:
+        raise ToolError("asset_types and exclude_asset_types cancel out: nothing would be listed")
 
     results = []
-    for asset in get_client().get("data/assets/with-tasks", params={"project_id": project_id}):
+    for asset in client.get("data/assets/with-tasks", params={"project_id": project_id}):
         if asset.get("canceled"):
             continue
         type_name = asset.get("asset_type_name") or lookups.name("asset_types", asset.get("entity_type_id")) or ""
@@ -83,7 +123,7 @@ def list_assets(
     return AssetList(total=len(results), assets=results[offset : offset + limit])
 
 
-@mcp.tool(annotations=READ_ONLY, tags={"assets"})
+@tool(annotations=READ_ONLY, tags={"assets"})
 def get_asset(asset_id: str) -> AssetDetail:
     """Get an asset's details and tasks."""
     asset_id = object_id(asset_id, "asset", "list_assets")
