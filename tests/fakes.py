@@ -128,7 +128,7 @@ def seed() -> dict[str, Any]:
             "nb_frames": 72,
             "fps": None,
             "description": None,
-            "data": {},
+            "data": {"frame_in": "101", "frame_out": 172},
             "preview_file_id": None,
             "canceled": False,
         },
@@ -309,12 +309,50 @@ class FakeClient:
         return b"\x89PNG fake " + path.encode()
 
     def post(self, path: str, data: Any) -> Any:
+        """Apply the writes the tools send, the way Zou does, so tests see their effect."""
         self.calls.append(("POST", path, data))
-        return {"id": "new", **(data if isinstance(data, dict) else {})}
+        if m := re.fullmatch(r"actions/tasks/([^/]+)/comment", path):
+            task = self._task_or_404(m[1], path)
+            status = self._by_id("statuses")[data["task_status_id"]]
+            task["task_status_id"] = status["id"]
+            author = self._by_id("people")[self.data["me"]]
+            new = {
+                "id": f"c-{len(self.calls)}",
+                "created_at": "2026-10-15T12:00:00",
+                "text": data["comment"],
+                "person": author,
+                "person_id": author["id"],
+                "task_status": status,
+                "task_status_id": status["id"],
+                "previews": [],
+            }
+            self.data["comments"].setdefault(task["id"], []).insert(0, new)
+            return new
+        if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)/add", path):
+            task = self._task_or_404(m[1], path)
+            task["duration"] = (task["duration"] or 0) + data["duration"]
+            return {"task_id": task["id"], "person_id": m[3], "date": m[2], "duration": data["duration"]}
+        raise ToolError(f"Not found: {path} (no fake route)")
 
     def put(self, path: str, data: dict) -> Any:
         self.calls.append(("PUT", path, data))
-        return {"id": "updated", **data}
+        if m := re.fullmatch(r"actions/persons/([^/]+)/assign", path):
+            for task_id in data["task_ids"]:
+                task = self._task_or_404(task_id, path)
+                if m[1] not in task["assignees"]:
+                    task["assignees"].append(m[1])
+            return [self._by_id("tasks")[t] for t in data["task_ids"]]
+        if m := re.fullmatch(r"data/tasks/([^/]+)", path):
+            task = self._task_or_404(m[1], path)
+            task.update(data)
+            return task
+        raise ToolError(f"Not found: {path} (no fake route)")
+
+    def _task_or_404(self, task_id: str, path: str) -> dict:
+        task = self._by_id("tasks").get(task_id)
+        if task is None:
+            raise ToolError(f"Not found: {path}")
+        return task
 
     def user_id(self) -> str:
         return self.data["me"]
@@ -382,7 +420,12 @@ class FakeClient:
         if m := re.fullmatch(r"data/projects/([^/]+)/asset-types", path):
             used = {a["asset_type_id"] for a in d["assets"] if a["project_id"] == m[1]}
             return [t for t in d["asset_types"] if t["id"] in used]
-        if m := re.fullmatch(r"data/projects/([^/]+)/(sequences|episodes|playlists)", path):
+        if m := re.fullmatch(r"data/projects/([^/]+)/playlists", path):
+            # Zou pages playlists 20 at a time; past the end it returns an empty page.
+            page = int(params.get("page", 1))
+            playlists = [r for r in d["playlists"] if r["project_id"] == m[1]]
+            return playlists[(page - 1) * 20 : page * 20]
+        if m := re.fullmatch(r"data/projects/([^/]+)/(sequences|episodes)", path):
             return [r for r in d[m[2]] if r["project_id"] == m[1]]
         if m := re.fullmatch(r"data/projects/([^/]+)/team", path):
             return d["people"]

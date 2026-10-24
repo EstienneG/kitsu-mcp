@@ -43,3 +43,27 @@ async def test_playlists(call):
 async def test_preview_tools_are_read_only(name):
     tool = await mcp.get_tool(name)
     assert tool.annotations.read_only_hint
+
+
+async def test_list_playlists_reads_every_page(call, fake):
+    template = fake.data["playlists"][0]
+    fake.data["playlists"] = [
+        {**template, "id": f"pl-{i}", "name": f"P{i}", "updated_at": f"2026-10-{i % 28 + 1:02d}T00:00:00"}
+        for i in range(45)
+    ]
+    playlists = await call("list_playlists", project="p-1")
+    assert len(playlists) == 45
+    assert len({p["id"] for p in playlists}) == 45
+
+
+async def test_download_previews_keeps_existing_files(call, fake, tmp_path):
+    existing = tmp_path / "Hero_a-hero.png"
+    existing.write_bytes(b"mine")
+    result = await call("download_previews", project="p-1", dest_dir=str(tmp_path), entity_kind="assets")
+    assert result["saved"] == [] and result["skipped"] == 2
+    assert existing.read_bytes() == b"mine"
+    result = await call(
+        "download_previews", project="p-1", dest_dir=str(tmp_path), entity_kind="assets", overwrite=True
+    )
+    assert [s["id"] for s in result["saved"]] == ["a-hero"]
+    assert existing.read_bytes() != b"mine"

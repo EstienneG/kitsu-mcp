@@ -39,6 +39,8 @@ def list_assets(
 
     results = []
     for asset in get_client().get("data/assets/with-tasks", params={"project_id": project_id}):
+        if asset.get("canceled"):
+            continue
         type_name = asset.get("asset_type_name") or lookups.name("asset_types", asset.get("entity_type_id")) or ""
         if include and type_name.lower() not in include:
             continue
@@ -51,6 +53,7 @@ def list_assets(
             continue
         results.append(AssetSummary(id=asset["id"], name=asset["name"], type=type_name, tasks=tasks))
 
+    results.sort(key=lambda a: ((a.type or "").lower(), a.name.lower()))
     return AssetList(total=len(results), assets=results[offset : offset + limit])
 
 

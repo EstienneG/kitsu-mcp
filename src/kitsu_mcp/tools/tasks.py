@@ -6,6 +6,7 @@ from kitsu_mcp.formatters import comment, task_detail
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import MyTask, StatusChange, TaskDetail, TaskHistory, TaskList
 from kitsu_mcp.production import EntityKind, TaskRecord, day, project_tasks
+from kitsu_mcp.validation import iso_date
 
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
 
@@ -45,6 +46,8 @@ def search_tasks(
     due_before / due_after: YYYY-MM-DD (inclusive). overdue: due date passed and status not done.
     Results are sorted by `sort_by` (missing values last); `total` counts all matches.
     """
+    due_before = iso_date(due_before, "due_before") if due_before else None
+    due_after = iso_date(due_after, "due_after") if due_after else None
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
     type_ids = {lookups.task_type(t)["id"] for t in task_types or []}

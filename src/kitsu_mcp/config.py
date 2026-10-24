@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,11 +15,11 @@ class Settings(BaseSettings):
     password: SecretStr
     allow_write: bool = False
     """Register tools that modify Kitsu (comments, status changes, assignments, ...)."""
-    cache_ttl: float = 300
+    cache_ttl: float = Field(300, ge=0)
     """Seconds to keep reference data (task types, statuses, people, ...) before refetching."""
-    timeout: float = 30
+    timeout: float = Field(30, gt=0)
     """Per-request timeout in seconds."""
-    max_retries: int = 3
+    max_retries: int = Field(3, ge=1)
     """Attempts for idempotent requests that fail with a server or network error."""
 
 

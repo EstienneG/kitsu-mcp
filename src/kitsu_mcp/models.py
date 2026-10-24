@@ -289,7 +289,7 @@ class FailedPreview(BaseModel):
 
 class DownloadResult(BaseModel):
     saved: list[SavedPreview]
-    skipped: int = Field(description="Entities without a preview")
+    skipped: int = Field(description="Entities without a preview, canceled, or already downloaded")
     failed: list[FailedPreview]
 
 

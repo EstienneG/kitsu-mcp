@@ -38,3 +38,8 @@ async def test_list_sequences_by_episode(call, fake):
     fake.data["sequences"].append({"id": "seq-2", "name": "SQ020", "project_id": "p-1", "parent_id": "ep-1"})
     assert [s["name"] for s in await call("list_sequences", project="p-1", episode="e01")] == ["SQ020"]
     assert [s["name"] for s in await call("list_sequences", project="p-1", episode="ep-1")] == ["SQ020"]
+
+
+async def test_frame_range_falls_back_to_data(call):
+    shot = await call("get_shot", shot_id="s-2")
+    assert (shot["frame_in"], shot["frame_out"], shot["nb_frames"]) == (101, 172, 72)

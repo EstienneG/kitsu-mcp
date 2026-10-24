@@ -1,7 +1,14 @@
 import pytest
+import requests
 from fastmcp.exceptions import ToolError
 from gazu import client as raw
-from gazu.exception import NotAllowedException, RouteNotFoundException, ServerErrorException
+from gazu.exception import (
+    NotAllowedException,
+    NotAuthenticatedException,
+    RouteNotFoundException,
+    ServerErrorException,
+)
+from pydantic import ValidationError
 
 from kitsu_mcp import client as client_module
 from kitsu_mcp.client import KitsuClient
@@ -84,3 +91,50 @@ def test_missing_config_is_reported(monkeypatch):
             config.get_settings()
     finally:
         config.get_settings.cache_clear()
+
+
+def test_relogin_does_not_recurse_when_login_itself_is_rejected(monkeypatch):
+    """A 401 on auth/login makes gazu call the not-authenticated callback again, from inside log_in."""
+    client = KitsuClient(Settings(host="http://kitsu.test/api", user="u", password="p"))  # type: ignore[arg-type]
+    calls = []
+
+    def log_in(user, password, client):
+        calls.append(user)
+        # gazu would invoke the callback here on a 401; it must refuse instead of logging in again.
+        assert kitsu_client._relogin(client, "auth/login") is False
+        raise NotAuthenticatedException("auth/login")
+
+    kitsu_client = client
+    monkeypatch.setattr(client_module.gazu, "log_in", log_in)
+    assert client._relogin(object(), "data/x") is False  # type: ignore[arg-type]
+    assert calls == ["u"]
+    # The guard is released afterwards, so a later expiry can log in again.
+    monkeypatch.setattr(client_module.gazu, "log_in", lambda user, password, client: None)
+    assert client._relogin(object(), "data/x") is True  # type: ignore[arg-type]
+
+
+def test_non_json_response_is_retried_then_readable(kitsu, monkeypatch):
+    attempts = []
+
+    def proxy_error(path, params=None, client=None):
+        attempts.append(path)
+        raise requests.JSONDecodeError("Expecting value", "<html>503</html>", 0)
+
+    monkeypatch.setattr(raw, "get", proxy_error)
+    with pytest.raises(ToolError, match="non-JSON response"):
+        kitsu.get("data/x")
+    assert len(attempts) == 3
+
+
+def test_network_error_after_retries_is_a_tool_error(kitsu, monkeypatch):
+    def offline(path, params=None, client=None):
+        raise requests.ConnectionError("refused")
+
+    monkeypatch.setattr(raw, "get", offline)
+    with pytest.raises(ToolError, match="Could not reach Kitsu"):
+        kitsu.get("data/x")
+
+
+def test_max_retries_must_be_positive():
+    with pytest.raises(ValidationError):
+        Settings(host="h", user="u", password="p", max_retries=0)  # type: ignore[arg-type]

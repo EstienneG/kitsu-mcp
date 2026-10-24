@@ -53,6 +53,32 @@ async def test_set_task_status(call, fake, writable):
     result = await call("set_task_status", task_id="t-hero-mod", status="done")
     assert result["message"] == "Status changed from wfa to done."
     assert result["task"]["entity"] == "Hero"
+    assert result["task"]["status"] == "done"
+
+
+async def test_set_same_status_says_so(call, fake, writable):
+    result = await call("set_task_status", task_id="t-hero-mod", status="wfa")
+    assert result["message"] == "Status was already wfa; comment posted."
+
+
+async def test_set_task_status_is_not_marked_idempotent(writable):
+    tool = await mcp.get_tool("set_task_status")
+    assert tool.annotations.idempotent_hint is False
+
+
+async def test_write_reported_ok_when_reload_fails(call, fake, writable, monkeypatch):
+    original = fake.get
+
+    def get(path, params=None):
+        if path == "data/tasks/t-sh020-anim/full" and any(m == "PUT" for m, _, _ in fake.calls):
+            raise ToolError("Kitsu error on GET: ServerErrorException")
+        return original(path, params)
+
+    monkeypatch.setattr(fake, "get", get)
+    result = await call("assign_task", task_id="t-sh020-anim", person="bob")
+    assert result["ok"] is True
+    assert result["task"] is None
+    assert "Could not reload the task" in result["message"]
 
 
 async def test_set_unknown_status_writes_nothing(call, fake, writable):
@@ -62,13 +88,15 @@ async def test_set_unknown_status_writes_nothing(call, fake, writable):
 
 
 async def test_assign_task(call, fake, writable):
-    await call("assign_task", task_id="t-sh020-anim", person="bob")
+    result = await call("assign_task", task_id="t-sh020-anim", person="bob")
     assert writes(fake) == [("PUT", f"actions/persons/{BOB}/assign", {"task_ids": ["t-sh020-anim"]})]
+    assert result["task"]["assignees"] == ["Bob Leroy"]
 
 
 async def test_update_task_schedule(call, fake, writable):
-    await call("update_task_schedule", task_id="t-hero-mod", due_date="2026-11-01", estimation_minutes=120)
+    result = await call("update_task_schedule", task_id="t-hero-mod", due_date="2026-11-01", estimation_minutes=120)
     assert writes(fake) == [("PUT", "data/tasks/t-hero-mod", {"due_date": "2026-11-01", "estimation": 120})]
+    assert (result["task"]["due_date"], result["task"]["estimation"]) == ("2026-11-01", 120)
 
 
 @pytest.mark.parametrize(
@@ -82,7 +110,8 @@ async def test_update_task_schedule_validation(call, fake, writable, args, error
 
 
 async def test_log_time_defaults_to_me(call, fake, writable):
-    await call("log_time", task_id="t-hero-mod", minutes=90, day="2026-10-14")
+    result = await call("log_time", task_id="t-hero-mod", minutes=90, day="2026-10-14")
+    assert result["task"]["duration"] == 690
     assert writes(fake) == [
         ("POST", f"actions/tasks/t-hero-mod/time-spents/2026-10-14/persons/{ALICE}/add", {"duration": 90})
     ]
