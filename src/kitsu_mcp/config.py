@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -64,3 +65,11 @@ def require_login(settings: Settings) -> None:
     ]
     if missing:
         raise RuntimeError(f"Missing configuration: {', '.join(missing)}")
+
+
+def without_userinfo(url: str) -> str:
+    """A host URL without any user:password@ part (a proxy login must never reach callers)."""
+    parts = urlsplit(url)
+    if "@" not in parts.netloc:
+        return url
+    return urlunsplit(parts._replace(netloc=parts.netloc.rsplit("@", 1)[1]))

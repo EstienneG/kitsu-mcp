@@ -52,10 +52,16 @@ def task_detail(task: dict) -> TaskDetail:
         retake_count=task.get("retake_count"),
         last_comment_date=task.get("last_comment_date"),
         last_preview_file_id=task.get("last_preview_file_id"),
-        url=links.task_url(
-            task.get("project_id"),
-            task["id"],
-            (task.get("task_type") or {}).get("for_entity"),
-            (task.get("episode") or {}).get("id"),
-        ),
+        url=task_link(task),
     )
+
+
+def task_link(task: dict, preview_file_id: str | None = None) -> str | None:
+    """Kitsu page of a `data/tasks/<id>/full` task. Zou leaves `episode` unset when the task's entity is
+    itself an Episode, so Kitsu's getTaskPath uses the entity ID there; so do we."""
+    for_entity = (task.get("task_type") or {}).get("for_entity")
+    if (for_entity or "").lower() == "episode":
+        episode_id = task.get("entity_id") or (task.get("entity") or {}).get("id")
+    else:
+        episode_id = (task.get("episode") or {}).get("id")
+    return links.task_url(task.get("project_id"), task["id"], for_entity, episode_id, preview_file_id)

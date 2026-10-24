@@ -43,6 +43,33 @@ def test_credentials_never_show_the_password():
     assert "hunter2" not in credentials.key
 
 
+def test_keys_cannot_be_checked_offline():
+    """Keys are HMACs under a per-process secret, not plain hashes an attacker could recompute."""
+    import hashlib
+
+    credentials = Credentials("alice@example.com", "hunter2")
+    assert credentials.key != hashlib.sha256(b"alice@example.com\0hunter2").hexdigest()
+    assert credentials.user_key == Credentials("ALICE@example.com", "other").user_key  # the user alone
+
+
+def test_login_throttle(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(auth.time, "monotonic", lambda: clock[0])
+    throttle = auth.LoginThrottle(free=2, cap=8)
+    throttle.failed("u")
+    throttle.failed("u")
+    throttle.check("u")  # the free failures do not slow anything down
+    throttle.failed("u")  # third failure: next attempt waits 2 s
+    with pytest.raises(ToolError, match="Too many failed Kitsu logins"):
+        throttle.check("u")
+    clock[0] += 2.5
+    throttle.check("u")
+    throttle.check("someone-else")
+    throttle.succeeded("u")
+    throttle.failed("u")
+    throttle.check("u")  # a success resets the count
+
+
 def test_ttl_cache_expires_and_bounds():
     cache: TTLCache[int] = TTLCache(ttl=60, max_size=2)
     assert cache.get_or_create("a", lambda: 1) == 1
@@ -57,17 +84,31 @@ def test_ttl_cache_expires_and_bounds():
 # --- over a real HTTP server ---------------------------------------------------------------------------
 
 
+REQUESTS: list[tuple[str, str]] = []
+"""(login the request was made with, path) of every request the fake Kitsu received."""
+
+
 class PerUserFake(FakeClient):
-    """A fake Kitsu that answers auth/authenticated as the person the credentials belong to."""
+    """A fake Kitsu client: logs in like the real one (wrong password rejected on connect) and records which
+    login each request was made with, the way a real Zou would see its bearer token."""
 
     people = {"alice@example.com": ALICE, "bob@example.com": BOB}
+    logins: list[str] = []
 
     def __init__(self, settings, credentials=None):
         super().__init__()
+        self.settings = settings
         self.credentials = credentials
-        if credentials is None or credentials.password != "right":
-            raise AssertionError("tests only build clients for valid logins")
-        self.data["me"] = self.people[credentials.user]
+        self.data["me"] = self.people.get(credentials.user) if credentials else None
+
+    def connect(self) -> None:
+        PerUserFake.logins.append(self.credentials.user)
+        if self.credentials.user not in self.people or self.credentials.password != "right":
+            raise ToolError("Kitsu rejected the credentials; check the Kitsu email and password")
+
+    def get(self, path, params=None):
+        REQUESTS.append((self.credentials.user, path))
+        return super().get(path, params)
 
 
 @pytest.fixture
@@ -86,6 +127,9 @@ async def server(monkeypatch):
     client_module._user_clients.clear()
     lookups_module._user_lookups.clear()
     monkeypatch.setattr(client_module, "_server_client", None)
+    monkeypatch.setattr(client_module, "_logins", auth.LoginThrottle())
+    REQUESTS.clear()
+    PerUserFake.logins.clear()
     async with run_server_async(mcp) as url:
         yield url
     client_module._user_clients.clear()
@@ -103,6 +147,45 @@ async def test_each_caller_runs_as_themselves(server):
     bob = await call(server, {"Authorization": "Bearer bob@example.com:right"}, "whoami")
     assert (alice["id"], bob["id"]) == (ALICE, BOB)
     assert len(client_module._user_clients) == 2
+
+
+async def test_interleaved_sessions_reach_kitsu_as_their_own_user(server):
+    """Several concurrent sessions alternating two users: every Kitsu request carries the caller's login."""
+    import asyncio
+
+    users = {"A": "alice@example.com", "B": "bob@example.com"}
+    seen: list[tuple[str, str]] = []
+
+    async def session(tag: str) -> None:
+        async with Client(StreamableHttpTransport(server, headers=basic(users[tag], "right"))) as session:
+            for _ in range(5):
+                me = (await session.call_tool("whoami", {})).data
+                seen.append((tag, me["id"]))
+                await session.call_tool("list_projects", {})
+
+    await asyncio.gather(*(session("A" if i % 2 == 0 else "B") for i in range(8)))
+    expected = {"A": ALICE, "B": BOB}
+    assert len(seen) == 40 and all(person == expected[tag] for tag, person in seen)
+    assert {user for user, _ in REQUESTS} == set(users.values())
+    assert PerUserFake.logins.count("alice@example.com") == 1  # logged in once, then reused
+
+
+async def test_header_decides_per_request(server):
+    """A session's own header decides who each call runs as, not who opened earlier sessions."""
+    assert (await call(server, basic("alice@example.com", "right"), "whoami"))["id"] == ALICE
+    assert (await call(server, basic("bob@example.com", "right"), "whoami"))["id"] == BOB
+    assert (await call(server, basic("alice@example.com", "right"), "whoami"))["id"] == ALICE
+
+
+async def test_wrong_passwords_are_not_cached_and_get_throttled(server):
+    alice = basic("alice@example.com", "right")
+    await call(server, alice, "whoami")
+    for attempt in range(8):
+        with pytest.raises(ToolError, match="rejected the credentials|Too many failed"):
+            await call(server, basic("bob@example.com", f"guess{attempt}"), "whoami")
+    assert len(client_module._user_clients) == 1  # only Alice's good login is cached
+    assert PerUserFake.logins.count("bob@example.com") < 8  # throttled before every guess reached Kitsu
+    assert (await call(server, alice, "whoami"))["id"] == ALICE
 
 
 async def test_my_tasks_follow_the_caller(server):
@@ -159,15 +242,19 @@ def test_request_credentials_outside_http_is_none():
 
 
 def test_video_cache_is_per_user_with_one_shared_budget(fake, tmp_path):
+    import stat
+
     from kitsu_mcp import video
 
-    fake.settings.video_cache_dir = tmp_path
-    assert video.cache_dir() == tmp_path  # stdio: the server's own folder
+    fake.settings.video_cache_dir = tmp_path / "cache"
+    assert video.cache_dir() == tmp_path / "cache"  # stdio: the server's own folder
     fake.credentials = Credentials("alice@example.com", "right")
     alice_dir = video.cache_dir()
     fake.credentials = Credentials("bob@example.com", "right")
     bob_dir = video.cache_dir()
-    assert alice_dir != bob_dir and alice_dir.parent == bob_dir.parent == tmp_path / "users"
+    assert alice_dir != bob_dir and alice_dir.parent == bob_dir.parent == tmp_path / "cache" / "users"
+    for folder in (tmp_path / "cache", alice_dir.parent, alice_dir):
+        assert stat.S_IMODE(folder.stat().st_mode) == 0o700
 
     (alice_dir / "old.mp4").write_bytes(b"x" * 600)
     (bob_dir / "new.mp4").write_bytes(b"x" * 600)

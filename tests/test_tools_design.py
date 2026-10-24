@@ -239,7 +239,7 @@ async def test_whoami_survives_a_status_lookup_failure(call, fake, monkeypatch):
 
 
 def test_server_info_hides_credentials_in_the_host():
-    from kitsu_mcp.tools.meta import _without_userinfo
+    from kitsu_mcp.config import without_userinfo as _without_userinfo
 
     assert _without_userinfo("https://bob:secret@kitsu.example.com:8443/api") == "https://kitsu.example.com:8443/api"
     assert _without_userinfo("http://kitsu.test/api") == "http://kitsu.test/api"
