@@ -143,6 +143,7 @@ def _too_big(answer: Any) -> dict:
 
 @tool(annotations={"readOnlyHint": True, "idempotentHint": True}, tags={"meta"})
 def refresh_cache() -> str:
-    """Drop cached reference data (projects, task types, statuses, people) so the next call refetches it."""
+    """Drop cached reference data (projects, task types, statuses, people, departments, custom fields) so the
+    next call refetches it."""
     get_lookups().clear()
     return "Cache cleared."

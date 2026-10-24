@@ -2,6 +2,7 @@ import re
 
 from fastmcp.exceptions import ToolError
 
+from kitsu_mcp import custom_fields as cf
 from kitsu_mcp import links
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
@@ -75,6 +76,7 @@ def list_assets(
     exclude_asset_types: list[str] | None = None,
     task_status_filters: dict[str, list[str]] | None = None,
     name_contains: str | None = None,
+    custom_field_filters: cf.CustomFieldFilters | None = None,
     detail: Detail = "compact",
     limit: Limit = 100,
     offset: Offset = 0,
@@ -89,10 +91,16 @@ def list_assets(
     "Characters - PFE 2028"). Excluding a type the project does not use is fine.
     task_status_filters: task type name -> allowed status short names; all must match,
     e.g. {"Modelling": ["APP", "wip"], "Sculpting": ["WRA"]}. Matching is case-insensitive.
+    custom_field_filters: custom field (display name or field_name, see list_custom_fields) -> allowed
+    values; all must match, e.g. {"Rigged": [true]}. Text is case-insensitive; null matches an unset
+    field (an unset yes/no field is false).
+    detail="full" also gives each asset's custom_fields.
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
     check_status_filters(task_status_filters, lookups)
+    descriptors = cf.fields_for(lookups, project_id, "Asset")
+    field_filters = cf.compile_filters(custom_field_filters, descriptors, "asset")
     client = get_client()
     project_types = [t["name"] for t in client.get(f"data/projects/{project_id}/asset-types")]
     studio_types = {t["name"] for t in lookups.index("asset_types").values()}
@@ -112,13 +120,18 @@ def list_assets(
             continue
         if name_contains and name_contains.lower() not in asset.get("name", "").lower():
             continue
+        if not cf.matches(field_filters, asset.get("data")):
+            continue
         tasks = [task_summary(t, lookups) for t in asset.get("tasks") or []]
         if not matches_status_filters(tasks, task_status_filters):
             continue
         if detail == "compact":
             results.append(AssetSummary(id=asset["id"], name=asset["name"], type=type_name, statuses=statuses(tasks)))
         else:
-            results.append(AssetSummary(id=asset["id"], name=asset["name"], type=type_name, tasks=tasks))
+            custom = cf.values(descriptors, asset.get("data"))
+            results.append(
+                AssetSummary(id=asset["id"], name=asset["name"], type=type_name, tasks=tasks, custom_fields=custom)
+            )
 
     results.sort(key=lambda a: ((a.type or "").lower(), a.name.lower()))
     return AssetList(total=len(results), assets=results[offset : offset + limit])
@@ -126,7 +139,7 @@ def list_assets(
 
 @tool(annotations=READ_ONLY, tags={"assets"})
 def get_asset(asset_id: str) -> AssetDetail:
-    """Get an asset's details and tasks."""
+    """Get an asset's details, custom field values (by display name; list_custom_fields explains them) and tasks."""
     asset_id = object_id(asset_id, "asset", "list_assets")
     lookups = get_lookups()
     client = get_client()
@@ -138,7 +151,7 @@ def get_asset(asset_id: str) -> AssetDetail:
         type=asset.get("asset_type_name") or lookups.name("asset_types", asset.get("entity_type_id")),
         description=asset.get("description"),
         project_id=asset.get("project_id"),
-        data=asset.get("data"),
+        **cf.detail_fields(lookups, asset, "Asset"),
         tasks=[task_summary(t, lookups) for t in tasks],
         url=links.entity_url(asset.get("project_id"), "asset", asset["id"], asset.get("episode_id")),
     )
