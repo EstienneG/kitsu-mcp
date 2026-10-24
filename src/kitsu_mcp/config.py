@@ -1,6 +1,7 @@
 """Server settings, read from environment variables or a `.env` in the working directory."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,6 +22,25 @@ class Settings(BaseSettings):
     """Per-request timeout in seconds."""
     max_retries: int = Field(3, ge=1)
     """Attempts for idempotent requests that fail with a server or network error."""
+    video_cache_dir: Path | None = None
+    """Where downloaded movies are cached (default: a kitsu-mcp-videos folder in the system temp dir)."""
+    video_cache_mb: int = Field(1024, ge=0)
+    """Size of the movie cache; the least recently used movies are deleted past it."""
+    video_max_mb: int = Field(500, gt=0)
+    """Largest movie the video tools will download."""
+    # Status roles. Each is a comma-separated list of task status short names or names (case-insensitive).
+    # A listed status takes that role; any other status gets its role from Kitsu's flags. Checked in this
+    # order, so a status in two lists takes the first.
+    omitted_statuses: str = "omit,na,n/a,omitted,cancelled,canceled"
+    """Dropped, not finished: left out of progress and open work (Kitsu flags them done)."""
+    done_statuses: str = "cbb"
+    """Finished, even if Kitsu flags them otherwise. CBB ("could be better") is done but improvable."""
+    on_hold_statuses: str = "stand by,standby,pause,paused,blocked,on hold"
+    """Open but paused: never counted as overdue or in progress."""
+    review_statuses: str = ""
+    """Waiting for review/approval, in addition to statuses Kitsu flags as feedback requests."""
+    retake_statuses: str = ""
+    """Sent back for changes, in addition to statuses Kitsu flags as retakes."""
 
 
 @lru_cache

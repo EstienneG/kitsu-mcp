@@ -1,5 +1,6 @@
 import pytest
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.server import mcp
 
@@ -7,8 +8,17 @@ from kitsu_mcp.server import mcp
 async def test_get_preview_returns_image(fake):
     async with Client(mcp) as client:
         result = await client.call_tool("get_preview", {"entity_id": "a-hero"})
-    assert result.content[0].type == "image"
-    assert fake.calls[-1][1] == "pictures/thumbnails/preview-files/pf-hero.png"
+    assert [c.type for c in result.content] == ["image"]
+    assert ("GET", "pictures/thumbnails/preview-files/pf-hero.png", None) in fake.calls
+
+
+async def test_get_preview_of_a_video_points_to_the_video_tools(fake):
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_preview", {"entity_id": "s-1"})
+        shown = await client.call_tool("get_preview_file", {"preview_file_id": "pf-sh010", "show": True})
+    for r in (result, shown):
+        assert [c.type for c in r.content] == ["image", "text"]
+        assert "get_video_contact_sheet" in r.content[1].text
 
 
 async def test_get_preview_without_preview(call):
@@ -17,7 +27,15 @@ async def test_get_preview_without_preview(call):
 
 async def test_get_preview_file_metadata(call):
     meta = await call("get_preview_file", preview_file_id="pf-sh010")
-    assert (meta["revision"], meta["is_movie"], meta["extension"]) == (1, True, "mp4")
+    assert (meta["revision"], meta["is_movie"], meta["extension"], meta["is_video"]) == (2, True, "mp4", True)
+    assert "get_video_frames" in meta["note"]
+    image = await call("get_preview_file", preview_file_id="pf-hero")
+    assert (image["is_video"], image["note"]) == (False, None)
+
+
+async def test_get_preview_file_detects_video_by_extension(call, fake):
+    fake.data["preview_files"]["pf-sh010"]["is_movie"] = False  # Kitsu reports False on real mp4s
+    assert (await call("get_preview_file", preview_file_id="pf-sh010"))["is_video"]
 
 
 async def test_list_task_previews(call):
@@ -67,3 +85,29 @@ async def test_download_previews_keeps_existing_files(call, fake, tmp_path):
     )
     assert [s["id"] for s in result["saved"]] == ["a-hero"]
     assert existing.read_bytes() != b"mine"
+
+
+async def test_recent_previews(call):
+    result = await call("recent_previews", project="Demo Short")
+    # Three comments carry an upload; newest first.
+    assert result["total"] == 3
+    assert [p["preview_file_id"] for p in result["previews"]] == ["pf-hero", "pf-sh010", "pf-sh010-v1"]
+    first = result["previews"][0]
+    assert (first["is_video"], first["author"], first["task_type"]) == (False, "Alice Martin", "Modeling")
+
+
+async def test_recent_previews_filters(call):
+    videos = await call("recent_previews", project="p-1", videos_only=True)
+    assert [p["preview_file_id"] for p in videos["previews"]] == ["pf-sh010", "pf-sh010-v1"]
+    assert all(p["is_video"] for p in videos["previews"])
+    anim = await call("recent_previews", project="p-1", task_type="Animation", since="2026-08-25")
+    assert [(p["preview_file_id"], p["entity"], p["revision"]) for p in anim["previews"]] == [
+        ("pf-sh010", "SQ010 / SH010", 2)
+    ]
+    named = await call("recent_previews", project="p-1", entity_name_contains="hero", limit=1)
+    assert [p["entity"] for p in named["previews"]] == ["Hero"]
+
+
+async def test_recent_previews_rejects_bad_dates(call):
+    with pytest.raises(ToolError, match="since must be a YYYY-MM-DD"):
+        await call("recent_previews", project="p-1", since="yesterday")

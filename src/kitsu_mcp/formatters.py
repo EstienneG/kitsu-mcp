@@ -4,13 +4,20 @@ from kitsu_mcp.lookups import Lookups
 from kitsu_mcp.models import Comment, TaskDetail, TaskSummary
 
 
+def day(value: str | None) -> str | None:
+    """Zou dates come as `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS`; tools report the day."""
+    return value[:10] if value else None
+
+
 def task_summary(task: dict, lookups: Lookups) -> TaskSummary:
     return TaskSummary(
         id=task["id"],
         task_type=lookups.name("task_types", task.get("task_type_id")),
         status=lookups.name("task_statuses", task.get("task_status_id"), "short_name"),
         assignees=[lookups.person_name(a) or a for a in task.get("assignees") or []],
-        due_date=task.get("due_date"),
+        due_date=day(task.get("due_date")),
+        last_comment_date=task.get("last_comment_date"),
+        last_preview_file_id=task.get("last_preview_file_id"),
     )
 
 
@@ -32,13 +39,16 @@ def task_detail(task: dict) -> TaskDetail:
         id=task["id"],
         project=(task.get("project") or {}).get("name"),
         entity=(task.get("entity") or {}).get("name"),
+        entity_id=task.get("entity_id") or (task.get("entity") or {}).get("id"),
         entity_type=(task.get("entity_type") or {}).get("name"),
         task_type=(task.get("task_type") or {}).get("name"),
         status=(task.get("task_status") or {}).get("short_name"),
         assignees=[p.get("full_name") or p["id"] for p in task.get("persons") or []],
-        due_date=task.get("due_date"),
-        start_date=task.get("start_date"),
+        due_date=day(task.get("due_date")),
+        start_date=day(task.get("start_date")),
         estimation=task.get("estimation"),
         duration=task.get("duration"),
         retake_count=task.get("retake_count"),
+        last_comment_date=task.get("last_comment_date"),
+        last_preview_file_id=task.get("last_preview_file_id"),
     )

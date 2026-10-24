@@ -17,12 +17,19 @@ dependencies = [
 [project.scripts]
 kitsu-mcp = "kitsu_mcp:main"
 
+[project.optional-dependencies]
+video = [
+    "av>=14",
+    "pillow>=11",
+]
+
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "kitsu-mcp[video]",
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",

@@ -25,7 +25,13 @@ async def test_prompts_mention_the_tools_they_rely_on(fake):
     tool_names = {t.name for t in await mcp.list_tools()}
     async with Client(mcp) as client:
         prompts = await client.list_prompts()
-        assert {p.name for p in prompts} == {"project_status_report", "review_queue", "my_day", "person_summary"}
+        assert {p.name for p in prompts} == {
+            "project_status_report",
+            "review_queue",
+            "my_day",
+            "person_summary",
+            "review_shot",
+        }
         for prompt in prompts:
             args = {a.name: "X" for a in prompt.arguments or [] if a.required}
             text = (await client.get_prompt(prompt.name, args)).messages[0].content.text

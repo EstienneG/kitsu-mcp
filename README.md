@@ -38,8 +38,30 @@ The password is stored in plain text in the agent's config file (e.g. `~/.vibe/c
 | `KITSU_CACHE_TTL` | `300` | Seconds to cache projects, task types, statuses, people |
 | `KITSU_TIMEOUT` | `30` | Per-request timeout (seconds) |
 | `KITSU_MAX_RETRIES` | `3` | Attempts for reads failing with a server or network error |
+| `KITSU_VIDEO_CACHE_DIR` | system temp | Where the video tools cache movies (`kitsu-mcp-videos/`) |
+| `KITSU_VIDEO_CACHE_MB` | `1024` | Movie cache size; least recently used movies are deleted past it |
+| `KITSU_VIDEO_MAX_MB` | `500` | Largest movie the video tools download |
+| `KITSU_OMITTED_STATUSES` | `omit,na,n/a,omitted,cancelled,canceled` | Statuses meaning "dropped": left out of progress and open work |
+| `KITSU_DONE_STATUSES` | `cbb` | Statuses meaning "finished", whatever Kitsu flags (CBB: done, could be improved later) |
+| `KITSU_ON_HOLD_STATUSES` | `stand by,standby,pause,paused,blocked,on hold` | Open but paused: never overdue |
+| `KITSU_REVIEW_STATUSES` | (none) | Extra statuses meaning "waiting for review/approval" |
+| `KITSU_RETAKE_STATUSES` | (none) | Extra statuses meaning "sent back for changes" |
 
 Variables can also come from a `.env` file in the working directory.
+
+### Status roles
+
+Kitsu's flags on a status (done, retake, feedback request, in progress) do not always say what a studio
+means: OMIT is flagged done but means dropped, CBB is flagged retake *and* feedback request but means
+done-but-improvable. So every status gets exactly one **role** — `omitted`, `done`, `on_hold`, `retake`,
+`waiting_review`, `wip` or `todo` — and every count and filter uses it (progress, overdue, waiting for
+review, workload, search). A status listed in one of the `KITSU_*_STATUSES` settings above (names or short
+names, case-insensitive, checked in the order shown) takes that role; any other status gets it from
+Kitsu's flags, in the order done > retake > feedback request > in progress > to do.
+
+`list_task_statuses` shows each status's role and where it comes from, and reports configured names that
+match no status. `project_overview` reports which statuses it counted as omitted and as
+done-but-improvable.
 
 ## Development
 
@@ -61,16 +83,40 @@ Project, task type, status and person arguments take names (case-insensitive) or
 
 | Area | Tools |
 |---|---|
-| Meta | `whoami`, `kitsu_get` (raw GET on any Zou route), `refresh_cache` |
+| Meta | `whoami`, `kitsu_get` (raw read of any Zou `data/` route), `refresh_cache` |
 | Projects | `list_projects`, `list_task_types`, `list_task_statuses`, `list_asset_types`, `project_overview` |
-| Assets | `list_assets` (type, name and per-task-type status filters), `get_asset`, `get_asset_cast_in` |
+| Assets | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `get_asset`, `get_asset_cast_in` |
 | Shots | `list_episodes`, `list_sequences`, `list_shots`, `get_shot`, `get_shot_casting` |
-| Tasks | `search_tasks` (type, status, assignee, due dates, overdue, ...), `get_task`, `task_history`, `my_tasks` |
+| Tasks | `search_tasks` (type, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
 | People | `list_people`, `get_person_tasks`, `workload` |
-| Previews | `get_preview` (image), `get_preview_file`, `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
+| Previews | `recent_previews` (latest uploads), `get_preview` (image), `get_preview_file`, `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
+| Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | Write (opt-in) | `add_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time` |
 
 **Resources:** `kitsu://projects`, `kitsu://task-types`, `kitsu://task-statuses`,
 `kitsu://projects/{project}/overview`, `kitsu://tasks/{task_id}`.
 
-**Prompts:** `project_status_report`, `review_queue`, `my_day`, `person_summary`.
+**Prompts:** `project_status_report`, `review_queue`, `my_day`, `person_summary`, `review_shot`.
+
+## Video
+
+The video tools look inside movie previews. They need the optional `video` extra (PyAV, which
+bundles ffmpeg, and Pillow), so no system ffmpeg is required:
+
+    uvx --from 'kitsu-mcp[video]' kitsu-mcp      # or: pip install 'kitsu-mcp[video]'
+
+Use that as the command when registering the server (e.g. `-- uvx --from 'kitsu-mcp[video]' kitsu-mcp`
+for Claude Code). Without the extra the tools are still listed but answer with an error saying how
+to install it (`download_video` works either way). `get_preview` and `get_preview_file` say when a
+preview is a video.
+
+- Movies are fetched at Kitsu's low-resolution playback quality by default (`quality="original"` for
+  the uploaded file) and cached per preview file and quality (see the `KITSU_VIDEO_*` settings).
+- Tools take a `preview_file_id`, or an `entity_id` (shot or asset) to use its current preview.
+- Frames are numbered from 1, like Kitsu's player. Frame arguments accept frame numbers (`37`),
+  timecodes (`"00:00:01:12"`, HH:MM:SS:FF), times (`"1.5s"`) and percentages (`"50%"`).
+  `review_video` finds the frames a task's comments point at: Kitsu's `v3 00:00:01:12 (37)` tags,
+  timecodes, "frame 37", "2.5s", and frames with drawn annotations.
+- Limits: at most 16 frames per call, grids at most 1568 px on a side, single frames at most
+  1280 px. The agent only sees sampled still frames: no motion in between and no audio. Every image
+  costs context, so start with `get_video_contact_sheet` and zoom in with `get_video_frames`.
