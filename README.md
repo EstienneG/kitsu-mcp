@@ -122,9 +122,10 @@ error mapping), `lookups.py` cached reference data and name resolution, `models.
 `/health`, TLS guard), `links.py` Kitsu web links.
 
 Release: bump `version` in `pyproject.toml`, merge, then tag it (`git tag v0.2.0 && git push origin v0.2.0`).
-The Release workflow checks the tag matches the version, runs the checks, and publishes the Docker image to
-`ghcr.io/estienneg/kitsu-mcp` (tags `0.2.0`, `0.2` and `latest`). Publishing the Python package to PyPI
-is a separate, manual `uv build && uv publish`.
+The Release workflow checks the tag matches the version, runs the checks, then publishes the package to
+PyPI and the Docker image to `ghcr.io/estienneg/kitsu-mcp` (tags `0.2.0`, `0.2` and `latest`).
+PyPI uses trusted publishing, so no token is stored: the `kitsu-mcp` project on PyPI has this repository
+as its publisher (workflow `release.yml`, environment `pypi`).
 
 ## Tools
 
