@@ -253,19 +253,25 @@ def _playlist(p: dict) -> Playlist:
 _MAX_PLAYLIST_PAGES = 50
 
 
+def project_playlists(project_id: str) -> list[dict]:
+    """Every playlist of a project, as Zou returns them."""
+    playlists: dict[str, dict] = {}
+    # The route is paginated (20 per page) and signals the end with an empty page.
+    for page in range(1, _MAX_PLAYLIST_PAGES + 1):
+        batch = get_client().get(f"data/projects/{project_id}/playlists", params={"page": page})
+        new = {p["id"]: p for p in batch if p["id"] not in playlists}
+        if not new:
+            break
+        playlists.update(new)
+    return list(playlists.values())
+
+
 @tool(annotations=READ_ONLY, tags={"previews", "playlists"})
 def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> PlaylistList:
     """List a project's review playlists, most recently updated first. `total` counts them all."""
     project_id = get_lookups().project(project)["id"]
-    raw_playlists: dict[str, dict] = {}
-    # The route is paginated (20 per page) and signals the end with an empty page.
-    for page in range(1, _MAX_PLAYLIST_PAGES + 1):
-        batch = get_client().get(f"data/projects/{project_id}/playlists", params={"page": page})
-        new = {p["id"]: p for p in batch if p["id"] not in raw_playlists}
-        if not new:
-            break
-        raw_playlists.update(new)
-    playlists = sorted((_playlist(p) for p in raw_playlists.values()), key=lambda p: p.updated_at or "", reverse=True)
+    raw_playlists = project_playlists(project_id)
+    playlists = sorted((_playlist(p) for p in raw_playlists), key=lambda p: p.updated_at or "", reverse=True)
     return PlaylistList(total=len(playlists), playlists=playlists[offset : offset + limit])
 
 
@@ -273,13 +279,16 @@ def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> Playl
 def get_playlist(playlist_id: str) -> PlaylistDetail:
     """A playlist with its entities and the preview file shown for each."""
     playlist_id = object_id(playlist_id, "playlist", "list_playlists")
-    client = get_client()
-    raw = client.get(f"data/playlists/{playlist_id}")
+    return playlist_detail(get_client().get(f"data/playlists/{playlist_id}"))
+
+
+def playlist_detail(raw: dict) -> PlaylistDetail:
+    """A Zou playlist with its entries named. Kitsu keeps entries under `shots` whatever the playlist holds."""
     items = raw.get("shots") or []
     names: dict[str, str] = {}
     if items:
         kind = "shots" if raw.get("for_entity") == "shot" else "assets"
-        names = {e["id"]: e["name"] for e in client.get(f"data/{kind}", params={"project_id": raw["project_id"]})}
+        names = {e["id"]: e["name"] for e in get_client().get(f"data/{kind}", params={"project_id": raw["project_id"]})}
     return PlaylistDetail(
         **_playlist(raw).model_dump(),
         items=[

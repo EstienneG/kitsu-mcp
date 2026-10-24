@@ -130,7 +130,7 @@ Project, task type, status and person arguments take names (case-insensitive) or
 | People | `list_people`, `get_person_tasks`, `workload` |
 | Previews | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
 | Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
-| Write (opt-in) | `add_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time` |
+| Write (opt-in) | `add_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview) |
 
 **Links:** detail results carry a `url` to the Kitsu page (asset, shot, task, preview in the player, playlist),
 and preview metadata a `download_url` to the original upload. They open in a browser signed in to Kitsu, so

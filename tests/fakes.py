@@ -104,6 +104,7 @@ def seed() -> dict[str, Any]:
             "id": "s-1",
             "name": "SH010",
             "sequence_id": "seq-1",
+            "parent_id": "seq-1",
             "sequence_name": "SQ010",
             "episode_id": None,
             "episode_name": None,
@@ -121,6 +122,7 @@ def seed() -> dict[str, Any]:
             "id": "s-2",
             "name": "SH020",
             "sequence_id": "seq-1",
+            "parent_id": "seq-1",
             "sequence_name": "SQ010",
             "episode_id": None,
             "episode_name": None,
@@ -438,6 +440,25 @@ class FakeClient:
             }
             self.data["comments"].setdefault(task["id"], []).insert(0, new)
             return new
+        if path == "data/playlists/":
+            playlist = {
+                "id": f"pl-new-{len(self.calls)}",
+                "task_type_id": None,
+                "episode_id": None,
+                "created_at": "2026-10-15T12:00:00",
+                "updated_at": "2026-10-15T12:00:00",
+                **data,
+                "shots": [],
+            }
+            self.data["playlists"].append(playlist)
+            return playlist
+        if m := re.fullmatch(r"actions/playlists/([^/]+)/add-entity", path):
+            # Zou appends the entry as given, even when the entity is already in the playlist.
+            playlist = self._by_id("playlists").get(m[1])
+            if playlist is None:
+                raise ToolError(f"Not found: {path}")
+            playlist["shots"].append({"entity_id": data["entity_id"], "preview_file_id": data.get("preview_file_id")})
+            return playlist
         if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)/add", path):
             task = self._task_or_404(m[1], path)
             task["duration"] = (task["duration"] or 0) + data["duration"]

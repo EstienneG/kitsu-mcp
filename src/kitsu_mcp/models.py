@@ -462,3 +462,25 @@ class WriteResult(BaseModel):
     ok: bool
     message: str
     task: TaskDetail | None = None
+
+
+class PlaylistEntry(BaseModel):
+    entity_id: str
+    entity: str | None
+    task_type: str | None = Field(None, description="Task the preview comes from")
+    revision: int | None = None
+    preview_file_id: str | None
+
+
+class SkippedEntry(BaseModel):
+    ref: str = Field(description="The task or entity ID as passed")
+    entity: str | None
+    reason: str
+
+
+class PlaylistWriteResult(BaseModel):
+    ok: bool
+    message: str
+    added: list[PlaylistEntry] = Field(default_factory=list)
+    skipped: list[SkippedEntry] = Field(default_factory=list)
+    playlist: PlaylistDetail | None = Field(None, description="The playlist after the change")
