@@ -15,8 +15,11 @@ def _frames(shot: dict, field: str) -> int | None:
         return None
     if isinstance(value, int | float):
         return int(value)
-    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
-        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value.strip()))
+        except (ValueError, OverflowError):
+            return None
     return None
 
 

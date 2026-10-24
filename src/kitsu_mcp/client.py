@@ -9,6 +9,7 @@ import requests
 from fastmcp.exceptions import ToolError
 from gazu import client as raw
 from gazu.exception import (
+    AuthFailedException,
     GazuException,
     NotAllowedException,
     NotAuthenticatedException,
@@ -40,7 +41,12 @@ class KitsuClient:
                     callback_not_authenticated=self._relogin,
                 )
                 _apply_timeout(client.session, self.settings.timeout)
-                self._log_in(client)
+                # Mark the first login as in progress too, so a 401 on it does not trigger a second attempt.
+                self._relogging.active = True
+                try:
+                    self._log_in(client)
+                finally:
+                    self._relogging.active = False
                 self._raw = client
             return self._raw
 
@@ -109,10 +115,16 @@ def _tool_error(error: Exception, method: str, path: str) -> ToolError:
         return ToolError(f"Not found: {path} (wrong ID, or the route does not exist)")
     if isinstance(error, NotAllowedException):
         return ToolError(f"Permission denied for {method} {path}")
-    if isinstance(error, NotAuthenticatedException):
+    if isinstance(error, (NotAuthenticatedException, AuthFailedException)):
         return ToolError("Kitsu rejected the credentials; check KITSU_USER / KITSU_PASSWORD")
     if isinstance(error, (ParameterException, ValidationException)):
         return ToolError(f"Kitsu rejected {method} {path}: {error}")
+    if isinstance(error, requests.JSONDecodeError | requests.ConnectionError | requests.Timeout) and method != "GET":
+        # The request may have reached Zou before the proxy or connection gave up.
+        return ToolError(
+            f"No usable answer from Kitsu on {method} {path} ({error.__class__.__name__}); the change MAY have "
+            "been applied. Check the current state (e.g. get_task) before retrying."
+        )
     if isinstance(error, requests.JSONDecodeError):
         return ToolError(f"Kitsu returned a non-JSON response on {method} {path} (server or proxy unavailable?)")
     if isinstance(error, (requests.ConnectionError, requests.Timeout)):

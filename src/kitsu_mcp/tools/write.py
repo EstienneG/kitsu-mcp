@@ -28,7 +28,7 @@ def _result(message: str, task_id: str) -> WriteResult:
     """The write already succeeded: a failing re-read must not make it look failed (and invite a retry)."""
     try:
         task = task_detail(_task(task_id))
-    except ToolError as error:
+    except Exception as error:  # noqa: BLE001 - any failure here happens after a successful write
         return WriteResult(ok=True, message=f"{message} (Could not reload the task: {error})", task=None)
     return WriteResult(ok=True, message=message, task=task)
 
