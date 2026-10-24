@@ -183,6 +183,7 @@ class AssetSummary(BaseModel):
     type: str | None
     tasks: list[TaskSummary] | None = None
     statuses: dict[str, str | None] | None = Field(default=None, description='detail="compact": task type -> status')
+    custom_fields: dict[str, Any] | None = Field(default=None, description='detail="full": by display name')
 
 
 class AssetList(BaseModel):
@@ -196,7 +197,12 @@ class AssetDetail(BaseModel):
     type: str | None
     description: str | None
     project_id: str | None
-    data: dict[str, Any] | None
+    custom_fields: dict[str, Any] | None = Field(
+        default_factory=dict, description="Custom field values by display name (list_custom_fields); unset = null"
+    )
+    extra_data: dict[str, Any] = Field(
+        default_factory=dict, description="Other non-empty values Kitsu keeps in the entity's data (handles, ...)"
+    )
     tasks: list[TaskSummary]
     url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
@@ -218,6 +224,7 @@ class ShotSummary(BaseModel):
     nb_frames: int | None
     tasks: list[TaskSummary] | None = None
     statuses: dict[str, str | None] | None = Field(default=None, description='detail="compact": task type -> status')
+    custom_fields: dict[str, Any] | None = Field(default=None, description='detail="full": by display name')
 
 
 class ShotList(BaseModel):
@@ -229,7 +236,12 @@ class ShotDetail(ShotSummary):
     project_id: str | None
     description: str | None
     fps: float | None
-    data: dict[str, Any] | None
+    custom_fields: dict[str, Any] | None = Field(
+        default_factory=dict, description="Custom field values by display name (list_custom_fields); unset = null"
+    )
+    extra_data: dict[str, Any] = Field(
+        default_factory=dict, description="Other non-empty values Kitsu keeps in the entity's data (handles, ...)"
+    )
     url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
 
@@ -484,3 +496,37 @@ class PlaylistWriteResult(BaseModel):
     added: list[PlaylistEntry] = Field(default_factory=list)
     skipped: list[SkippedEntry] = Field(default_factory=list)
     playlist: PlaylistDetail | None = Field(None, description="The playlist after the change")
+
+
+class PlannedRequest(BaseModel):
+    method: str = Field(description="POST or PUT")
+    path: str = Field(description="Zou API route")
+    payload: dict[str, Any]
+
+
+class DryRunResult(BaseModel):
+    """What a write tool would do (dry_run=True). Nothing was sent to Kitsu."""
+
+    dry_run: bool = True
+    ok: bool = Field(description="False when a check failed: the real call would be refused")
+    verdict: str = Field(description='"would_succeed" or "would_fail"')
+    would: str = Field(description="The action, in one line")
+    reason: str | None = Field(None, description="Why it would fail")
+    requests: list[PlannedRequest] = Field(
+        default_factory=list, description="Exactly what the real call sends, in order"
+    )
+    before: dict[str, Any] = Field(default_factory=dict, description="Current values of the fields that change")
+    after: dict[str, Any] = Field(default_factory=dict, description="Their values after the write")
+    warnings: list[str] = Field(default_factory=list, description="Allowed, but worth showing the user")
+
+
+class CustomField(BaseModel):
+    """A project's custom field (Kitsu "metadata descriptor")."""
+
+    name: str = Field(description="Display name; custom_fields and custom_field_filters use it")
+    field_name: str = Field(description="Key in the entity's data")
+    entity_type: str = Field(description="Asset, Shot, Sequence, Episode or Edit")
+    data_type: str = Field(description="string, number, boolean, date, list, taglist, checklist, ...")
+    choices: list[str] = Field(default_factory=list, description='The allowed values of a "list" field')
+    departments: list[str] = Field(default_factory=list, description="Departments it is shown to (empty: everyone)")
+    for_client: bool = False

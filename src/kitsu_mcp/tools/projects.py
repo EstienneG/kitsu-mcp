@@ -113,7 +113,10 @@ def _ratio(part: int, total: int) -> float:
 
 @tool(annotations=READ_ONLY, tags={"projects", "reporting"})
 def project_overview(
-    project: str, task_types: list[str] | None = None, exclude_task_types: list[str] | None = None
+    project: str,
+    task_types: list[str] | None = None,
+    exclude_task_types: list[str] | None = None,
+    departments: list[str] | None = None,
 ) -> ProjectOverview:
     """Where a production stands: entity and task counts, completion per task type, overdue tasks,
     tasks waiting for review, retakes, on hold, unassigned work and time logged vs. estimated.
@@ -122,8 +125,9 @@ def project_overview(
     are counted apart and left out of done_ratio, so dropped work does not inflate progress.
     done_improvable counts done tasks that could still be improved (e.g. CBB, "could be better").
     task_types / exclude_task_types (names or short names) limit the task counts and ratios, e.g.
-    exclude_task_types=["Animatic"] to leave admin or pre-production work out of progress; entity counts
-    (assets, shots) are unaffected."""
+    exclude_task_types=["Animatic"] to leave admin or pre-production work out of progress. departments
+    (names or IDs) keeps tasks whose task type belongs to one of them, as in search_tasks and workload.
+    Entity counts (assets, shots) are unaffected by these filters."""
     client = get_client()
     lookups = get_lookups()
     info = client.get(f"data/projects/{lookups.project(project)['id']}")
@@ -131,12 +135,15 @@ def project_overview(
     drop = {lookups.task_type(t)["id"] for t in exclude_task_types or []}
     if keep and keep <= drop:
         raise ToolError("task_types and exclude_task_types cancel out: nothing would be counted")
+    department_types = lookups.department_task_types(departments)
     entities = project_entities(client, lookups, info["id"])
     records = [
         task
         for entity in entities
         for task in entity.tasks()
-        if (not keep or task.raw.get("task_type_id") in keep) and task.raw.get("task_type_id") not in drop
+        if (not keep or task.raw.get("task_type_id") in keep)
+        and task.raw.get("task_type_id") not in drop
+        and (department_types is None or task.raw.get("task_type_id") in department_types)
     ]
 
     def status_of(r: TaskRecord) -> str | None:

@@ -3,6 +3,7 @@
 import difflib
 import threading
 import time
+from collections.abc import Callable
 from typing import Any, Literal
 
 from fastmcp.exceptions import ToolError
@@ -35,6 +36,7 @@ _SOURCES = {
     "task_statuses": "data/task-status",
     "people": "data/persons",
     "asset_types": "data/asset-types",
+    "departments": "data/departments",
 }
 
 _LABELS = {
@@ -44,6 +46,7 @@ _LABELS = {
     "task_statuses": "task status",
     "people": "person",
     "asset_types": "asset type",
+    "departments": "department",
 }
 
 
@@ -51,19 +54,29 @@ class Lookups:
     def __init__(self, client: KitsuClient, ttl: float) -> None:
         self.client = client
         self.ttl = ttl
-        self._cache: dict[str, tuple[float, dict[str, Record]]] = {}
+        self._cache: dict[str, tuple[float, Any]] = {}
         self._lock = threading.Lock()
+
+    def cached(self, key: str, fetch: Callable[[], Any]) -> Any:
+        """`fetch()`, kept for the cache TTL under `key` (dropped by clear / refresh_cache)."""
+        with self._lock:
+            hit = self._cache.get(key)
+            if hit and time.monotonic() - hit[0] < self.ttl:
+                return hit[1]
+        value = fetch()
+        with self._lock:
+            self._cache[key] = (time.monotonic(), value)
+        return value
 
     def index(self, kind: str) -> dict[str, Record]:
         """All records of a kind, keyed by ID."""
-        with self._lock:
-            cached = self._cache.get(kind)
-            if cached and time.monotonic() - cached[0] < self.ttl:
-                return cached[1]
-        records = {r["id"]: r for r in self.client.get(_SOURCES[kind])}
-        with self._lock:
-            self._cache[kind] = (time.monotonic(), records)
-        return records
+        return self.cached(kind, lambda: {r["id"]: r for r in self.client.get(_SOURCES[kind])})
+
+    def custom_fields(self, project_id: str) -> list[Record]:
+        """A project's custom field definitions (Kitsu "metadata descriptors"), all entity types."""
+        return self.cached(
+            f"custom_fields:{project_id}", lambda: self.client.get(f"data/projects/{project_id}/metadata-descriptors")
+        )
 
     def clear(self) -> None:
         with self._lock:
@@ -149,6 +162,20 @@ class Lookups:
 
     def asset_type(self, ref: str) -> Record:
         return self.resolve("asset_types", ref)
+
+    def department(self, ref: str) -> Record:
+        return self.resolve("departments", ref)
+
+    def department_task_types(self, refs: list[str] | None) -> set[str] | None:
+        """IDs of the task types belonging to the given departments (names or IDs); None when no filter.
+
+        A task is in a department when its task type is: Kitsu links task types to departments, while people
+        can belong to several (or none), so they are not used.
+        """
+        if not refs:
+            return None
+        wanted = {self.department(ref)["id"] for ref in refs}
+        return {i for i, t in self.index("task_types").items() if t.get("department_id") in wanted}
 
 
 def names_in(setting: str) -> set[str]:

@@ -76,7 +76,7 @@ way.
 | `KITSU_HOST` | required | Zou API URL, ending in `/api` |
 | `KITSU_USER` / `KITSU_PASSWORD` | required over stdio | Kitsu login (over HTTP each caller sends their own) |
 | `KITSU_ALLOW_WRITE` | `false` | Expose the write tools below |
-| `KITSU_CACHE_TTL` | `300` | Seconds to cache projects, task types, statuses, people |
+| `KITSU_CACHE_TTL` | `300` | Seconds to cache projects, task types, statuses, people, departments, custom fields |
 | `KITSU_TIMEOUT` | `30` | Per-request timeout (seconds) |
 | `KITSU_MAX_RETRIES` | `3` | Attempts for reads failing with a server or network error |
 | `KITSU_VIDEO_CACHE_DIR` | system temp | Where the video tools cache movies (`kitsu-mcp-videos/`) |
@@ -87,6 +87,7 @@ way.
 | `KITSU_ON_HOLD_STATUSES` | `stand by,standby,pause,paused,blocked,on hold` | Open but paused: never overdue |
 | `KITSU_REVIEW_STATUSES` | (none) | Extra statuses meaning "waiting for review/approval" |
 | `KITSU_RETAKE_STATUSES` | (none) | Extra statuses meaning "sent back for changes" |
+| `KITSU_DRY_RUN_LOG` | (none) | JSONL file each write-tool dry run is appended to |
 
 Variables can also come from a `.env` file in the working directory.
 
@@ -113,15 +114,19 @@ done-but-improvable.
 
 Layout (`src/kitsu_mcp/`): `config.py` settings, `client.py` HTTP client (login, re-login, retries,
 error mapping), `lookups.py` cached reference data and name resolution, `models.py` output schemas,
-`formatters.py` payload → model conversion, `production.py` project-wide task views, `tools/` one
-module per domain, `resources.py`, `prompts.py`, `auth.py` per-caller credentials, `http.py` HTTP mode
-(hidden local tools, `/health`, TLS guard), `links.py` Kitsu web links.
+`formatters.py` payload → model conversion, `production.py` project-wide task views, `plans.py` write plans
+(dry run), `custom_fields.py` custom field values and filters, `tools/` one module per domain,
+`resources.py`, `prompts.py`, `auth.py` per-caller credentials, `http.py` HTTP mode (hidden local tools,
+`/health`, TLS guard), `links.py` Kitsu web links.
 
 Release: bump `version` in `pyproject.toml`, then `uv build && uv publish`.
 
 ## Tools
 
-Project, task type, status and person arguments take names (case-insensitive) or IDs.
+Project, task type, department, status and person arguments take names (case-insensitive) or IDs.
+`departments` filters (`search_tasks`, `workload`, `project_overview`) keep tasks whose task type belongs to
+one of the departments, so the three tools agree; people's own departments are not used (`list_people` shows
+them).
 
 | Area | Tools |
 |---|---|
@@ -129,7 +134,8 @@ Project, task type, status and person arguments take names (case-insensitive) or
 | Projects | `list_projects`, `list_task_types`, `list_task_statuses`, `list_asset_types`, `project_overview` |
 | Assets | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `get_asset`, `get_casting` (either way) |
 | Shots | `list_episodes`, `list_sequences`, `list_shots`, `get_shot`, `get_casting` |
-| Tasks | `search_tasks` (type, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
+| Custom fields | `list_custom_fields` (a project's custom columns: type, choices, departments); values show up by display name in `get_asset` / `get_shot` (and `detail="full"` lists), and `list_assets` / `list_shots` filter on them with `custom_field_filters` |
+| Tasks | `search_tasks` (type, department, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task`, `task_history`, `my_tasks` |
 | People | `list_people`, `get_person_tasks`, `workload` |
 | Previews | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
 | Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
@@ -138,6 +144,14 @@ Project, task type, status and person arguments take names (case-insensitive) or
 **Links:** detail results carry a `url` to the Kitsu page (asset, shot, task, preview in the player, playlist),
 and preview metadata a `download_url` to the original upload. They open in a browser signed in to Kitsu, so
 movies are watched and downloaded there rather than passed through the server.
+
+**Dry run.** Every write tool takes `dry_run=True`: it runs the same lookups and checks with reads only and
+returns the plan instead of writing: `would` (the action in one line), `requests` (method, path and payload,
+exactly what the real call sends), `before`/`after` for the fields that change (status, assignees, dates,
+estimate, time logged), and `warnings` (e.g. Kitsu may refuse a status your role cannot set). If a check fails
+(archived status, inactive person, start date after due date, over 24 h logged in a day), `verdict` is
+`would_fail` with the `reason`, and the real call refuses with the same reason. Invalid arguments (bad IDs,
+unknown names) are errors either way. Agents are told to dry-run first and show the user the plan.
 
 **Resources:** `kitsu://projects`, `kitsu://task-types`, `kitsu://task-statuses`,
 `kitsu://projects/{project}/overview`, `kitsu://tasks/{task_id}`.
