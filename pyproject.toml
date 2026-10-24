@@ -1,7 +1,7 @@
 [project]
 name = "kitsu-mcp"
 version = "0.1.0"
-description = "Add your description here"
+description = "Read-only MCP server for the Kitsu (CGWire) production tracker"
 readme = "README.md"
 authors = [
     { name = "EstienneG", email = "estienne.goigoux@mistral.ai" }
