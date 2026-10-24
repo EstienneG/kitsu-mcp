@@ -6,7 +6,7 @@ from kitsu_mcp.lookups import Lookups
 from tests.fakes import FakeClient
 
 STATUSES = [
-    # CBB on the live instance is flagged both retake and feedback request; the studio means "done".
+    # A studio's CBB flagged both retake and feedback request, meaning "done": KITSU_DONE_STATUSES=cbb.
     {"id": "st-cbb", "name": "Could be better", "short_name": "CBB", "is_retake": True, "is_feedback_request": True},
     {"id": "st-standby", "name": "Stand by", "short_name": "STAND BY", "is_wip": False},
     {"id": "st-pause", "name": "Pause", "short_name": "PAUSE", "is_wip": True},
@@ -19,7 +19,21 @@ STATUSES = [
 def lookups():
     fake = FakeClient()
     fake.data["statuses"] += STATUSES
+    fake.settings.done_statuses = "cbb"
     return Lookups(fake, ttl=300)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+def cbb_done(fake):
+    fake.data["statuses"] += STATUSES
+    fake.settings.done_statuses = "cbb"
+
+
+def test_cbb_follows_kitsu_flags_unless_configured():
+    fake = FakeClient()
+    fake.data["statuses"] += STATUSES
+    lookups = Lookups(fake, ttl=300)  # type: ignore[arg-type]
+    assert lookups.role_and_source("st-cbb") == ("retake", "kitsu flags")
 
 
 @pytest.mark.parametrize(
@@ -56,8 +70,7 @@ def test_first_matching_setting_wins(lookups):
     assert lookups.role("st-cbb") == "done"
 
 
-async def test_cbb_counts_as_done_and_improvable(call, fake):
-    fake.data["statuses"] += STATUSES
+async def test_cbb_counts_as_done_and_improvable(call, fake, cbb_done):
     task = next(t for t in fake.data["tasks"] if t["id"] == "t-sh010-comp")  # was a retake, overdue
     task["task_status_id"] = "st-cbb"
     overview = await call("project_overview", project="p-1")
@@ -92,8 +105,7 @@ async def test_omitted_tasks_are_left_out_of_search_by_default(call, fake):
     assert overview["omitted_statuses"] == ["OMIT"]
 
 
-async def test_list_task_statuses_shows_roles(call, fake):
-    fake.data["statuses"] += STATUSES
+async def test_list_task_statuses_shows_roles(call, fake, cbb_done):
     result = await call("list_task_statuses")
     by_short = {s["short_name"]: s for s in result["statuses"]}
     assert (by_short["CBB"]["role"], by_short["CBB"]["role_source"]) == ("done", "KITSU_DONE_STATUSES")
@@ -102,9 +114,8 @@ async def test_list_task_statuses_shows_roles(call, fake):
     assert result["unmatched_settings"] == {}
 
 
-async def test_person_tools_follow_roles_like_workload(call, fake):
+async def test_person_tools_follow_roles_like_workload(call, fake, cbb_done):
     """Zou splits a person's tasks by Kitsu's done flag; the tools must split them by role instead."""
-    fake.data["statuses"] += STATUSES
     tasks = {t["id"]: t for t in fake.data["tasks"]}
     tasks["t-forest-mod"]["task_status_id"] = "st-cbb"  # Bob: CBB is done here, not flagged done in Kitsu
     tasks["t-hero-mod"]["task_status_id"] = "st-omit"  # Alice: OMIT is flagged done in Kitsu, but dropped

@@ -170,7 +170,7 @@ async def test_whoami_describes_the_server(call, fake):
     server = result["server"]
     assert server["kitsu_host"] == "http://kitsu.test/api" and server["write_tools"] is False
     assert server["max_page_size"] == 500 and server["version"]
-    assert server["status_role_settings"]["KITSU_DONE_STATUSES"] == ["cbb"]
+    assert server["status_role_settings"]["KITSU_DONE_STATUSES"] == []
     assert "password" not in str(result).lower() and server["kitsu_host"] != "p"
 
 

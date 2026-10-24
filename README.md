@@ -85,7 +85,7 @@ way.
 | `KITSU_VIDEO_CACHE_MB` | `1024` | Movie cache size; least recently used movies are deleted past it |
 | `KITSU_VIDEO_MAX_MB` | `500` | Largest movie the video tools download |
 | `KITSU_OMITTED_STATUSES` | `omit,na,n/a,omitted,cancelled,canceled` | Statuses meaning "dropped": left out of progress and open work |
-| `KITSU_DONE_STATUSES` | `cbb` | Statuses meaning "finished", whatever Kitsu flags (CBB: done, could be improved later) |
+| `KITSU_DONE_STATUSES` | (none) | Statuses meaning "finished", whatever Kitsu flags (e.g. `cbb` for "could be better") |
 | `KITSU_ON_HOLD_STATUSES` | `stand by,standby,pause,paused,blocked,on hold` | Open but paused: never overdue |
 | `KITSU_REVIEW_STATUSES` | (none) | Extra statuses meaning "waiting for review/approval" |
 | `KITSU_RETAKE_STATUSES` | (none) | Extra statuses meaning "sent back for changes" |
@@ -96,8 +96,8 @@ Variables can also come from a `.env` file in the working directory.
 ### Status roles
 
 Kitsu's flags on a status (done, retake, feedback request, in progress) do not always say what a studio
-means: OMIT is flagged done but means dropped, CBB is flagged retake *and* feedback request but means
-done-but-improvable. So every status gets exactly one **role** — `omitted`, `done`, `on_hold`, `retake`,
+means: an OMIT status is often flagged done but means dropped, and a studio may flag a "could be better" (CBB)
+status as retake while meaning done-but-improvable (set `KITSU_DONE_STATUSES=cbb` for that). So every status gets exactly one **role** — `omitted`, `done`, `on_hold`, `retake`,
 `waiting_review`, `wip` or `todo` — and every count and filter uses it (progress, overdue, waiting for
 review, workload, search). A status listed in one of the `KITSU_*_STATUSES` settings above (names or short
 names, case-insensitive, checked in the order shown) takes that role; any other status gets it from
