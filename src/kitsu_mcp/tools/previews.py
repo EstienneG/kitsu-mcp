@@ -15,12 +15,13 @@ from kitsu_mcp.models import (
     Playlist,
     PlaylistDetail,
     PlaylistItem,
+    PlaylistList,
     PreviewFile,
     RecentPreview,
     RecentPreviews,
     SavedPreview,
 )
-from kitsu_mcp.validation import Limit, iso_date, object_id
+from kitsu_mcp.validation import Limit, Offset, iso_date, object_id
 
 Size = Literal["thumbnail", "preview"]
 
@@ -245,8 +246,8 @@ _MAX_PLAYLIST_PAGES = 50
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"previews", "playlists"})
-def list_playlists(project: str) -> list[Playlist]:
-    """List a project's review playlists, most recently updated first."""
+def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> PlaylistList:
+    """List a project's review playlists, most recently updated first. `total` counts them all."""
     project_id = get_lookups().project(project)["id"]
     raw_playlists: dict[str, dict] = {}
     # The route is paginated (20 per page) and signals the end with an empty page.
@@ -256,8 +257,8 @@ def list_playlists(project: str) -> list[Playlist]:
         if not new:
             break
         raw_playlists.update(new)
-    playlists = [_playlist(p) for p in raw_playlists.values()]
-    return sorted(playlists, key=lambda p: p.updated_at or "", reverse=True)
+    playlists = sorted((_playlist(p) for p in raw_playlists.values()), key=lambda p: p.updated_at or "", reverse=True)
+    return PlaylistList(total=len(playlists), playlists=playlists[offset : offset + limit])
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"previews", "playlists"})

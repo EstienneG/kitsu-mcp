@@ -35,15 +35,19 @@ async def test_task_dates_are_days_and_tasks_carry_ids(call, fake):
 
 
 async def test_list_people_hides_emails_by_default(call):
-    assert all(p["email"] is None for p in await call("list_people"))
-    assert {p["email"] for p in await call("list_people", include_email=True)} == {
+    assert all(p["email"] is None for p in (await call("list_people"))["people"])
+    assert {p["email"] for p in (await call("list_people", include_email=True))["people"]} == {
         "alice@example.com",
         "bob@example.com",
     }
 
 
 async def test_get_person_tasks_limit(call):
-    assert len(await call("get_person_tasks", person="Bob Leroy", limit=1)) == 1
+    page = await call("get_person_tasks", person="Bob Leroy", limit=1, offset=1)
+    assert page["total"] == 2 and [t["id"] for t in page["tasks"]] == ["t-forest-mod"]
+    assert set(page["tasks"][0]) == {"id", "project", "entity", "entity_type", "task_type", "status", "due_date"}
+    full = await call("get_person_tasks", person="Bob Leroy", detail="full")
+    assert "estimation" in full["tasks"][0] and "sequence" in full["tasks"][0]
 
 
 async def test_download_previews_reports_why_entities_were_skipped(call, fake, tmp_path):
@@ -131,3 +135,17 @@ async def test_asset_type_exact_name_wins_over_containment(call, fake):
     )
     result = await call("list_assets", project="p-1", asset_types=["Character"])
     assert [a["name"] for a in result["assets"]] == ["Hero"]
+
+
+async def test_search_tasks_compact_rows(call):
+    compact = await call("search_tasks", project="p-1", task_types=["COMP"])
+    assert set(compact["tasks"][0]) == {"id", "entity", "task_type", "status", "assignees", "due_date"}
+    full = await call("search_tasks", project="p-1", task_types=["COMP"], detail="full")
+    assert {"entity_id", "group", "estimation", "last_preview_file_id"} <= set(full["tasks"][0])
+
+
+async def test_list_people_and_playlists_page(call):
+    people = await call("list_people", limit=1, offset=1)
+    assert people["total"] == 2 and [p["full_name"] for p in people["people"]] == ["Bob Leroy"]
+    playlists = await call("list_playlists", project="p-1", limit=1)
+    assert playlists["total"] == 1 and len(playlists["playlists"]) == 1
