@@ -39,6 +39,7 @@ def get_task(
 def search_tasks(
     project: str,
     task_types: list[str] | None = None,
+    departments: list[str] | None = None,
     statuses: list[str] | None = None,
     assignee: str | None = None,
     unassigned: bool = False,
@@ -60,7 +61,8 @@ def search_tasks(
 ) -> TaskList:
     """Search a project's asset and shot tasks.
 
-    project: name or ID. task_types: names or short names. statuses: status short names.
+    project: name or ID. task_types: names or short names. departments: names or IDs; a task is in a
+    department when its task type is (combined with task_types, both must match). statuses: status short names.
     assignee: person name, email or ID. group: asset type name or sequence name.
     due_before / due_after: YYYY-MM-DD (inclusive). Status meanings follow each status's role (see
     list_task_statuses): overdue = due date passed on a task still being worked on (not done, omitted or
@@ -79,6 +81,7 @@ def search_tasks(
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
     type_ids = {lookups.task_type(t)["id"] for t in task_types or []}
+    department_types = lookups.department_task_types(departments)
     status_ids = {lookups.task_status(s)["id"] for s in statuses or []}
     person_id = lookups.person(assignee)["id"] if assignee else None
     name_part = (entity_name_contains or "").lower()
@@ -89,6 +92,7 @@ def search_tasks(
         due = day(task.get("due_date"))
         return (
             (not type_ids or task.get("task_type_id") in type_ids)
+            and (department_types is None or task.get("task_type_id") in department_types)
             and (not status_ids or task.get("task_status_id") in status_ids)
             and (person_id is None or person_id in (task.get("assignees") or []))
             and (not unassigned or not task.get("assignees"))

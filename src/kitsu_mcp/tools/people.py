@@ -38,7 +38,7 @@ def list_people(
         people = client.get(f"data/projects/{lookups.project(project)['id']}/team")
     else:
         people = list(lookups.index("people").values())
-    departments = {d["id"]: d["name"] for d in client.get("data/departments")}
+    departments = {i: d["name"] for i, d in lookups.index("departments").items()}
     found = sorted(
         (
             _person(p, departments, include_email)
@@ -100,19 +100,25 @@ def get_person_tasks(
 
 
 @tool(annotations=READ_ONLY, tags={"people", "tasks", "reporting"})
-def workload(project: str, task_types: list[str] | None = None) -> list[Workload]:
+def workload(project: str, task_types: list[str] | None = None, departments: list[str] | None = None) -> list[Workload]:
     """Open tasks per person on a project: counts, overdue, waiting for review, retakes, on hold,
     estimate vs. logged.
 
     Open = not done and not omitted (status roles: see list_task_statuses); on-hold tasks are open but
     never overdue. Sorted by number of open tasks. Unassigned open tasks are reported as "(unassigned)".
+    task_types: names or short names. departments: names or IDs; counts only tasks whose task type belongs to
+    one of them (the same filter as search_tasks and project_overview).
     """
     lookups = get_lookups()
     project_id = lookups.project(project)["id"]
     type_ids = {lookups.task_type(t)["id"] for t in task_types or []}
+    department_types = lookups.department_task_types(departments)
     by_person: dict[str | None, list] = defaultdict(list)
     for record in project_tasks(get_client(), lookups, project_id):
-        if not record.is_open(lookups) or (type_ids and record.raw.get("task_type_id") not in type_ids):
+        type_id = record.raw.get("task_type_id")
+        if not record.is_open(lookups) or (type_ids and type_id not in type_ids):
+            continue
+        if department_types is not None and type_id not in department_types:
             continue
         for person_id in record.raw.get("assignees") or [None]:
             by_person[person_id].append(record)
