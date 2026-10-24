@@ -1,8 +1,8 @@
 """Per-caller Kitsu credentials for the HTTP transport.
 
-Over stdio the server logs in with KITSU_USER / KITSU_PASSWORD. Over HTTP (a hosted server used as a Le Chat or
-AI Studio connector) each caller sends their own Kitsu login in the `Authorization` header, and every tool call
-runs as that person. The server's own login is never used for HTTP calls.
+Over stdio the server logs in with KITSU_USER / KITSU_PASSWORD. Over HTTP (a hosted server used by web agents)
+each caller sends their own Kitsu login in the `Authorization` header, and every tool call runs as that person.
+The server's own login is never used for HTTP calls.
 """
 
 import base64
