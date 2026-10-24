@@ -17,6 +17,34 @@ jobs:
       - run: uv run pyright
       - run: uv run pytest
 
+  zou:
+    # Read tools against real Zou versions (the CGWire image bundles Kitsu + Zou), oldest and newest supported.
+    name: zou ${{ matrix.zou }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - zou: "1.0.43"
+            image: cgwire/cgwire:1.0.35-1.0.43-01
+          - zou: "1.0.97"
+            image: cgwire/cgwire:1.0.73-1.0.97-01
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --locked
+      - name: Start Zou
+        run: |
+          docker run -d --name zou -p 8090:80 ${{ matrix.image }}
+          for i in $(seq 1 150); do curl -fs http://127.0.0.1:8090/api && break; sleep 2; done
+          curl -fs http://127.0.0.1:8090/api
+      - name: Seed a test production
+        run: |
+          for i in $(seq 1 10); do uv run python tests/integration/seed.py http://127.0.0.1:8090/api && break; sleep 5; done
+      - run: uv run pytest tests/integration -v
+        env:
+          KITSU_TEST_HOST: http://127.0.0.1:8090/api
+
   docker:
     runs-on: ubuntu-latest
     steps:

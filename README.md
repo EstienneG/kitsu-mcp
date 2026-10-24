@@ -143,12 +143,31 @@ Kitsu's flags, in the order done > retake > feedback request > in progress > to 
 match no status. `project_overview` reports which statuses it counted as omitted and as
 done-but-improvable.
 
+## Compatibility
+
+| | Supported | Tested in CI |
+|---|---|---|
+| Zou (Kitsu API) | 1.0.43 and later | 1.0.43 and 1.0.97, with the `cgwire/cgwire` image |
+| gazu | 1.3.x (`>=1.3,<2`) | the locked version |
+| Python | 3.12 and later | 3.12 |
+
+`curl https://your-studio.cg-wire.com/api` shows a Zou version. Older Zou versions may work but are not tested.
+Report anything that breaks on a supported version as an issue.
+
 ## Development
 
     cp .env.example .env   # fill in KITSU_USER / KITSU_PASSWORD
     uv run kitsu-mcp       # reads .env from the current directory
     uv run pytest          # tests run against an in-memory fake Kitsu, no credentials needed
     uv run ruff check . && uv run ruff format --check . && uv run pyright
+
+Integration tests run the read tools against a real Zou, seeded with a tiny production (writes are blocked):
+
+    docker run -d -p 8090:80 cgwire/cgwire:1.0.73-1.0.97-01
+    uv run python tests/integration/seed.py http://127.0.0.1:8090/api
+    KITSU_TEST_HOST=http://127.0.0.1:8090/api uv run pytest tests/integration
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md) and [SECURITY.md](SECURITY.md).
 
 Layout (`src/kitsu_mcp/`): `config.py` settings, `client.py` HTTP client (login, re-login, retries,
 error mapping), `lookups.py` cached reference data and name resolution, `models.py` output schemas,
@@ -157,9 +176,10 @@ error mapping), `lookups.py` cached reference data and name resolution, `models.
 `resources.py`, `prompts.py`, `auth.py` per-caller credentials, `http.py` HTTP mode (hidden local tools,
 `/health`, TLS guard), `links.py` Kitsu web links.
 
-Release: bump `version` in `pyproject.toml`, merge, then tag it (`git tag v0.2.0 && git push origin v0.2.0`).
+Release: bump `version` in `pyproject.toml` and add a `CHANGELOG.md` entry, merge, then tag it
+(`git tag v0.3.1 && git push origin v0.3.1`).
 The Release workflow checks the tag matches the version, runs the checks, then publishes the package to
-PyPI and the Docker image to `ghcr.io/estienneg/kitsu-mcp` (tags `0.2.0`, `0.2` and `latest`).
+PyPI and the Docker image to `ghcr.io/estienneg/kitsu-mcp` (tags `0.3.1`, `0.3` and `latest`).
 PyPI uses trusted publishing, so no token is stored: the `kitsu-mcp` project on PyPI has this repository
 as its publisher (workflow `release.yml`, environment `pypi`).
 
