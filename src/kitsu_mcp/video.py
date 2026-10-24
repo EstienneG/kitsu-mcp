@@ -431,11 +431,16 @@ _TEXT_TIMECODE = re.compile(r"(?<![\d:])(\d{1,2}:\d{2}:\d{2}[:;]\d{1,2})(?![\d:]
 _TEXT_FRAME = re.compile(
     r"(?:(?<![\w/])(?i:frames?|frm|fr)\s*#?\s*|(?<![\w/])f\s?#?)"
     # Further numbers in a list or range, unless they are really a time ("f 12, 2.5s").
-    r"(\d{1,6}(?:\s*(?:[-–,]|\bto\b|\bà\b|\bet\b|\band\b)\s*\d{1,6}(?![.,]\d|\s*(?i:s|sec|:)\b|\d))*)\b"
+    # The first number must not be followed by a decimal: "f2.8" is a camera f-stop, not frame 2.
+    r"(\d{1,6}(?![.,]?\d)(?:\s*(?:[-–,]|\bto\b|\bà\b|\bet\b|\band\b)\s*\d{1,6}(?![.,]\d|\s*(?i:s|sec|:)\b|\d))*)\b"
 )
 _FRAME_NUMBER = re.compile(r"\d{1,6}")
 # "1.5s", "1,5 s", "2 sec", "10 secondes"; not "s'il" / "s’il".
-_TEXT_SECONDS = re.compile(r"(?<![\w.,:/])(\d+(?:[.,]\d+)?)\s*(?i:secondes?|seconds?|secs?|s)(?![\w'’])")
+_TEXT_SECONDS = re.compile(
+    r"(?<![\w.,:/])(\d+(?:[.,]\d+)?)"
+    # A bare "s" glued to 20, 30, ..., 90 or a year is a decade ("the 90s look", "1980s"), not seconds.
+    r"(?:\s*(?i:secondes?|seconds?|secs?)|\s+(?i:s)|(?<!(?<!\d)[2-9]0)(?<!\d{3}0)(?i:s))(?![\w'’])"
+)
 # "at 0:02", "à 1:30", "vers 0:05", "around 0:02.5": a M:SS movie time only after such a word, so clock
 # times ("à 12:30 on fait la review") are rare false positives and usually past the movie's end anyway.
 _TEXT_CLOCK = re.compile(r"(?i:\b(?:at|à|a|vers|around|to)\s+)(\d{1,2}:\d{2}(?:[.,]\d+)?)(?![\d:])")
@@ -547,7 +552,7 @@ def _seek(container, stream, start: int, time_base: float, target: int, fps: flo
         decoder = container.decode(stream)
         first = next(decoder, None)
         if first is None:
-            break
+            continue  # nothing after this point (e.g. inside an MPEG-TS's last GOP): seek further back
         landed = 0 if first.pts is None else round((first.pts - start) * time_base * fps)
         if landed <= target:
             return _chain(first, decoder), landed - 1

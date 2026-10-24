@@ -504,6 +504,12 @@ async def test_get_video_frames_merges_duplicates(served):
         ("12 frames too long", []),
         ("f12 et frame 30", [12, 30]),
         ("check 00:00:01:00", [25]),
+        ("the 90s look", []),  # decades, not seconds
+        ("années 80s", []),
+        ("the 1980s vibe", []),
+        ("2s plus tard", [49]),
+        ("f2.8 is too soft", []),  # camera f-stops, not frames
+        ("f 2.8", []),
     ],
 )
 def test_find_references_in_realistic_comments(text, frames):
@@ -585,3 +591,8 @@ async def test_review_video_lists_other_revision_tags_past_the_end(served):
     # v1's frame 217 is past v2's end but still reported as being about v1; v2's own 217 is out of range.
     assert comment["refers_to_other_revisions"] == [1] and comment["frames"] == []
     assert summary["frames_shown"] == []
+
+
+def test_seconds_glued_to_round_numbers_are_still_seconds():
+    """Only 20-90 and years are read as decades: "10s" and "100s" are seconds."""
+    assert [r.frame for r in video.find_references("10s puis 100s", 24.0, 5000)] == [241, 2401]
