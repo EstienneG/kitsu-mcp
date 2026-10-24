@@ -115,7 +115,7 @@ def resolve_preview(preview_file_id: str | None, entity_id: str | None) -> dict:
     if not is_video(preview):
         raise ToolError(
             f"Preview file {preview_file_id} is not a video (extension {extension(preview) or 'unknown'}); "
-            "use get_preview_file with show=True to see it"
+            "use get_preview to see it"
         )
     if is_broken(preview):
         raise ToolError(f"Preview file {preview_file_id} is marked broken in Kitsu (its processing failed)")

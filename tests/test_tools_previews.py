@@ -15,7 +15,7 @@ async def test_get_preview_returns_image(fake):
 async def test_get_preview_of_a_video_points_to_the_video_tools(fake):
     async with Client(mcp) as client:
         result = await client.call_tool("get_preview", {"entity_id": "s-1"})
-        shown = await client.call_tool("get_preview_file", {"preview_file_id": "pf-sh010", "show": True})
+        shown = await client.call_tool("get_preview", {"preview_file_id": "pf-sh010"})
     for r in (result, shown):
         assert [c.type for c in r.content] == ["image", "text"]
         assert "get_video_contact_sheet" in r.content[1].text
@@ -26,16 +26,16 @@ async def test_get_preview_without_preview(call):
 
 
 async def test_get_preview_file_metadata(call):
-    meta = await call("get_preview_file", preview_file_id="pf-sh010")
+    meta = await call("get_preview", preview_file_id="pf-sh010", show=False)
     assert (meta["revision"], meta["is_movie"], meta["extension"], meta["is_video"]) == (2, True, "mp4", True)
     assert "get_video_frames" in meta["note"]
-    image = await call("get_preview_file", preview_file_id="pf-hero")
+    image = await call("get_preview", preview_file_id="pf-hero", show=False)
     assert (image["is_video"], image["note"]) == (False, None)
 
 
 async def test_get_preview_file_detects_video_by_extension(call, fake):
     fake.data["preview_files"]["pf-sh010"]["is_movie"] = False  # Kitsu reports False on real mp4s
-    assert (await call("get_preview_file", preview_file_id="pf-sh010"))["is_video"]
+    assert (await call("get_preview", preview_file_id="pf-sh010", show=False))["is_video"]
 
 
 async def test_list_task_previews(call):
@@ -57,7 +57,7 @@ async def test_playlists(call):
     assert detail["items"] == [{"entity_id": "s-1", "entity": "SH010", "preview_file_id": "pf-sh010"}]
 
 
-@pytest.mark.parametrize("name", ["get_preview", "get_preview_file", "list_task_previews", "list_playlists"])
+@pytest.mark.parametrize("name", ["get_preview", "get_casting", "list_task_previews", "list_playlists"])
 async def test_preview_tools_are_read_only(name):
     tool = await mcp.get_tool(name)
     assert tool.annotations.read_only_hint
@@ -113,3 +113,14 @@ async def test_recent_previews_filters(call):
 async def test_recent_previews_rejects_bad_dates(call):
     with pytest.raises(ToolError, match="since must be a YYYY-MM-DD"):
         await call("recent_previews", project="p-1", since="yesterday")
+
+
+async def test_get_preview_needs_exactly_one_target(call):
+    for args in ({}, {"entity_id": "a-hero", "preview_file_id": "pf-hero"}):
+        with pytest.raises(ToolError, match="exactly one"):
+            await call("get_preview", **args)
+
+
+async def test_get_preview_metadata_by_entity(call):
+    meta = await call("get_preview", entity_id="a-hero", show=False)
+    assert meta["id"] == "pf-hero"

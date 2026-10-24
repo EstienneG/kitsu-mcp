@@ -26,10 +26,10 @@ async def test_get_shot(call):
 
 
 async def test_casting_both_ways(call):
-    assert await call("get_shot_casting", shot_id="s-1") == [
+    assert await call("get_casting", shot_id="s-1") == [
         {"asset_id": "a-hero", "name": "Hero", "asset_type": "Character", "occurrences": 1, "label": "animate"}
     ]
-    cast_in = await call("get_asset_cast_in", asset_id="a-hero")
+    cast_in = await call("get_casting", asset_id="a-hero")
     assert [(c["shot"], c["sequence"]) for c in cast_in] == [("SH010", "SQ010")]
 
 
@@ -50,3 +50,12 @@ def test_frames_tolerates_odd_values():
 
     values = ["12", "12.0", " 7 ", "²", "--5", "abc", "inf", True, None, 3.9]
     assert [_frames({"f": v}, "f") for v in values] == [12, 12, 7, None, None, None, None, None, None, 3]
+
+
+async def test_get_casting_needs_exactly_one_side(call):
+    import pytest
+    from fastmcp.exceptions import ToolError
+
+    for args in ({}, {"shot_id": "s-1", "asset_id": "a-hero"}):
+        with pytest.raises(ToolError, match="exactly one"):
+            await call("get_casting", **args)
