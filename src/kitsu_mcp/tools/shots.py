@@ -6,8 +6,18 @@ from kitsu_mcp.models import CastAsset, CastIn, Named, Sequence, ShotDetail, Sho
 from kitsu_mcp.tools.assets import matches_status_filters
 
 
-def _frames(value) -> int | None:
-    return int(value) if isinstance(value, int | float) else None
+def _frames(shot: dict, field: str) -> int | None:
+    """Frame fields live at the top level on recent Zou, in `data` on shots created through gazu."""
+    value = shot.get(field)
+    if value is None:
+        value = (shot.get("data") or {}).get(field)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return int(value)
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value)
+    return None
 
 
 def _text(value) -> str | None:
@@ -75,9 +85,9 @@ def list_shots(
                 name=shot["name"],
                 sequence=_text(shot.get("sequence_name")),
                 episode=_text(shot.get("episode_name")),
-                frame_in=_frames(shot.get("frame_in")),
-                frame_out=_frames(shot.get("frame_out")),
-                nb_frames=_frames(shot.get("nb_frames")),
+                frame_in=_frames(shot, "frame_in"),
+                frame_out=_frames(shot, "frame_out"),
+                nb_frames=_frames(shot, "nb_frames"),
                 tasks=tasks,
             )
         )
@@ -97,9 +107,9 @@ def get_shot(shot_id: str) -> ShotDetail:
         name=shot["name"],
         sequence=_text(shot.get("sequence_name")),
         episode=_text(shot.get("episode_name")),
-        frame_in=_frames(shot.get("frame_in")),
-        frame_out=_frames(shot.get("frame_out")),
-        nb_frames=_frames(shot.get("nb_frames")),
+        frame_in=_frames(shot, "frame_in"),
+        frame_out=_frames(shot, "frame_out"),
+        nb_frames=_frames(shot, "nb_frames"),
         project_id=shot.get("project_id"),
         description=shot.get("description"),
         fps=shot.get("fps"),

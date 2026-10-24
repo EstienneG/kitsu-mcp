@@ -57,19 +57,37 @@ class TaskRecord:
         return due is not None and due < today().isoformat() and not self.is_done(lookups)
 
 
-def project_tasks(client: KitsuClient, lookups: Lookups, project_id: str, kind: EntityKind = "any") -> list[TaskRecord]:
-    """All tasks on a project's (non-canceled) assets and/or shots."""
-    records: list[TaskRecord] = []
+@dataclass
+class EntityRecord:
+    """A non-canceled asset or shot, with its tasks as returned by the `with-tasks` routes."""
+
+    raw: dict
+    kind: Literal["asset", "shot"]
+    group: str | None
+    """Asset type for assets, episode/sequence for shots."""
+
+    def tasks(self) -> list[TaskRecord]:
+        return [TaskRecord(t, self.raw, self.kind, self.group) for t in self.raw.get("tasks") or []]
+
+
+def project_entities(
+    client: KitsuClient, lookups: Lookups, project_id: str, kind: EntityKind = "any"
+) -> list[EntityRecord]:
+    """A project's non-canceled assets and/or shots, including those without tasks."""
+    entities: list[EntityRecord] = []
     if kind in ("asset", "any"):
         for asset in client.get("data/assets/with-tasks", params={"project_id": project_id}):
-            if asset.get("canceled"):
-                continue
-            group = asset.get("asset_type_name") or lookups.name("asset_types", asset.get("entity_type_id"))
-            records += [TaskRecord(t, asset, "asset", group) for t in asset.get("tasks") or []]
+            if not asset.get("canceled"):
+                group = asset.get("asset_type_name") or lookups.name("asset_types", asset.get("entity_type_id"))
+                entities.append(EntityRecord(asset, "asset", group))
     if kind in ("shot", "any"):
         for shot in client.get("data/shots/with-tasks", params={"project_id": project_id}):
-            if shot.get("canceled"):
-                continue
-            group = "/".join(p for p in (shot.get("episode_name"), shot.get("sequence_name")) if p) or None
-            records += [TaskRecord(t, shot, "shot", group) for t in shot.get("tasks") or []]
-    return records
+            if not shot.get("canceled"):
+                group = "/".join(p for p in (shot.get("episode_name"), shot.get("sequence_name")) if p) or None
+                entities.append(EntityRecord(shot, "shot", group))
+    return entities
+
+
+def project_tasks(client: KitsuClient, lookups: Lookups, project_id: str, kind: EntityKind = "any") -> list[TaskRecord]:
+    """All tasks on a project's (non-canceled) assets and/or shots."""
+    return [task for entity in project_entities(client, lookups, project_id, kind) for task in entity.tasks()]

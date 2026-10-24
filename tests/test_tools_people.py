@@ -52,3 +52,10 @@ async def test_project_overview(call):
         "done_ratio": 0.5,
         "statuses": [{"status": "done", "count": 1}, {"status": "todo", "count": 1}],
     }
+
+
+async def test_project_overview_counts_entities_without_tasks(call, fake):
+    fake.data["assets"].append({**fake.data["assets"][1], "id": "a-new", "name": "Bridge"})
+    fake.data["assets"].append({**fake.data["assets"][1], "id": "a-cut", "name": "Cut", "canceled": True})
+    overview = await call("project_overview", project="p-1")
+    assert (overview["assets"], overview["tasks"]) == (3, 5)

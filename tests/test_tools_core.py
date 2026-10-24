@@ -83,3 +83,19 @@ async def test_refresh_cache(call, fake):
     await call("refresh_cache")
     await call("list_task_types")
     assert sum(path == "data/task-types" for _, path, _ in fake.calls) == 2
+
+
+@pytest.mark.parametrize(
+    "path", ["auth/logout", "data/playlists/pl-1/build/mp4", "data/../auth/logout", "actions/tasks/t/comment"]
+)
+async def test_kitsu_get_refuses_non_data_or_side_effect_routes(call, fake, path):
+    with pytest.raises(ToolError, match="only allows read routes"):
+        await call("kitsu_get", path=path)
+    assert all(p != path for _, p, _ in fake.calls)
+
+
+async def test_list_assets_skips_canceled_and_sorts(call, fake):
+    fake.data["assets"].append({**fake.data["assets"][0], "id": "a-old", "name": "Old Hero", "canceled": True})
+    fake.data["assets"].append({**fake.data["assets"][0], "id": "a-aaa", "name": "Archer"})
+    names = [a["name"] for a in (await call("list_assets", project="p-1"))["assets"]]
+    assert names == ["Archer", "Hero", "Forest"]

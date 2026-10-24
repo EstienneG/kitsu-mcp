@@ -81,10 +81,12 @@ def download_previews(
     dest_dir: str,
     entity_kind: Literal["assets", "shots", "both"] = "both",
     size: Size = "preview",
+    overwrite: bool = False,
 ) -> DownloadResult:
     """Save the preview image of every asset and/or shot of a project to a local folder.
 
     Writes local files only; Kitsu is not modified. Files are named <entity name>_<entity id>.png.
+    Existing files are left alone (counted as skipped) unless overwrite=True. Canceled entities are skipped.
     """
     client = get_client()
     project_id = get_lookups().project(project)["id"]
@@ -99,10 +101,13 @@ def download_previews(
     saved, failed, skipped = [], [], 0
     for kind, entity in entities:
         preview_file_id = entity.get("preview_file_id")
-        if not preview_file_id:
+        if not preview_file_id or entity.get("canceled"):
             skipped += 1
             continue
-        path = dest / f"{_safe_filename(entity['name'])}_{entity['id']}.png"
+        path = dest / f"{_safe_filename(entity['name'])}_{_safe_filename(entity['id'])}.png"
+        if path.exists() and not overwrite:
+            skipped += 1
+            continue
         try:
             path.write_bytes(_preview_bytes(preview_file_id, size))
         except Exception as error:
@@ -123,11 +128,22 @@ def _playlist(p: dict) -> Playlist:
     )
 
 
+_MAX_PLAYLIST_PAGES = 50
+
+
 @mcp.tool(annotations=READ_ONLY, tags={"previews", "playlists"})
 def list_playlists(project: str) -> list[Playlist]:
     """List a project's review playlists, most recently updated first."""
     project_id = get_lookups().project(project)["id"]
-    playlists = [_playlist(p) for p in get_client().get(f"data/projects/{project_id}/playlists")]
+    raw_playlists: dict[str, dict] = {}
+    # The route is paginated (20 per page) and signals the end with an empty page.
+    for page in range(1, _MAX_PLAYLIST_PAGES + 1):
+        batch = get_client().get(f"data/projects/{project_id}/playlists", params={"page": page})
+        new = {p["id"]: p for p in batch if p["id"] not in raw_playlists}
+        if not new:
+            break
+        raw_playlists.update(new)
+    playlists = [_playlist(p) for p in raw_playlists.values()]
     return sorted(playlists, key=lambda p: p.updated_at or "", reverse=True)
 
 

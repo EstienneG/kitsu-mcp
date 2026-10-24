@@ -12,7 +12,7 @@ from kitsu_mcp.models import (
     TaskType,
     TaskTypeProgress,
 )
-from kitsu_mcp.production import TaskRecord, day, project_tasks
+from kitsu_mcp.production import TaskRecord, day, project_entities
 
 
 @mcp.tool(annotations=READ_ONLY, tags={"projects"})
@@ -77,7 +77,8 @@ def project_overview(project: str) -> ProjectOverview:
     client = get_client()
     lookups = get_lookups()
     info = client.get(f"data/projects/{lookups.project(project)['id']}")
-    records = project_tasks(client, lookups, info["id"])
+    entities = project_entities(client, lookups, info["id"])
+    records = [task for entity in entities for task in entity.tasks()]
 
     def status_of(r: TaskRecord) -> str | None:
         return r.raw.get("task_status_id")
@@ -109,8 +110,8 @@ def project_overview(project: str) -> ProjectOverview:
         end_date=day(info.get("end_date")),
         fps=info.get("fps"),
         resolution=info.get("resolution"),
-        assets=len({r.entity["id"] for r in records if r.entity_kind == "asset"}),
-        shots=len({r.entity["id"] for r in records if r.entity_kind == "shot"}),
+        assets=sum(e.kind == "asset" for e in entities),
+        shots=sum(e.kind == "shot" for e in entities),
         tasks=len(records),
         done_ratio=_ratio(done_total, len(records)),
         overdue=sum(r.is_overdue(lookups) for r in open_records),

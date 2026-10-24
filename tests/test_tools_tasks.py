@@ -38,3 +38,11 @@ async def test_task_history(call):
     assert history["current_status"] == "wfa"
     assert history["time_logged"] == 600
     assert [(c["previous_status"], c["status"]) for c in history["changes"]] == [(None, "wip"), ("wip", "wfa")]
+
+
+async def test_search_rejects_malformed_dates(call):
+    import pytest
+    from fastmcp.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="due_before must be a YYYY-MM-DD date"):
+        await call("search_tasks", project="p-1", due_before="2026-1-5")
