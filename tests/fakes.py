@@ -355,6 +355,7 @@ class FakeClient:
     def __init__(self, data: dict[str, Any] | None = None) -> None:
         self.data = data or seed()
         self.settings = Settings(host="http://kitsu.test/api", user="u", password="p")  # type: ignore[arg-type]
+        self.credentials = None
         self.calls: list[tuple[str, str, Any]] = []
         self.movies: dict[str, bytes] = {}
         """Movie files by route (e.g. movies/low/preview-files/<id>.mp4), served by download()."""

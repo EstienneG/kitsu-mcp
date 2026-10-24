@@ -210,11 +210,30 @@ def _in_use(path: Path) -> bool:
     return stamp is not None and time.monotonic() - stamp <= IN_USE_SECONDS
 
 
-def cache_dir() -> Path:
+def _cache_root() -> Path:
     configured = get_client().settings.video_cache_dir
-    path = Path(configured).expanduser() if configured else Path(tempfile.gettempdir()) / "kitsu-mcp-videos"
+    return Path(configured).expanduser() if configured else Path(tempfile.gettempdir()) / "kitsu-mcp-videos"
+
+
+def cache_dir() -> Path:
+    """The movie cache of the current caller. Over HTTP each Kitsu user gets their own folder, so a movie
+    fetched for one person is never served to another without Kitsu checking their access."""
+    client = get_client()
+    path = _cache_root()
+    if client.credentials is not None:
+        path = path / "users" / client.credentials.key[:32]
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _cached_movies() -> list[Path]:
+    """Every cached movie: the server's own and, over HTTP, every user's. KITSU_VIDEO_CACHE_MB caps them together."""
+    root = _cache_root()
+    if not root.is_dir():
+        return []
+    users = root / "users"
+    folders = [root, *(d for d in users.iterdir() if d.is_dir())] if users.is_dir() else [root]
+    return [f for d in folders for f in d.iterdir() if f.is_file() and not f.name.startswith(".")]
 
 
 def max_download_bytes() -> int:
@@ -256,15 +275,15 @@ def _download(preview: dict, quality: Quality, path: Path) -> None:
 
 
 def evict(keep: Path | None = None) -> None:
-    """Delete the least recently used movies until the cache fits KITSU_VIDEO_CACHE_MB.
+    """Delete the least recently used movies until the cache (all users together) fits KITSU_VIDEO_CACHE_MB.
 
     Files fetched in the last IN_USE_SECONDS may still be decoding and are kept, so the cache can go
     over budget for a while; they are evicted on a later call.
     """
     budget = get_client().settings.video_cache_mb * 2**20
     files = []
-    for f in cache_dir().iterdir():
-        if f.is_file() and not f.name.startswith(".") and f != keep and not _in_use(f):
+    for f in _cached_movies():
+        if f != keep and not _in_use(f):
             try:
                 stat = f.stat()
             except FileNotFoundError:
