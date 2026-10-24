@@ -35,18 +35,24 @@ Le Chat and AI Studio run in Mistral's cloud, so they need the server at a publi
 everyone: each person adds their own private connector with their Kitsu login, and every call runs as them,
 with their Kitsu permissions.
 
-**Run it.** Only `KITSU_HOST` is needed (no shared login):
+**Run it.** Only `KITSU_HOST` is needed (no shared login). Deploy the image on a host that terminates HTTPS
+(Fly.io, Render, a reverse proxy) and confirm it with `KITSU_BEHIND_TLS=true`:
 
     docker build -t kitsu-mcp .
-    docker run -p 8000:8000 -e KITSU_HOST=https://your-studio.cg-wire.com/api kitsu-mcp
+    docker run -p 8000:8000 -e KITSU_HOST=https://your-studio.cg-wire.com/api -e KITSU_BEHIND_TLS=true kitsu-mcp
 
-or `kitsu-mcp --http` (`--host`, `--port`, or `HOST` / `PORT`). The MCP endpoint is `/mcp` and `/health`
-answers for health checks. Deploy the image on any host that terminates HTTPS (Fly.io, Render, ...).
+To try it locally without a proxy, run `KITSU_HOST=... kitsu-mcp --http`, which listens on 127.0.0.1:8000.
+
+The supported entry point is `kitsu-mcp --http` (`--host` / `--port`, or `KITSU_HTTP_HOST` / `PORT`): it
+applies the TLS check below, which `fastmcp run` would skip. The MCP endpoint is `/mcp`; `/health` answers
+for health checks. The image runs as an unprivileged user.
 
 **HTTPS is required.** Callers send their Kitsu password with every request, so the server refuses to listen
-on anything but localhost unless you confirm TLS terminates in front of it (`--behind-tls` or
-`KITSU_BEHIND_TLS=true`, set in the Docker image). It never logs credentials, keeps them only in memory
-(hashed as cache keys), and drops idle sessions after an hour.
+on anything but localhost unless the operator confirms TLS terminates in front of it (`--behind-tls` or
+`KITSU_BEHIND_TLS=true`; deliberately not set in the image). It never logs credentials and keeps them only in
+memory, under keys derived with a per-process secret. Only logins Kitsu accepted are kept, for an hour of
+inactivity; repeated failed logins for one account are slowed down. Listing the tools works without a login
+(it is metadata only); every tool call needs one.
 
 **Each user** (AI Studio → Connectors → Add, or Le Chat → Connectors → Custom MCP connector):
 - URL: `https://<your-server>/mcp`, visibility **Private**

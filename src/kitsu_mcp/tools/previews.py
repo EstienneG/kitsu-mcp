@@ -8,6 +8,7 @@ from fastmcp.utilities.types import Image
 from kitsu_mcp import links, video
 from kitsu_mcp.app import READ_ONLY, tool
 from kitsu_mcp.client import get_client
+from kitsu_mcp.formatters import task_link
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import (
     DownloadResult,
@@ -58,18 +59,8 @@ def _preview_file(p: dict, task: dict | None = None) -> PreviewFile:
         is_video=video.is_video(p),
         duration=p.get("duration") if video.is_video(p) else None,
         note=_note(p),
-        url=_preview_url(task, p["id"]) if task else None,
+        url=task_link(task, p["id"]) if task else None,
         download_url=links.download_url(p),
-    )
-
-
-def _preview_url(task: dict, preview_file_id: str) -> str | None:
-    return links.task_url(
-        task.get("project_id"),
-        task["id"],
-        (task.get("task_type") or {}).get("for_entity"),
-        (task.get("episode") or {}).get("id"),
-        preview_file_id,
     )
 
 

@@ -8,6 +8,8 @@ runs as that person. The server's own login is never used for HTTP calls.
 import base64
 import binascii
 import hashlib
+import hmac
+import secrets
 import threading
 import time
 from collections import OrderedDict
@@ -22,6 +24,15 @@ AUTH_HELP = (
 )
 
 
+# Keys derived from credentials are HMACs under a secret that only lives in this process, so a key seen
+# elsewhere (a cache folder name, a dump) cannot be checked against password guesses offline.
+_SECRET = secrets.token_bytes(32)
+
+
+def keyed_hash(value: str) -> str:
+    return hmac.new(_SECRET, value.encode(), hashlib.sha256).hexdigest()
+
+
 @dataclass(frozen=True)
 class Credentials:
     user: str
@@ -29,8 +40,13 @@ class Credentials:
 
     @property
     def key(self) -> str:
-        """Cache key: a hash, so passwords never sit in the cache as dict keys."""
-        return hashlib.sha256(f"{self.user}\0{self.password}".encode()).hexdigest()
+        """Cache key for this login (user and password), so passwords never sit in the cache as dict keys."""
+        return keyed_hash(f"{self.user}\0{self.password}")
+
+    @property
+    def user_key(self) -> str:
+        """Key of the user alone, e.g. for their video cache folder (Kitsu authorizes every cache hit)."""
+        return keyed_hash(self.user.lower())
 
     def __repr__(self) -> str:
         return f"Credentials(user={self.user!r}, password='***')"
@@ -79,15 +95,35 @@ class TTLCache[T]:
         self._lock = threading.Lock()
 
     def get_or_create(self, key: str, create) -> T:
+        found = self.get(key)
+        if found is not None:
+            return found
+        value = create()
+        self.put(key, value)
+        return value
+
+    def get(self, key: str) -> T | None:
         now = time.monotonic()
         with self._lock:
-            for stale in [k for k, (used, _) in self._items.items() if now - used > self.ttl]:
-                del self._items[stale]
-            value = self._items.pop(key)[1] if key in self._items else create()
+            self._expire(now)
+            if key not in self._items:
+                return None
+            value = self._items.pop(key)[1]
+            self._items[key] = (now, value)
+            return value
+
+    def put(self, key: str, value: T) -> None:
+        now = time.monotonic()
+        with self._lock:
+            self._expire(now)
+            self._items.pop(key, None)
             self._items[key] = (now, value)
             while len(self._items) > self.max_size:
                 self._items.popitem(last=False)
-            return value
+
+    def _expire(self, now: float) -> None:
+        for stale in [k for k, (used, _) in self._items.items() if now - used > self.ttl]:
+            del self._items[stale]
 
     def clear(self) -> None:
         with self._lock:
@@ -95,3 +131,39 @@ class TTLCache[T]:
 
     def __len__(self) -> int:
         return len(self._items)
+
+
+class LoginThrottle:
+    """Slows down repeated failed logins per user, so the server is not an unthrottled password relay to Kitsu.
+
+    The first `free` failures in a row cost nothing; after that, the next attempt must wait
+    2**(failures - free) seconds (capped) since the last failure. A success resets the count. Bounded: the
+    oldest users are forgotten past `max_users`.
+    """
+
+    def __init__(self, free: int = 5, cap: float = 60, max_users: int = 4096) -> None:
+        self.free = free
+        self.cap = cap
+        self.max_users = max_users
+        self._failures: OrderedDict[str, tuple[int, float]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def check(self, user_key: str) -> None:
+        with self._lock:
+            count, last = self._failures.get(user_key, (0, 0.0))
+        if count <= self.free:
+            return
+        wait = min(self.cap, 2 ** (count - self.free)) - (time.monotonic() - last)
+        if wait > 0:
+            raise ToolError(f"Too many failed Kitsu logins for this account; try again in {wait:.0f} s")
+
+    def failed(self, user_key: str) -> None:
+        with self._lock:
+            count, _ = self._failures.pop(user_key, (0, 0.0))
+            self._failures[user_key] = (count + 1, time.monotonic())
+            while len(self._failures) > self.max_users:
+                self._failures.popitem(last=False)
+
+    def succeeded(self, user_key: str) -> None:
+        with self._lock:
+            self._failures.pop(user_key, None)

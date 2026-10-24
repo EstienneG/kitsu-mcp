@@ -21,7 +21,7 @@ from gazu.exception import (
     ValidationException,
 )
 
-from kitsu_mcp.auth import Credentials, TTLCache, request_credentials
+from kitsu_mcp.auth import Credentials, LoginThrottle, TTLCache, request_credentials
 from kitsu_mcp.config import Settings, get_settings
 
 # requests.JSONDecodeError: a proxy answered 503/504 with an HTML page (gazu only raises on 500/502).
@@ -72,6 +72,13 @@ class KitsuClient:
                     self._relogging.active = False
                 self._raw = client
             return self._raw
+
+    def connect(self) -> None:
+        """Log in now (instead of on the first request), reporting a rejected login as a ToolError."""
+        try:
+            self._connect()
+        except (GazuException, requests.RequestException) as error:
+            raise _tool_error(error, "POST", "auth/login") from error
 
     def _log_in(self, client: raw.KitsuClient) -> None:
         if self.credentials is not None:
@@ -171,6 +178,9 @@ _override: KitsuClient | None = None
 _server_client: KitsuClient | None = None
 _server_lock = threading.Lock()
 _user_clients: TTLCache[KitsuClient] = TTLCache(ttl=3600, max_size=256)
+_logins = LoginThrottle()
+_login_locks: TTLCache[threading.Lock] = TTLCache(ttl=3600, max_size=4096)
+_login_locks_guard = threading.Lock()
 
 
 def get_client() -> KitsuClient:
@@ -184,12 +194,35 @@ def get_client() -> KitsuClient:
         return _override
     credentials = request_credentials()
     if credentials is not None:
-        settings = get_settings()
-        return _user_clients.get_or_create(credentials.key, lambda: KitsuClient(settings, credentials))
+        return _user_client(credentials)
     with _server_lock:
         if _server_client is None:
             _server_client = KitsuClient(get_settings())
         return _server_client
+
+
+def _user_client(credentials: Credentials) -> KitsuClient:
+    """A caller's logged-in client. Only successful logins are cached, so wrong passwords cannot push real
+    users out of the cache; repeated failures for one account are slowed down (LoginThrottle)."""
+    cached = _user_clients.get(credentials.key)
+    if cached is not None:
+        return cached
+    with _login_locks_guard:
+        lock = _login_locks.get_or_create(credentials.user_key, threading.Lock)
+    with lock:  # one login at a time per account; concurrent first calls reuse the winner's client
+        cached = _user_clients.get(credentials.key)
+        if cached is not None:
+            return cached
+        _logins.check(credentials.user_key)
+        client = KitsuClient(get_settings(), credentials)
+        try:
+            client.connect()
+        except ToolError:
+            _logins.failed(credentials.user_key)
+            raise
+        _logins.succeeded(credentials.user_key)
+        _user_clients.put(credentials.key, client)
+        return client
 
 
 def set_client(client: KitsuClient | None) -> None:

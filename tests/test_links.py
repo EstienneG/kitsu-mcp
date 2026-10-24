@@ -39,3 +39,28 @@ def test_tv_show_links_go_through_an_episode(fake):
     # A shot or task outside any episode (its sequence has none) uses the plain production route.
     assert links.entity_url("p-1", "shot", "s-1", None) == "http://kitsu.test/productions/p-1/shots/s-1"
     assert links.task_url("p-1", "t-1", "Asset", None) == "http://kitsu.test/productions/p-1/assets/tasks/t-1"
+
+
+def test_links_never_carry_a_login_embedded_in_the_host(fake):
+    fake.settings.host = "https://proxyuser:proxypw@kitsu.example/api"
+    assert links.entity_url("p-1", "shot", "s-1") == "https://kitsu.example/productions/p-1/shots/s-1"
+    assert links.download_url({"id": "pf-1", "extension": "mp4"}) == (
+        "https://kitsu.example/api/movies/originals/preview-files/pf-1/download"
+    )
+
+
+def test_task_on_an_episode_links_to_that_episode(fake):
+    """Zou's full task has no `episode` when the entity is an Episode; Kitsu then uses the entity ID."""
+    from kitsu_mcp.formatters import task_detail
+
+    fake.data["projects"][0]["production_type"] = "tvshow"
+    lookups_module.get_lookups().clear()
+    task = {
+        "id": "t-ep",
+        "project_id": "p-1",
+        "entity_id": "ep-1",
+        "entity": {"id": "ep-1", "name": "E01"},
+        "task_type": {"name": "Storyboard", "for_entity": "Episode"},
+        "persons": [],
+    }
+    assert task_detail(task).url == "http://kitsu.test/productions/p-1/episodes/ep-1/tasks/t-ep"

@@ -7,12 +7,17 @@ production routes, as Kitsu's getTaskPath does.
 """
 
 from kitsu_mcp.client import get_client
+from kitsu_mcp.config import without_userinfo
 from kitsu_mcp.lookups import get_lookups
 
 
+def _api() -> str:
+    """The Zou API URL without any login embedded in KITSU_HOST, which must never reach callers."""
+    return without_userinfo(get_client().settings.host).rstrip("/")
+
+
 def _base() -> str:
-    host = get_client().settings.host.rstrip("/")
-    return host.removesuffix("/api")
+    return _api().removesuffix("/api")
 
 
 def _is_tv_show(project_id: str) -> bool:
@@ -42,11 +47,16 @@ def task_url(
     episode_id: str | None = None,
     preview_file_id: str | None = None,
 ) -> str | None:
-    """Page of a task (its comments and previews); with a preview file, opens that preview in the player."""
+    """Page of a task (its comments and previews); with a preview file, opens that preview in the player.
+
+    episode_id: the task's episode; for a task on an Episode entity, that episode itself (its entity_id).
+    """
     if not project_id:
         return None
     kind = (for_entity or "Asset").lower()
     if kind == "episode":
+        if not episode_id:
+            return None
         url = f"{_base()}/productions/{project_id}/episodes/{episode_id}/tasks/{task_id}"
     else:
         kind = kind if kind in ("asset", "shot", "edit", "sequence") else "asset"
@@ -60,7 +70,7 @@ def download_url(preview: dict) -> str:
     from kitsu_mcp import video  # video imports this module's dependencies; keep the import local
 
     folder = "movies" if video.is_video(preview) else "pictures"
-    return f"{get_client().settings.host.rstrip('/')}/{folder}/originals/preview-files/{preview['id']}/download"
+    return f"{_api()}/{folder}/originals/preview-files/{preview['id']}/download"
 
 
 def playlist_url(project_id: str | None, playlist_id: str, episode_id: str | None = None) -> str | None:
