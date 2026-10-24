@@ -1,10 +1,20 @@
+import re
+
 import pytest
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.server import mcp
-from tests.fakes import ALICE, BOB, ST_DONE, ST_WFA
+from tests.fakes import ALICE, BOB, ST_DONE, ST_WFA, TT_ANIM
 
-WRITE_TOOLS = {"add_comment", "set_task_status", "assign_task", "update_task_schedule", "log_time"}
+WRITE_TOOLS = {
+    "add_comment",
+    "set_task_status",
+    "assign_task",
+    "update_task_schedule",
+    "log_time",
+    "create_playlist",
+    "add_to_playlist",
+}
 
 
 @pytest.fixture
@@ -120,3 +130,269 @@ async def test_log_time_defaults_to_me(call, fake, writable):
 async def test_log_time_bounds(call, fake, writable):
     with pytest.raises(ToolError, match="between 1 and 1440"):
         await call("log_time", task_id="t-hero-mod", minutes=0)
+
+
+async def test_create_playlist(call, fake, writable):
+    result = await call(
+        "create_playlist", project="demo short", name=" WRA shots ", for_entity="shot", task_type="anim"
+    )
+    assert result["ok"] and result["message"] == "Created playlist 'WRA shots' in Demo Short."
+    assert writes(fake) == [
+        (
+            "POST",
+            "data/playlists/",
+            {
+                "name": "WRA shots",
+                "project_id": "p-1",
+                "for_entity": "shot",
+                "for_client": False,
+                "is_for_all": False,
+                "task_type_id": TT_ANIM,
+            },
+        )
+    ]
+    playlist = result["playlist"]
+    assert (playlist["name"], playlist["for_entity"], playlist["task_type"], playlist["items"]) == (
+        "WRA shots",
+        "shot",
+        "Animation",
+        [],
+    )
+
+
+@pytest.mark.parametrize(
+    ("args", "error"),
+    [
+        ({"project": "Nope"}, "Unknown project 'Nope'"),
+        ({"task_type": "Lighting"}, "Unknown task type 'Lighting'"),
+        ({"name": "dailies"}, "already has a playlist named 'Dailies' (ID pl-1)"),
+        ({"name": "  "}, "name is empty"),
+        ({"episode": "EP01"}, "Demo Short has no episodes"),
+    ],
+)
+async def test_create_playlist_rejects_bad_arguments_before_writing(call, fake, writable, args, error):
+    with pytest.raises(ToolError, match=re.escape(error)):
+        await call("create_playlist", **{"project": "p-1", "name": "New", "for_entity": "shot", **args})
+    assert writes(fake) == []
+
+
+@pytest.fixture
+def show(fake):
+    """Closed Show (p-2) with episodes EP01 and EP02, a shot in each, and an EP01 'Dailies' playlist."""
+    fake.data["episodes"] = [
+        {"id": "ep-1", "name": "EP01", "project_id": "p-2"},
+        {"id": "ep-2", "name": "EP02", "project_id": "p-2"},
+    ]
+    shot = fake.data["shots"][0]
+    for n, episode in ((1, "ep-1"), (2, "ep-2")):
+        fake.data["sequences"].append(
+            {"id": f"seq-e{n}", "name": f"SQ0{n}", "project_id": "p-2", "parent_id": episode, "type": "Sequence"}
+        )
+        fake.data["shots"].append(
+            {**shot, "id": f"s-e{n}", "name": f"E{n}_SH010", "project_id": "p-2", "parent_id": f"seq-e{n}"}
+        )
+    fake.data["playlists"].append(
+        {**fake.data["playlists"][0], "id": "pl-ep1", "project_id": "p-2", "episode_id": "ep-1", "shots": []}
+    )
+    return fake
+
+
+async def test_create_playlist_in_a_tv_show_needs_the_episode(call, show, writable):
+    with pytest.raises(ToolError, match="pass the episode"):
+        await call("create_playlist", project="Closed Show", name="New", for_entity="shot")
+    with pytest.raises(ToolError, match="Unknown episode 'EP03'"):
+        await call("create_playlist", project="Closed Show", name="New", for_entity="shot", episode="EP03")
+    assert writes(show) == []
+    await call("create_playlist", project="Closed Show", name="New", for_entity="shot", episode="ep01")
+    assert writes(show)[0][2]["episode_id"] == "ep-1"
+
+
+async def test_tv_show_without_episodes_needs_no_episode(call, fake, writable):
+    """Some TV shows (Wing It) have no episodes: their shot playlists are project-level."""
+    await call("create_playlist", project="Closed Show", name="New", for_entity="shot")
+    assert "episode_id" not in writes(fake)[0][2]
+
+
+async def test_playlist_names_are_unique_per_episode(call, show, writable):
+    with pytest.raises(ToolError, match=re.escape("named 'Dailies' in this episode (ID pl-ep1)")):
+        await call("create_playlist", project="p-2", name="dailies ", for_entity="shot", episode="EP01")
+    assert writes(show) == []
+    await call("create_playlist", project="p-2", name="Dailies", for_entity="shot", episode="EP02")
+    assert writes(show)[0][2]["episode_id"] == "ep-2"
+
+
+async def test_add_to_episode_playlist_rejects_shots_of_other_episodes(call, show, writable):
+    with pytest.raises(ToolError, match=re.escape("s-e2 (E2_SH010) is not in the episode of playlist 'Dailies'")):
+        await call("add_to_playlist", playlist_id="pl-ep1", entity_ids=["s-e1", "s-e2"])
+    assert writes(show) == []
+    result = await call("add_to_playlist", playlist_id="pl-ep1", entity_ids=["s-e1"])
+    assert [e["entity"] for e in result["added"]] == ["E1_SH010"]
+
+
+async def test_create_playlist_reports_success_when_the_reload_fails(call, fake, writable, monkeypatch):
+    from kitsu_mcp.tools import write
+
+    monkeypatch.setattr(write, "playlist_detail", lambda raw: (_ for _ in ()).throw(ToolError("Kitsu is down")))
+    result = await call("create_playlist", project="p-1", name="New", for_entity="asset")
+    assert result["ok"] and "Could not read it back: Kitsu is down" in result["message"]
+    assert result["playlist"] is None
+
+
+@pytest.fixture
+def wra(fake):
+    """An empty asset playlist and a shot playlist holding nothing, plus SH020 with an uploaded preview."""
+    fake.data["playlists"].append({**fake.data["playlists"][0], "id": "pl-shots", "name": "Shots", "shots": []})
+    fake.data["playlists"].append(
+        {**fake.data["playlists"][0], "id": "pl-assets", "name": "Assets", "for_entity": "asset", "shots": []}
+    )
+    return fake
+
+
+def adds(fake):
+    return [data for method, path, data in fake.calls if method == "POST" and path.endswith("/add-entity")]
+
+
+async def test_add_tasks_to_playlist_with_their_latest_revision(call, wra, writable):
+    result = await call("add_to_playlist", playlist_id="pl-shots", task_ids=["t-sh010-anim"])
+    # Revision 3 is broken; revision 2's main file is position 1 (pf-sh010), not the render at position 2.
+    assert adds(wra) == [{"entity_id": "s-1", "preview_file_id": "pf-sh010"}]
+    assert result["added"] == [
+        {
+            "entity_id": "s-1",
+            "entity": "SH010",
+            "task_type": "Animation",
+            "revision": 2,
+            "preview_file_id": "pf-sh010",
+        }
+    ]
+    assert result["message"] == "Added 1 to 'Shots'."
+    assert result["playlist"]["items"] == [{"entity_id": "s-1", "entity": "SH010", "preview_file_id": "pf-sh010"}]
+
+
+async def test_add_entities_to_playlist_with_their_current_preview(call, wra, writable):
+    result = await call("add_to_playlist", playlist_id="pl-assets", entity_ids=["a-hero", "a-forest"])
+    assert adds(wra) == [{"entity_id": "a-hero", "preview_file_id": "pf-hero"}]
+    assert [(e["entity"], e["task_type"], e["revision"]) for e in result["added"]] == [("Hero", "Modeling", 2)]
+    assert result["skipped"] == [{"ref": "a-forest", "entity": "Forest", "reason": "no preview uploaded"}]
+    assert result["message"] == "Added 1 to 'Assets', skipped 1."
+
+
+async def test_add_to_playlist_never_adds_twice(call, wra, writable):
+    await call("add_to_playlist", playlist_id="pl-assets", task_ids=["t-hero-mod"])
+    again = await call("add_to_playlist", playlist_id="pl-assets", task_ids=["t-hero-mod"], entity_ids=["a-hero"])
+    assert len(adds(wra)) == 1
+    assert [s["reason"] for s in again["skipped"]] == ["already in the playlist"] * 2
+    assert len(again["playlist"]["items"]) == 1
+
+
+async def test_add_task_without_preview_is_skipped(call, wra, writable):
+    result = await call("add_to_playlist", playlist_id="pl-shots", task_ids=["t-sh020-anim"])
+    assert adds(wra) == [] and result["skipped"][0]["reason"] == "no preview uploaded"
+
+
+@pytest.mark.parametrize(
+    ("args", "error"),
+    [
+        ({"task_ids": ["t-sh010-anim", "t-hero-mod"]}, "Task t-hero-mod is not a shot of Demo Short"),
+        ({"entity_ids": ["s-1", "a-hero"]}, "Entity a-hero is not a shot of Demo Short"),
+        ({"task_ids": ["t-nope"]}, "Not found"),
+        ({"entity_ids": ["SH010 please"]}, "is not an entity ID"),
+        ({}, "Nothing to add"),
+        ({"entity_ids": ["s-1"] * 51}, "At most 50"),
+        ({"task_ids": ["t-sh010-anim"], "task_type": "Animation"}, "task_type picks the preview of entity_ids"),
+        ({"entity_ids": ["s-1"], "task_type": "Lighting"}, "Unknown task type 'Lighting'"),
+    ],
+)
+async def test_add_to_playlist_checks_everything_before_writing(call, wra, writable, args, error):
+    with pytest.raises(ToolError, match=re.escape(error)):
+        await call("add_to_playlist", playlist_id="pl-shots", **args)
+    assert writes(wra) == []
+
+
+async def test_add_to_playlist_rejects_entities_of_another_project(call, wra, writable):
+    wra.data["shots"].append({**wra.data["shots"][0], "id": "s-other", "name": "SH900", "project_id": "p-2"})
+    with pytest.raises(ToolError, match="Entity s-other is not a shot of Demo Short"):
+        await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-other"])
+    assert writes(wra) == []
+
+
+async def test_add_to_playlist_reports_success_when_the_reload_fails(call, wra, writable, monkeypatch):
+    from kitsu_mcp.tools import write
+
+    monkeypatch.setattr(write, "playlist_detail", lambda raw: (_ for _ in ()).throw(ToolError("Kitsu is down")))
+    result = await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-1"])
+    assert result["ok"] and "Could not reload the playlist: Kitsu is down" in result["message"]
+    assert len(result["added"]) == 1 and result["playlist"] is None
+
+
+async def test_add_entity_with_a_broken_current_preview_is_skipped(call, wra, writable):
+    wra.data["shots"][0]["preview_file_id"] = "pf-sh010-broken"
+    result = await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-1"])
+    assert adds(wra) == []
+    assert "current preview is broken" in result["skipped"][0]["reason"]
+
+
+async def test_add_entities_with_the_latest_preview_of_a_task_type(call, wra, writable):
+    # SH010's current preview is set by hand to revision 1; task_type picks the Animation task's latest.
+    wra.data["shots"][0]["preview_file_id"] = "pf-sh010-v1"
+    result = await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-1", "s-2"], task_type="anim")
+    assert adds(wra) == [{"entity_id": "s-1", "preview_file_id": "pf-sh010"}]
+    assert [(e["task_type"], e["revision"]) for e in result["added"]] == [("Animation", 2)]
+    assert result["skipped"] == [{"ref": "s-2", "entity": "SH020", "reason": "no anim preview uploaded"}]
+
+
+async def test_task_type_with_several_tasks_takes_the_most_recent_upload(call, wra, writable):
+    wra.data["tasks"].append({**wra.data["tasks"][2], "id": "t-sh010-anim2"})
+    wra.data["preview_files"]["pf-anim2"] = {
+        **wra.data["preview_files"]["pf-sh010"],
+        "id": "pf-anim2",
+        "task_id": "t-sh010-anim2",
+        "revision": 1,
+        "created_at": "2026-10-01T10:00:00",
+    }
+    result = await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-1"], task_type="Animation")
+    assert [(e["preview_file_id"], e["revision"]) for e in result["added"]] == [("pf-anim2", 1)]
+
+
+async def test_task_type_the_entity_lacks_is_skipped(call, wra, writable):
+    result = await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-2"], task_type="Compositing")
+    assert result["skipped"][0]["reason"] == "no Compositing task" and adds(wra) == []
+
+
+async def test_add_to_playlist_takes_exactly_50_and_dedupes_within_a_call(call, wra, writable):
+    result = await call(
+        "add_to_playlist", playlist_id="pl-shots", entity_ids=["s-1"] * 25, task_ids=["t-sh010-anim"] * 25
+    )
+    assert len(adds(wra)) == 1
+    assert len(result["added"]) == 1 and len(result["skipped"]) == 49
+    assert {s["reason"] for s in result["skipped"]} == {"already in the playlist"}
+
+
+async def test_failure_mid_add_reports_progress_and_a_retry_finishes(call, wra, writable, monkeypatch):
+    post = wra.post
+
+    def flaky(path, data):
+        if data.get("entity_id") == "a-forest":
+            raise ToolError("POST failed: timed out; it MAY have been applied.")
+        return post(path, data)
+
+    wra.data["assets"][1]["preview_file_id"] = "pf-hero"
+    monkeypatch.setattr(wra, "post", flaky)
+    with pytest.raises(ToolError) as error:
+        await call("add_to_playlist", playlist_id="pl-assets", entity_ids=["a-hero", "a-forest"])
+    assert "Added Hero before failing on Forest: POST failed: timed out; it MAY have been applied. Calling" in str(
+        error.value
+    )
+    monkeypatch.setattr(wra, "post", post)
+    retry = await call("add_to_playlist", playlist_id="pl-assets", entity_ids=["a-hero", "a-forest"])
+    assert [e["entity"] for e in retry["added"]] == ["Forest"]
+    assert retry["skipped"] == [{"ref": "a-hero", "entity": "Hero", "reason": "already in the playlist"}]
+
+
+async def test_failure_mid_add_keeps_the_progress_report_for_any_error(call, wra, writable, monkeypatch):
+    def broken(path, data):
+        raise ConnectionResetError("connection reset")
+
+    monkeypatch.setattr(wra, "post", broken)
+    with pytest.raises(ToolError, match="Added nothing before failing on SH010: connection reset. Calling"):
+        await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-1"])
