@@ -147,3 +147,49 @@ class AssetDetail(BaseModel):
     project_id: str | None
     data: dict[str, Any] | None
     tasks: list[TaskSummary]
+
+
+class Sequence(BaseModel):
+    id: str
+    name: str
+    episode: str | None = None
+    description: str | None = None
+
+
+class ShotSummary(BaseModel):
+    id: str
+    name: str
+    sequence: str | None
+    episode: str | None
+    frame_in: int | None
+    frame_out: int | None
+    nb_frames: int | None
+    tasks: list[TaskSummary]
+
+
+class ShotList(BaseModel):
+    total: int = Field(description="Matches before limit/offset")
+    shots: list[ShotSummary]
+
+
+class ShotDetail(ShotSummary):
+    project_id: str | None
+    description: str | None
+    fps: str | None
+    data: dict[str, Any] | None
+
+
+class CastAsset(BaseModel):
+    asset_id: str
+    name: str | None
+    asset_type: str | None
+    occurrences: int | None
+    label: str | None = None
+
+
+class CastIn(BaseModel):
+    shot_id: str
+    shot: str | None
+    sequence: str | None
+    episode: str | None
+    occurrences: int | None
