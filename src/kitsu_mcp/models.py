@@ -312,6 +312,35 @@ class PlaylistDetail(Playlist):
     items: list[PlaylistItem]
 
 
+class VideoInfo(BaseModel):
+    preview_file_id: str
+    task_id: str | None
+    revision: int | None
+    original_name: str | None
+    extension: str | None
+    quality: str = Field(description="Which file was probed: low (Kitsu's web-playback encode) or original")
+    file_bytes: int
+    codec: str | None
+    width: int
+    height: int
+    fps: float
+    duration: float = Field(description="Seconds")
+    frame_count: int = Field(description="Frames are numbered 1..frame_count, like Kitsu's player")
+    kitsu_width: int | None = None
+    kitsu_height: int | None = None
+    kitsu_duration: float | None = None
+    original_file_size: int | None = Field(None, description="Bytes of the uploaded file")
+    annotated_frames: list[int] = Field(default_factory=list, description="Frames with drawings in Kitsu")
+
+
+class SavedVideo(BaseModel):
+    preview_file_id: str
+    path: str
+    quality: str
+    bytes: int
+    skipped: bool = Field(default=False, description="The file already existed and overwrite was False")
+
+
 class WriteResult(BaseModel):
     ok: bool
     message: str

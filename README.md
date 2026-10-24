@@ -68,6 +68,7 @@ Project, task type, status and person arguments take names (case-insensitive) or
 | Tasks | `search_tasks` (type, status, assignee, due dates, overdue, ...), `get_task`, `task_history`, `my_tasks` |
 | People | `list_people`, `get_person_tasks`, `workload` |
 | Previews | `get_preview` (image), `get_preview_file`, `list_task_previews`, `download_previews`, `list_playlists`, `get_playlist` |
+| Video (`[video]` extra) | `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | Write (opt-in) | `add_comment`, `set_task_status`, `assign_task`, `update_task_schedule`, `log_time` |
 
 **Resources:** `kitsu://projects`, `kitsu://task-types`, `kitsu://task-statuses`,
