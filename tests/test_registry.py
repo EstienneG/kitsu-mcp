@@ -58,13 +58,15 @@ def test_tool_functions_are_callable_directly(fake):
 
 
 # What clients put in the model's context before any call: every tool's name, description and input schema.
-# 49.8k characters (about 12.5k tokens) with every group and write tools on, as of 56 tools. Most sessions
+# 53.9k characters (about 13.5k tokens) with every group and write tools on, as of 60 tools. Most sessions
 # only list the core tools (see test_groups). Raise this deliberately, with the
 # README's "Context cost" paragraph, when a new tool earns its place.
-TOOL_LIST_BUDGET_CHARS = 51_000
+TOOL_LIST_BUDGET_CHARS = 55_000
 
 
-async def test_tool_list_stays_within_its_context_budget():
+async def test_tool_list_stays_within_its_context_budget(all_groups):
+    """The whole list, every group listed (KITSU_TOOL_GROUPS=all): without all_groups the group filter would
+    hide most tools and the budget would measure only the core list."""
     import json
 
     mcp.enable(tags={"write"})

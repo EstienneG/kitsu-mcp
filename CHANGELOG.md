@@ -10,6 +10,9 @@ change behaviour (called out under **Changed**).
   `manage_asset`, `manage_concept`, `manage_edit` and `manage_task`, one tool per kind of record with an
   `action` (create, update, delete; restore for shots; close and reopen for projects). Each has a dry run;
   deletes also need `confirm=True`, and the dry run says whether Kitsu will cancel or delete.
+- `production` tools (writes): `task_action` (start, submit for review), `publish_preview` (a file as the next
+  revision, with a status; stdio only), `batch_tasks` (status, assign, unassign, priority or delete up to 100
+  tasks) and `manage_comment` (edit, delete, delete a reply).
 - Write tools are tested for real against throwaway Zou 1.0.43 and 1.0.97 containers in CI
   (`KITSU_TEST_WRITES=1`, local hosts only).
 
