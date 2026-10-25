@@ -271,8 +271,7 @@ def manage_schedule(
     set_task_type_dates: task_type and start_date / end_date (YYYY-MM-DD), optional man_days; creates the
     schedule row if missing. add_milestone: name and date (optional task_type). delete_milestone: milestone_id
     (production_schedule lists them); needs confirm=True. Kitsu lets admins and the production's managers do
-    this. dry_run=True: show the plan without
-    writing; show it to the user first.
+    this. dry_run=True: show the plan without writing; show it to the user first.
     """
     record = _project(project)
     lookups = get_lookups()
