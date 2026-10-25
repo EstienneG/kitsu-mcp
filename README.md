@@ -176,7 +176,7 @@ Layout (`src/kitsu_mcp/`):
 - `kitsu/` talking to Kitsu, independent of the MCP server and tools: `client.py` HTTP client (login, re-login, retries, error
   mapping), `auth.py` per-caller credentials, `lookups.py` cached reference data and name resolution,
   `production.py` project-wide task views, `plans.py` write plans (dry run), `custom_fields.py`, `links.py`
-  Kitsu web links, `validation.py`, `video.py` movie decoding, `models.py` output schemas, `formatters.py`
+  Kitsu web links, `validation.py`, `video.py` movie decoding, `models/` output schemas by area, `formatters.py`
   payload → model conversion.
 - `server/` what MCP clients reach besides tools: `app.py` the FastMCP app and `@tool`, `groups.py` tool
   groups and `load_tools`, `http.py` HTTP mode (hidden local tools, `/health`, TLS guard), `prompts.py`,
