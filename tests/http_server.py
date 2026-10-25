@@ -8,7 +8,8 @@ import base64
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.kitsu.client import LoginRejected
-from tests.fakes import ALICE, BOB, FakeClient
+from tests.fake_data import ALICE, BOB
+from tests.fakes import FakeClient
 
 
 def basic(user: str, password: str) -> dict[str, str]:

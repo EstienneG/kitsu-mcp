@@ -4,7 +4,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.server import mcp
-from tests.fakes import ALICE, BOB, ST_DONE, ST_WFA, TT_ANIM
+from tests.fake_data import ALICE, BOB, ST_DONE, ST_WFA, TT_ANIM
 
 WRITE_TOOLS = {
     "add_comment",

@@ -12,7 +12,7 @@ from kitsu_mcp.kitsu import auth
 from kitsu_mcp.kitsu import client as client_module
 from kitsu_mcp.kitsu.auth import Credentials, TTLCache, parse_authorization
 from kitsu_mcp.server import mcp
-from tests.fakes import ALICE, BOB
+from tests.fake_data import ALICE, BOB
 from tests.http_server import REQUESTS, PerUserFake, basic
 
 # --- header parsing ----------------------------------------------------------------------------------

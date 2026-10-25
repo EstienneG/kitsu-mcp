@@ -1,0 +1,528 @@
+"""The seed data behind FakeClient: a small invented production, and the IDs tests refer to."""
+
+from typing import Any
+
+PROJECT = "p-1"
+TT_MODEL, TT_ANIM, TT_COMP = "tt-model", "tt-anim", "tt-comp"
+ST_WIP, ST_WFA, ST_DONE, ST_RETAKE, ST_TODO = "st-wip", "st-wfa", "st-done", "st-retake", "st-todo"
+ALICE, BOB = "person-alice", "person-bob"
+
+
+def seed() -> dict[str, Any]:
+    task_types = [
+        {"id": TT_MODEL, "name": "Modeling", "short_name": "MOD", "for_entity": "Asset", "department_id": "dep-model"},
+        {"id": TT_ANIM, "name": "Animation", "short_name": "ANIM", "for_entity": "Shot", "department_id": "dep-anim"},
+        {"id": TT_COMP, "name": "Compositing", "short_name": "COMP", "for_entity": "Shot", "department_id": "dep-comp"},
+        {"id": "tt-old", "name": "Old", "short_name": "OLD", "for_entity": "Asset", "archived": True},
+    ]
+    statuses = [
+        {"id": ST_TODO, "name": "Todo", "short_name": "todo", "is_done": False, "is_default": True},
+        {"id": ST_WIP, "name": "Work In Progress", "short_name": "wip", "is_done": False, "is_wip": True},
+        {
+            "id": ST_WFA,
+            "name": "Waiting For Approval",
+            "short_name": "wfa",
+            "is_done": False,
+            "is_feedback_request": True,
+        },
+        {"id": ST_RETAKE, "name": "Retake", "short_name": "retake", "is_done": False, "is_retake": True},
+        {"id": ST_DONE, "name": "Done", "short_name": "done", "is_done": True},
+    ]
+    people = [
+        {
+            "id": ALICE,
+            "full_name": "Alice Martin",
+            "first_name": "Alice",
+            "last_name": "Martin",
+            "email": "alice@example.com",
+            "desktop_login": "alice",
+            "role": "user",
+            "active": True,
+        },
+        {
+            "id": BOB,
+            "full_name": "Bob Leroy",
+            "first_name": "Bob",
+            "last_name": "Leroy",
+            "email": "bob@example.com",
+            "desktop_login": "bob",
+            "role": "supervisor",
+            "active": True,
+        },
+    ]
+    projects = [
+        {
+            "id": PROJECT,
+            "name": "Demo Short",
+            "production_type": "short",
+            "project_status_id": "ps-open",
+            "fps": "24",
+            "resolution": "1920x1080",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+        },
+        {"id": "p-2", "name": "Closed Show", "production_type": "tvshow", "project_status_id": "ps-closed"},
+    ]
+    asset_types = [{"id": "at-char", "name": "Character"}, {"id": "at-env", "name": "Environment"}]
+    assets = [
+        {
+            "id": "a-hero",
+            "name": "Hero",
+            "asset_type_id": "at-char",
+            "asset_type_name": "Character",
+            "entity_type_id": "at-char",
+            "project_id": PROJECT,
+            "description": "Main character",
+            "data": {"rigged": "true", "date_rendu": "2026-11-06", "resolution": ""},
+            "preview_file_id": "pf-hero",
+            "canceled": False,
+        },
+        {
+            "id": "a-forest",
+            "name": "Forest",
+            "asset_type_id": "at-env",
+            "asset_type_name": "Environment",
+            "entity_type_id": "at-env",
+            "project_id": PROJECT,
+            "description": None,
+            "data": None,
+            "preview_file_id": None,
+            "canceled": False,
+        },
+    ]
+    sequences = [{"id": "seq-1", "name": "SQ010", "project_id": PROJECT, "parent_id": None, "type": "Sequence"}]
+    shots = [
+        {
+            "id": "s-1",
+            "name": "SH010",
+            "sequence_id": "seq-1",
+            "parent_id": "seq-1",
+            "sequence_name": "SQ010",
+            "episode_id": None,
+            "episode_name": None,
+            "project_id": PROJECT,
+            "frame_in": 1,
+            "frame_out": 48,
+            "nb_frames": 48,
+            "fps": "24",
+            "description": None,
+            "data": {"anim_level": "⭐⭐", "key_shot": "true", "handle_in": 4},
+            "preview_file_id": "pf-sh010",
+            "canceled": False,
+        },
+        {
+            "id": "s-2",
+            "name": "SH020",
+            "sequence_id": "seq-1",
+            "parent_id": "seq-1",
+            "sequence_name": "SQ010",
+            "episode_id": None,
+            "episode_name": None,
+            "project_id": PROJECT,
+            "frame_in": None,
+            "frame_out": None,
+            "nb_frames": 72,
+            "fps": None,
+            "description": None,
+            "data": {"frame_in": "101", "frame_out": 172, "key_shot": "false"},
+            "preview_file_id": None,
+            "canceled": False,
+        },
+    ]
+
+    def task(id_, entity, task_type, status, assignees, due=None, estimation=0, duration=0, **extra):
+        return {
+            "id": id_,
+            "entity_id": entity,
+            "task_type_id": task_type,
+            "task_status_id": status,
+            "assignees": assignees,
+            "due_date": due,
+            "start_date": None,
+            "estimation": estimation,
+            "duration": duration,
+            "retake_count": 0,
+            "project_id": PROJECT,
+            "last_comment_date": None,
+            **extra,
+        }
+
+    tasks = [
+        task("t-hero-mod", "a-hero", TT_MODEL, ST_WFA, [ALICE], due="2026-10-01", estimation=960, duration=600),
+        task("t-forest-mod", "a-forest", TT_MODEL, ST_WIP, [BOB], due="2026-12-01", estimation=480),
+        task("t-sh010-anim", "s-1", TT_ANIM, ST_DONE, [ALICE], due="2026-09-01", estimation=480, duration=500),
+        task("t-sh010-comp", "s-1", TT_COMP, ST_RETAKE, [BOB], due="2026-10-10", estimation=240, duration=60),
+        task("t-sh020-anim", "s-2", TT_ANIM, ST_TODO, [], estimation=480),
+    ]
+    comments = {
+        "t-hero-mod": [
+            {
+                "id": "c-2",
+                "created_at": "2026-10-02T10:00:00",
+                "text": "Ready for review",
+                "person": {"id": ALICE, "full_name": "Alice Martin"},
+                "person_id": ALICE,
+                "task_status": {"id": ST_WFA, "short_name": "wfa"},
+                "task_status_id": ST_WFA,
+                "previews": [{"id": "pf-hero", "revision": 2}],
+            },
+            {
+                "id": "c-1",
+                "created_at": "2026-09-20T09:00:00",
+                "text": "Started",
+                "person": {"id": ALICE, "first_name": "Alice", "last_name": "Martin"},
+                "person_id": ALICE,
+                "task_status": {"id": ST_WIP, "short_name": "wip"},
+                "task_status_id": ST_WIP,
+                "previews": [],
+            },
+        ],
+        "t-sh010-anim": [
+            {
+                "id": "c-anim-3",
+                "created_at": "2026-08-31T09:00:00",
+                "text": "Approved, the v1 00:00:01:12 (37) fix works.",
+                "person": {"id": BOB, "full_name": "Bob Leroy"},
+                "person_id": BOB,
+                "task_status": {"id": ST_DONE, "short_name": "done"},
+                "task_status_id": ST_DONE,
+                "previews": [],
+            },
+            {
+                "id": "c-anim-2",
+                "created_at": "2026-08-30T10:00:00",
+                "text": "v2: fixed the arm at frame 30",
+                "person": {"id": ALICE, "full_name": "Alice Martin"},
+                "person_id": ALICE,
+                "task_status": {"id": ST_WFA, "short_name": "wfa"},
+                "task_status_id": ST_WFA,
+                "previews": [{"id": "pf-sh010", "revision": 2}],
+            },
+            {
+                "id": "c-anim-1",
+                "created_at": "2026-08-20T10:00:00",
+                "text": "Arm pops at 00:00:01:00 and again around 2.5s; see drawing.",
+                "person": {"id": BOB, "full_name": "Bob Leroy"},
+                "person_id": BOB,
+                "task_status": {"id": ST_RETAKE, "short_name": "retake"},
+                "task_status_id": ST_RETAKE,
+                "previews": [{"id": "pf-sh010-v1", "revision": 1}],
+            },
+        ],
+    }
+    preview_files = {
+        "pf-hero": {
+            "id": "pf-hero",
+            "task_id": "t-hero-mod",
+            "revision": 2,
+            "extension": "png",
+            "original_name": "hero_v002",
+            "is_movie": False,
+            "status": "ready",
+            "width": 1920,
+            "height": 1080,
+            "created_at": "2026-10-02T10:00:00",
+            "validation_status": "neutral",
+        },
+        "pf-sh010": {
+            "id": "pf-sh010",
+            "task_id": "t-sh010-anim",
+            "revision": 2,
+            "extension": "mp4",
+            "original_name": "sh010_anim_v002",
+            "is_movie": True,
+            "status": "ready",
+            "width": 1920,
+            "height": 1080,
+            "duration": 3.0,
+            "position": 1,
+            "file_size": 9000,
+            "annotations": None,
+            "data": {"original_file_size": 4000},
+            "created_at": "2026-08-30T10:00:00",
+            "validation_status": "neutral",
+        },
+        "pf-sh010-v2b": {
+            "id": "pf-sh010-v2b",
+            "task_id": "t-sh010-anim",
+            "revision": 2,
+            "position": 2,
+            "extension": "mp4",
+            "original_name": "sh010_anim_v002_render",
+            "is_movie": False,
+            "status": "ready",
+            "width": 1920,
+            "height": 1080,
+            "duration": 3.0,
+            "file_size": 9500,
+            "annotations": None,
+            "data": {},
+            "created_at": "2026-08-30T10:05:00",
+            "validation_status": "neutral",
+        },
+        "pf-sh010-broken": {
+            "id": "pf-sh010-broken",
+            "task_id": "t-sh010-anim",
+            "revision": 3,
+            "position": 1,
+            "extension": "mp4",
+            "original_name": "sh010_anim_v003",
+            "is_movie": False,
+            "status": "broken",
+            "width": 0,
+            "height": 0,
+            "duration": 0,
+            "file_size": 0,
+            "annotations": None,
+            "data": {},
+            "created_at": "2026-09-01T10:00:00",
+            "validation_status": "neutral",
+        },
+        "pf-sh010-v1": {
+            "id": "pf-sh010-v1",
+            "task_id": "t-sh010-anim",
+            "revision": 1,
+            "extension": "mov",
+            "original_name": "sh010_anim_v001",
+            "is_movie": False,  # Kitsu's flag is unreliable: the extension says it is a movie
+            "status": "ready",
+            "width": 1920,
+            "height": 1080,
+            "duration": 2.0,
+            # Kitsu stores drawings by time; 1.0 s at 24 fps is frame 25, 2.0 s would be past the end.
+            "annotations": [
+                {"time": 1.0, "drawing": {"objects": [{"type": "path"}]}},
+                {"time": 0.5, "drawing": {"objects": []}},
+            ],
+            "data": {},
+            "created_at": "2026-08-20T10:00:00",
+            "validation_status": "rejected",
+        },
+    }
+    casting = {
+        "s-1": [
+            {
+                "asset_id": "a-hero",
+                "asset_name": "Hero",
+                "asset_type_name": "Character",
+                "nb_occurences": 1,
+                "label": "animate",
+            }
+        ]
+    }
+    playlists = [
+        {
+            "id": "pl-1",
+            "name": "Dailies",
+            "project_id": PROJECT,
+            "for_entity": "shot",
+            "for_client": False,
+            "task_type_id": TT_ANIM,
+            "episode_id": None,
+            "created_at": "2026-10-20T08:00:00",
+            "updated_at": "2026-10-21T08:00:00",
+            "shots": [{"entity_id": "s-1", "preview_file_id": "pf-sh010"}],
+        }
+    ]
+    # Custom fields ("metadata descriptors"), shaped like the live instance's. Kitsu stores values as text.
+    custom_fields = [
+        {
+            "id": "md-level",
+            "project_id": PROJECT,
+            "name": "Anim Level",
+            "field_name": "anim_level",
+            "entity_type": "Shot",
+            "data_type": "list",
+            "choices": ["⭐", "⭐⭐", "⭐⭐⭐"],
+            "departments": ["dep-anim"],
+            "position": 2,
+            "for_client": False,
+        },
+        {
+            "id": "md-key",
+            "project_id": PROJECT,
+            "name": "key_shot",
+            "field_name": "key_shot",
+            "entity_type": "Shot",
+            "data_type": "boolean",
+            "choices": [],
+            "departments": [],
+            "position": 1,
+            "for_client": False,
+        },
+        {
+            "id": "md-rigged",
+            "project_id": PROJECT,
+            "name": "Rigged",
+            "field_name": "rigged",
+            "entity_type": "Asset",
+            "data_type": "boolean",
+            "choices": [],
+            "departments": [],
+            "position": None,
+            "for_client": True,
+        },
+        {
+            "id": "md-due",
+            "project_id": PROJECT,
+            "name": "DATE RENDU",
+            "field_name": "date_rendu",
+            "entity_type": "Asset",
+            "data_type": "date",
+            "choices": [],
+            "departments": [],
+            "position": None,
+            "for_client": False,
+        },
+    ]
+    departments = [
+        {"id": "dep-model", "name": "Modeling", "color": "#888", "archived": False},
+        {"id": "dep-anim", "name": "Animation", "color": "#888", "archived": False},
+        {"id": "dep-comp", "name": "Compositing", "color": "#888", "archived": False},
+        {"id": "dep-sound", "name": "Sound", "color": "#888", "archived": False},
+    ]
+    return {
+        "departments": departments,
+        "custom_fields": custom_fields,
+        "task_types": task_types,
+        "statuses": statuses,
+        "people": people,
+        "projects": projects,
+        "asset_types": asset_types,
+        "assets": assets,
+        "sequences": sequences,
+        "shots": shots,
+        "tasks": tasks,
+        "comments": comments,
+        "preview_files": preview_files,
+        "casting": casting,
+        "playlists": playlists,
+        "episodes": [],
+        "edits": [{"id": "ed-trailer", "name": "Trailer Cut", "project_id": "p-1"}],
+        "concepts": [{"id": "co-hero", "name": "Hero sketch v2", "project_id": "p-1"}],
+        "notifications": [
+            {
+                "id": "n-1",
+                "notification_type": "comment",
+                "read": False,
+                "created_at": "2026-10-14T09:00:00",
+                "project_id": "p-1",
+                "project_name": "Demo Short",
+                "full_entity_name": "SQ010 / SH010",
+                "task_id": "t-sh010-comp",
+                "task_type_id": TT_COMP,
+                "task_status_id": ST_RETAKE,
+                "author_id": BOB,
+                "comment_id": "c-comp-1",
+                "comment_text": "Edges flicker, please fix",
+                "reply_text": "",
+            },
+            {
+                "id": "n-0",
+                "notification_type": "assignation",
+                "read": True,
+                "created_at": "2026-10-01T09:00:00",
+                "project_id": "p-1",
+                "project_name": "Demo Short",
+                "full_entity_name": "Hero",
+                "task_id": "t-hero-mod",
+                "task_type_id": TT_MODEL,
+                "task_status_id": ST_WIP,
+                "author_id": BOB,
+                "comment_id": None,
+                "comment_text": "",
+                "reply_text": "",
+            },
+        ],
+        "time_spents": [
+            # Past days only: write tests log time on 2026-10-14 and expect an empty day.
+            {"task_id": "t-hero-mod", "person_id": ALICE, "date": "2026-10-12", "duration": 240},
+            {"task_id": "t-hero-mod", "person_id": ALICE, "date": "2026-10-13", "duration": 180},
+            {"task_id": "t-sh010-anim", "person_id": ALICE, "date": "2026-10-13", "duration": 60},
+            {"task_id": "t-sh010-anim", "person_id": ALICE, "date": "2026-09-01", "duration": 500},
+            {"task_id": "t-forest-mod", "person_id": BOB, "date": "2026-10-13", "duration": 120},
+        ],
+        "me": ALICE,
+        "day_offs": [
+            {"id": "do-1", "person_id": ALICE, "date": "2026-10-09", "end_date": "2026-10-12", "description": "Trip"},
+            {"id": "do-2", "person_id": ALICE, "date": "2026-08-03", "end_date": "2026-08-14", "description": None},
+        ],
+        "schedule_items": [
+            # Task-type spans (no object_id): Modeling ended before today (2026-10-15) with work still open.
+            {
+                "id": "si-mod",
+                "task_type_id": TT_MODEL,
+                "object_id": None,
+                "start_date": "2026-02-01",
+                "end_date": "2026-09-30",
+                "man_days": 40,
+            },
+            {
+                "id": "si-anim",
+                "task_type_id": TT_ANIM,
+                "object_id": None,
+                "start_date": "2026-06-01",
+                "end_date": "2026-11-30",
+                "man_days": None,
+            },
+            # A per-shot item (object_id set) is not a task-type span.
+            {
+                "id": "si-sh010",
+                "task_type_id": TT_ANIM,
+                "object_id": "s-1",
+                "start_date": "2026-07-01",
+                "end_date": "2026-07-02",
+                "man_days": None,
+            },
+        ],
+        "milestones": [
+            {"id": "ms-2", "date": "2026-12-01", "name": "Delivery", "task_type_id": None},
+            {"id": "ms-1", "date": "2026-11-01", "name": "Anim lock", "task_type_id": TT_ANIM},
+        ],
+        # Zou's quotas answer: person -> period -> measure -> {key: value}; weeks are unpadded ("2026-7").
+        "quotas": {
+            ALICE: {
+                "week": {
+                    "count": {"2026-7": 1.0, "2026-40": 2.0, "2026-41": 0},
+                    "frames": {"2026-7": 0, "2026-40": 96, "2026-41": 0},
+                    "seconds": {"2026-7": 0, "2026-40": 4.0, "2026-41": 0},
+                    "drawings": {},
+                },
+                "month": {"count": {"2026-02": 1.0, "2026-10": 2.0}, "frames": {"2026-10": 96}},
+            },
+            BOB: {"week": {"count": {"2026-40": 0}, "frames": {}}},
+            # Zou sums everyone under "total".
+            "total": {"week": {"count": {"2026-7": 1.0, "2026-40": 2.0}, "frames": {"2026-40": 96}}},
+        },
+        "budgets": [
+            {"id": "b-1", "project_id": PROJECT, "name": "First pass", "revision": 1, "currency": "EUR"},
+            {"id": "b-2", "project_id": PROJECT, "name": "Revised", "revision": 2, "currency": "EUR"},
+        ],
+        "budget_entries": {
+            "b-2": [
+                # 3 months at 100/day (20 days a month), October set by hand to 500.
+                {
+                    "id": "be-1",
+                    "person_id": ALICE,
+                    "department_id": "dep-anim",
+                    "position": "artist",
+                    "seniority": "mid",
+                    "start_date": "2026-09-01",
+                    "months_duration": 3,
+                    "daily_salary": 100,
+                    "exceptions": {"2026-10": 500, "2027-05": 9999},
+                },
+                {
+                    "id": "be-2",
+                    "person_id": BOB,
+                    "department_id": "dep-model",
+                    "position": "supervisor",
+                    "seniority": "senior",
+                    "start_date": "2026-11-01",
+                    "months_duration": 1,
+                    "daily_salary": 200,
+                    "exceptions": {},
+                },
+            ],
+        },
+    }

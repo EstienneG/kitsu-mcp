@@ -1,6 +1,7 @@
 from kitsu_mcp.kitsu.formatters import comment, task_summary
 from kitsu_mcp.kitsu.lookups import Lookups
-from tests.fakes import ALICE, ST_WFA, TT_MODEL, FakeClient
+from tests.fake_data import ALICE, ST_WFA, TT_MODEL
+from tests.fakes import FakeClient
 
 
 def test_comment_author_falls_back_to_first_and_last_name():
