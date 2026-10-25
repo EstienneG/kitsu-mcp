@@ -22,13 +22,14 @@ from mcp_types import ToolListChangedNotification
 from pydantic import Field
 
 from kitsu_mcp.kitsu.auth import TTLCache, parse_authorization
+from kitsu_mcp.server.app import GROUPS as GROUP_DESCRIPTIONS
 from kitsu_mcp.server.app import mcp, tool
 from kitsu_mcp.server.http import LOCAL_TAG, over_http
 
 CORE = "core"
 
-GROUPS = ("browse", "activity", "planning", "review", "write")
-"""Groups `load_tools` adds (its docstring says what each holds). A tool's group is its tag."""
+GROUPS = tuple(GROUP_DESCRIPTIONS)
+"""Groups `load_tools` adds (described in kitsu_mcp.server.app.GROUPS). A tool's group is its tag."""
 
 _loaded: TTLCache[frozenset[str]] = TTLCache(ttl=24 * 3600, max_size=4096)
 _lock = threading.Lock()
@@ -102,20 +103,23 @@ class GroupFilter(Middleware):
 mcp.add_middleware(GroupFilter())
 
 
-@tool(annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False}, tags={CORE})
+_LOAD_TOOLS = (
+    "Add tool groups to this conversation. At first only the core tools are listed (search, projects, task "
+    "search and details, people's tasks, assets, shots); load a group before you need its tools.\n\n"
+    + "\n".join(f"{name}: {holds}." for name, holds in GROUP_DESCRIPTIONS.items())
+)
+
+
+@tool(
+    annotations={"readOnlyHint": True, "idempotentHint": True, "openWorldHint": False},
+    tags={CORE},
+    description=_LOAD_TOOLS,
+)
 async def load_tools(
-    groups: Annotated[list[str], Field(description="Some of: browse, activity, planning, review, write; or all")],
+    groups: Annotated[list[str], Field(description=f"Some of: {', '.join(GROUPS)}; or all")],
     ctx: Context,
 ) -> str:
-    """Add tool groups to this conversation. At first only the core tools are listed (search, projects,
-    task search and details, people's tasks, assets, shots); load a group before you need its tools.
-
-    browse: list assets, shots, sequences, episodes, people, types; custom fields; casting.
-    activity: what changed lately on a project; the user's notifications.
-    planning: workload, timesheets with days off, quotas, schedule and milestones, budget.
-    review: preview images, playlists, frame-level review of movies.
-    write: comments, status changes, assignments, schedules, time logs, playlists (if the server allows).
-    """
+    """Add groups to what this client lists (description: _LOAD_TOOLS, built from the group map)."""
     wanted = {g.strip().lower() for g in groups}
     if "all" in wanted:
         wanted = set(GROUPS)

@@ -141,7 +141,9 @@ def _too_big(answer: Any) -> dict:
     }
 
 
-@tool(annotations={"readOnlyHint": True, "idempotentHint": True}, tags={"browse"})
+# Core: agents need it exactly when the always-listed tools answer with stale names (a new person, a renamed
+# task type), and it costs a few dozen tokens.
+@tool(annotations={"readOnlyHint": True, "idempotentHint": True}, tags={"core"})
 def refresh_cache() -> str:
     """Drop cached reference data (projects, task types, statuses, people, departments, custom fields) so the
     next call refetches it."""

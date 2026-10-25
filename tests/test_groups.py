@@ -8,7 +8,7 @@ from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.server import groups, mcp
-from tests.test_http import basic, server  # noqa: F401  (fixture)
+from tests.http_server import basic
 
 CORE = {
     "whoami",
@@ -21,6 +21,7 @@ CORE = {
     "get_asset",
     "get_shot",
     "kitsu_get",
+    "refresh_cache",
     "load_tools",
 }
 
@@ -102,7 +103,7 @@ def test_parse_groups():
         groups.parse_groups("planing")
 
 
-async def test_loaded_groups_are_per_http_caller(server):  # noqa: F811
+async def test_loaded_groups_are_per_http_caller(server):
     """Without MCP sessions (protocol 2026-07-28) a caller is their Kitsu login: Bob does not see what Alice
     loaded."""
     alice, bob = basic("alice@example.com", "right"), basic("bob@example.com", "right")
@@ -135,7 +136,7 @@ def test_http_callers_are_keyed_by_session_then_full_login(monkeypatch):
 
 # The core list is what every conversation pays for before any call. Raise this deliberately, with the
 # README's "Context cost" paragraph, when a tool earns a place in core rather than in a group.
-CORE_BUDGET_CHARS = 11_000  # 10.0k as of 11 core tools
+CORE_BUDGET_CHARS = 11_000  # 10.2k as of 12 core tools
 SEP = (",", ":")
 
 
