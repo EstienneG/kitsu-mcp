@@ -12,6 +12,12 @@ change behaviour (called out under **Changed**).
   `all` for clients that do not refresh their tool list). Listing never gates calls: any registered tool
   can be called by name, and write tools still need `KITSU_ALLOW_WRITE`.
 
+- `planning` tools: `quotas` (output per artist per day, week or month, as Kitsu's Quotas page),
+  `production_schedule` (task types' planned dates against their tasks' due dates, late task types,
+  milestones) and `budget` (planned salary costs per person and department, computed as Kitsu does).
+- `timesheet` lists the person's days off in the period.
+- `assign_task(remove=True)` unassigns someone, and reports it when Kitsu refuses (it skips tasks silently).
+
 ### Changed
 - Fewer tools for the same features (48 to 44), so agents see a shorter list: `my_tasks` is
   `get_person_tasks` without a person; `task_history` and `list_task_previews` are `get_task` with

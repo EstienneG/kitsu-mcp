@@ -104,6 +104,27 @@ async def test_assign_task(call, fake, writable):
     assert result["task"]["assignees"] == ["Bob Leroy"]
 
 
+async def test_unassign_task(call, fake, writable):
+    plan = await call("assign_task", task_id="t-hero-mod", person="Alice Martin", remove=True, dry_run=True)
+    assert (plan["before"], plan["after"]) == ({"assignees": ["Alice Martin"]}, {"assignees": []})
+    assert writes(fake) == []
+    result = await call("assign_task", task_id="t-hero-mod", person="Alice Martin", remove=True)
+    assert writes(fake) == [
+        ("PUT", "actions/tasks/clear-assignation", {"task_ids": ["t-hero-mod"], "person_id": ALICE})
+    ]
+    assert result["task"]["assignees"] == [] and result["message"] == "Unassigned Alice Martin."
+    again = await call("assign_task", task_id="t-hero-mod", person="Alice Martin", remove=True)
+    assert again["message"] == "Alice Martin was not assigned; nothing changed."
+    assert len(writes(fake)) == 1  # nothing sent the second time
+
+
+async def test_unassign_reports_what_kitsu_skipped(call, fake, writable):
+    """Zou silently skips tasks the caller may not unassign; the tool must not claim success."""
+    fake.data["unassign_denied"] = {"t-hero-mod"}
+    with pytest.raises(ToolError, match="did not unassign"):
+        await call("assign_task", task_id="t-hero-mod", person="Alice Martin", remove=True)
+
+
 async def test_update_task_schedule(call, fake, writable):
     result = await call("update_task_schedule", task_id="t-hero-mod", due_date="2026-11-01", estimation_minutes=120)
     assert writes(fake) == [("PUT", "data/tasks/t-hero-mod", {"due_date": "2026-11-01", "estimation": 120})]

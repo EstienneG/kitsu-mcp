@@ -50,7 +50,7 @@ async def test_load_tools_lists_a_group_and_notifies(fake):
     async with Client(mcp, message_handler=handler) as client:
         result = (await client.call_tool("load_tools", {"groups": ["planning"]})).data
         assert "workload" in result and "timesheet" in result
-        assert await listed(client) == CORE | {"workload", "timesheet"}
+        assert await listed(client) == CORE | {"workload", "timesheet", "quotas", "production_schedule", "budget"}
         assert "ToolListChangedNotification" in notices
         notices.clear()
         again = (await client.call_tool("load_tools", {"groups": ["planning"]})).data

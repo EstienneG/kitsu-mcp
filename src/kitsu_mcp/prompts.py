@@ -13,6 +13,7 @@ def project_status_report(project: str) -> str:
         "2. Call search_tasks with overdue=True and group_by='assignee', and list the most urgent overdue tasks "
         "per person.\n"
         "3. Call workload and point out anyone overloaded and how much open work is unassigned.\n"
+        "4. Call production_schedule and flag task types past their planned end, and the next milestones.\n"
         "End with three concrete recommendations. Use tables where they help."
     )
 

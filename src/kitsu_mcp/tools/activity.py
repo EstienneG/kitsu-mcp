@@ -13,6 +13,7 @@ from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import (
     Activity,
     ActivityItem,
+    DayOff,
     Notification,
     Notifications,
     SearchHit,
@@ -187,7 +188,7 @@ def search(query: str, project: str | None = None, kinds: list[str] | None = Non
 
 @tool(annotations=READ_ONLY, tags={"planning"})
 def timesheet(person: str | None = None, start: str | None = None, end: str | None = None) -> Timesheet:
-    """Time a person logged over a period, in minutes: per day and per task.
+    """Time a person logged over a period, in minutes: per day and per task, with their days off.
 
     person: name, email or ID (default: the logged-in user). start / end: YYYY-MM-DD (default: the last 7
     days, today included). For time logged on a single task, see get_task (duration).
@@ -218,6 +219,11 @@ def timesheet(person: str | None = None, start: str | None = None, end: str | No
                 minutes=minutes,
             )
         )
+    days_off = [
+        DayOff(start=day(d.get("date")), end=day(d.get("end_date")), description=d.get("description") or None)
+        for d in client.get(f"data/persons/{person_id}/day-offs")
+        if (day(d.get("date")) or "") <= end_day and (day(d.get("end_date") or d.get("date")) or "") >= start_day
+    ]
     return Timesheet(
         person=lookups.person_name(person_id),
         start=start_day,
@@ -225,4 +231,5 @@ def timesheet(person: str | None = None, start: str | None = None, end: str | No
         total_minutes=sum(by_day.values()),
         by_day=[TimesheetDay(date=d, minutes=m) for d, m in sorted(by_day.items())],
         by_task=tasks,
+        days_off=sorted(days_off, key=lambda d: d.start or ""),
     )
