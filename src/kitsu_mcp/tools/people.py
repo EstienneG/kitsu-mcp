@@ -19,7 +19,7 @@ def _person(p: dict, departments: dict[str, str], with_email: bool) -> Person:
     )
 
 
-@tool(annotations=READ_ONLY, tags={"people"})
+@tool(annotations=READ_ONLY, tags={"browse"})
 def list_people(
     project: str | None = None,
     include_inactive: bool = False,
@@ -50,7 +50,7 @@ def list_people(
     return PeopleList(total=len(found), people=found[offset : offset + limit])
 
 
-@tool(annotations=READ_ONLY, tags={"people", "tasks"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def get_person_tasks(
     person: str | None = None,
     done: bool = False,
@@ -101,7 +101,7 @@ def get_person_tasks(
     return PersonTaskList(total=len(tasks), tasks=rows)
 
 
-@tool(annotations=READ_ONLY, tags={"people", "tasks", "reporting"})
+@tool(annotations=READ_ONLY, tags={"planning"})
 def workload(project: str, task_types: list[str] | None = None, departments: list[str] | None = None) -> list[Workload]:
     """Open tasks per person on a project: counts, overdue, waiting for review, retakes, on hold,
     estimate vs. logged.

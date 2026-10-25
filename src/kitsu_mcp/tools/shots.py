@@ -45,14 +45,14 @@ def _text(value) -> str | None:
     return value if value and value != "None" else None
 
 
-@tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"browse"})
 def list_episodes(project: str) -> list[Named]:
     """List a project's episodes (TV shows only; empty for shorts and features)."""
     project_id = get_lookups().project(project)["id"]
     return [Named(id=e["id"], name=e["name"]) for e in get_client().get(f"data/projects/{project_id}/episodes")]
 
 
-@tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"browse"})
 def list_sequences(project: str, episode: str | None = None) -> list[Sequence]:
     """List a project's sequences, optionally only those of one episode (name or ID)."""
     client = get_client()
@@ -70,7 +70,7 @@ def list_sequences(project: str, episode: str | None = None) -> list[Sequence]:
     return sorted(sequences, key=lambda s: (s.episode or "", s.name))
 
 
-@tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"browse"})
 def list_shots(
     project: str,
     sequence: str | None = None,
@@ -137,7 +137,7 @@ def list_shots(
     return ShotList(total=len(results), shots=results[offset : offset + limit])
 
 
-@tool(annotations=READ_ONLY, tags={"shots"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def get_shot(shot_id: str) -> ShotDetail:
     """Get a shot's details (frame range, fps), custom field values (by display name; list_custom_fields
     explains them) and tasks."""
@@ -163,7 +163,7 @@ def get_shot(shot_id: str) -> ShotDetail:
     )
 
 
-@tool(annotations=READ_ONLY, tags={"shots", "assets", "casting"})
+@tool(annotations=READ_ONLY, tags={"browse"})
 def get_casting(shot_id: str | None = None, asset_id: str | None = None) -> list[CastAsset] | list[CastIn]:
     """Casting (the breakdown), either way: the assets cast in a shot (shot_id), or the shots an asset
     is cast in (asset_id)."""

@@ -79,7 +79,7 @@ def _video_note() -> str:
     return note if video.available() else f"{note} {video.INSTALL_HINT}"
 
 
-@tool(annotations=READ_ONLY, tags={"previews"})
+@tool(annotations=READ_ONLY, tags={"review"})
 def get_preview(
     entity_id: str | None = None,
     preview_file_id: str | None = None,
@@ -125,7 +125,7 @@ def task_previews(task_id: str, task: dict | None = None) -> list[PreviewFile]:
     return [_preview_file(p, task) for p in raw]
 
 
-@tool(annotations=READ_ONLY, tags={"previews", "video"})
+@tool(annotations=READ_ONLY, tags={"review"})
 def recent_previews(
     project: str,
     task_type: str | None = None,
@@ -188,7 +188,7 @@ def recent_previews(
 _MAX_FEED_PAGES = 5
 
 
-@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews", "local"})
+@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"review", "local"})
 def download_previews(
     project: str,
     dest_dir: str,
@@ -263,7 +263,7 @@ def project_playlists(project_id: str) -> list[dict]:
     return list(playlists.values())
 
 
-@tool(annotations=READ_ONLY, tags={"previews", "playlists"})
+@tool(annotations=READ_ONLY, tags={"review"})
 def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> PlaylistList:
     """List a project's review playlists, most recently updated first. `total` counts them all."""
     project_id = get_lookups().project(project)["id"]
@@ -272,7 +272,7 @@ def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> Playl
     return PlaylistList(total=len(playlists), playlists=playlists[offset : offset + limit])
 
 
-@tool(annotations=READ_ONLY, tags={"previews", "playlists"})
+@tool(annotations=READ_ONLY, tags={"review"})
 def get_playlist(playlist_id: str) -> PlaylistDetail:
     """A playlist with its entities and the preview file shown for each."""
     playlist_id = object_id(playlist_id, "playlist", "list_playlists")

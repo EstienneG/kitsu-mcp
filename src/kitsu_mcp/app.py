@@ -12,10 +12,13 @@ mcp = FastMCP(
         "names (e.g. wip, wfa, done); list_task_statuses shows them and the role each one plays here "
         "(done, omitted, on hold, waiting review, ...), which every count and filter follows. Durations "
         'and estimates are in minutes. List tools return compact rows by default (detail="full" for '
-        "more). Use kitsu_get for any read the other tools don't cover. Write tools "
-        "(comments, status changes, assignments, schedule, time logs, playlists) only exist when the server "
-        "runs with KITSU_ALLOW_WRITE=true. For write tools, call with dry_run=True first and show the user the "
-        "plan before writing; then confirm with the user before calling them for real."
+        "more). Use kitsu_get for any read the other tools don't cover. Only the core tools are listed at "
+        "first: call load_tools to add a group (browse: list assets, shots, people, types, casting; activity: "
+        "recent changes, notifications; planning: workload, timesheets, quotas, schedule, days off, budget; "
+        "review: previews, playlists, movie review; write: comments, statuses, assignments, schedules, time "
+        "logs, playlists). Write tools only exist when the server runs with KITSU_ALLOW_WRITE=true. For write "
+        "tools, call with dry_run=True first and show the user the plan before writing; then confirm with the "
+        "user before calling them for real."
     ),
 )
 

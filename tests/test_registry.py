@@ -6,7 +6,7 @@ from pathlib import Path
 from kitsu_mcp.server import mcp
 
 
-async def test_readme_lists_every_tool():
+async def test_readme_lists_every_tool(all_groups):
     mcp.enable(tags={"write"})
     try:
         tools = {t.name for t in await mcp.list_tools()}
@@ -17,13 +17,13 @@ async def test_readme_lists_every_tool():
     assert tools - documented == set(), "tools missing from README"
 
 
-async def test_every_tool_has_a_description_and_annotations():
+async def test_every_tool_has_a_description_and_annotations(all_groups):
     for tool in await mcp.list_tools():
         assert tool.description, tool.name
         assert tool.annotations is not None, tool.name
 
 
-async def test_output_schemas_are_generic_and_arguments_kept():
+async def test_output_schemas_are_generic_and_arguments_kept(all_groups):
     """Detailed output schemas are left out to save context; the input schemas must be unchanged."""
     tools = {t.name: t for t in await mcp.list_tools()}
     for name, t in tools.items():
@@ -58,7 +58,7 @@ def test_tool_functions_are_callable_directly(fake):
 
 
 # What clients put in the model's context before any call: every tool's name, description and input schema.
-# 36.4k characters (about 9k tokens) with write tools on, as of 44 tools. Raise this deliberately, with the
+# 37.3k characters (about 9.3k tokens) with every group and write tools on, as of 45 tools. Raise this deliberately, with the
 # README's "Context cost" paragraph, when a new tool earns its place.
 TOOL_LIST_BUDGET_CHARS = 41_000
 

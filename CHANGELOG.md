@@ -5,6 +5,13 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
+### Added
+- Tool groups. A conversation starts with 11 core tools (about 2,500 tokens instead of 9,000); `load_tools`
+  adds the `browse`, `activity`, `planning`, `review` or `write` group when a task needs it, and the server
+  tells the client its tool list changed. `KITSU_TOOL_GROUPS` lists groups from the start (default `write`;
+  `all` for clients that do not refresh their tool list). Listing never gates calls: any registered tool
+  can be called by name, and write tools still need `KITSU_ALLOW_WRITE`.
+
 ### Changed
 - Fewer tools for the same features (48 to 44), so agents see a shorter list: `my_tasks` is
   `get_person_tasks` without a person; `task_history` and `list_task_previews` are `get_task` with

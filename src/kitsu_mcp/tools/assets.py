@@ -69,7 +69,7 @@ def matches_status_filters(tasks: list, status_filters: dict[str, list[str]] | N
     )
 
 
-@tool(annotations=READ_ONLY, tags={"assets"})
+@tool(annotations=READ_ONLY, tags={"browse"})
 def list_assets(
     project: str,
     asset_types: list[str] | None = None,
@@ -137,7 +137,7 @@ def list_assets(
     return AssetList(total=len(results), assets=results[offset : offset + limit])
 
 
-@tool(annotations=READ_ONLY, tags={"assets"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def get_asset(asset_id: str) -> AssetDetail:
     """Get an asset's details, custom field values (by display name; list_custom_fields explains them) and tasks."""
     asset_id = object_id(asset_id, "asset", "list_assets")
