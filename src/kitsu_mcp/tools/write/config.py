@@ -7,7 +7,8 @@ Checked on a throwaway Zou, which differs from gazu (what kitsu-cli calls) in pl
 - A budget entry is a salary line (person, department, start month, months, daily rate), not gazu's
   name/amount: Zou refuses those. Updating one writes None into every field left out (Zou then refuses), so
   `update_line` sends the whole line.
-- Schedule items and milestones are only created through Zou's generic routes, which are for admins.
+- Schedule items and milestones are only created through Zou's generic routes. Admins and the production's
+  managers may use them (older Zou, e.g. 1.0.43, keeps creating schedule rows to admins).
 """
 
 from typing import Any, Literal
@@ -30,9 +31,10 @@ def _project(ref: str) -> dict:
     return get_client().get(f"data/projects/{get_lookups().project(ref)['id']}")
 
 
-def _admin_only(plan: Plan, what: str) -> None:
-    if current_user().get("role") != "admin":
-        plan.fail(f"Kitsu lets only admins {what}; ask an admin, or have them grant you the admin role.")
+def _managers_only(plan: Plan, what: str) -> None:
+    """Zou checks manager access to the production; versions differ, so a warning rather than a refusal."""
+    if current_user().get("role") not in ("admin", "manager"):
+        plan.warnings.append(f"Kitsu may refuse: it lets admins and the production's managers {what}.")
 
 
 def _done(plan: Plan, dry_run: bool) -> Result:
@@ -268,8 +270,9 @@ def manage_schedule(
 
     set_task_type_dates: task_type and start_date / end_date (YYYY-MM-DD), optional man_days; creates the
     schedule row if missing. add_milestone: name and date (optional task_type). delete_milestone: milestone_id
-    (production_schedule lists them); needs confirm=True. Kitsu lets only admins create schedule rows and
-    milestones. dry_run=True: show the plan without writing; show it to the user first.
+    (production_schedule lists them); needs confirm=True. Kitsu lets admins and the production's managers do
+    this. dry_run=True: show the plan without
+    writing; show it to the user first.
     """
     record = _project(project)
     lookups = get_lookups()
@@ -299,7 +302,7 @@ def manage_schedule(
             plan.request(
                 "POST", "data/schedule-items", {"project_id": record["id"], "task_type_id": ttype["id"], **changes}
             )
-            _admin_only(plan, "create schedule rows")
+            _managers_only(plan, "create schedule rows")
             merged = changes
         first, last = str(merged.get("start_date") or "")[:10], str(merged.get("end_date") or "")[:10]
         if first and last and first > last:
@@ -319,7 +322,7 @@ def manage_schedule(
         plan.would = f"Add milestone '{name.strip()}' on {payload['date']} to {record['name']}"
         plan.message = "Milestone added."
         plan.after = payload
-        _admin_only(plan, "create milestones")
+        _managers_only(plan, "create milestones")
     else:
         if not milestone_id:
             raise ToolError("delete_milestone needs milestone_id")
@@ -331,7 +334,7 @@ def manage_schedule(
         plan.request("DELETE", f"data/milestones/{milestone_id}")
         plan.would = f"Delete milestone '{milestone.get('name')}' ({milestone.get('date')})"
         plan.message = "Milestone deleted."
-        _admin_only(plan, "delete milestones")
+        _managers_only(plan, "delete milestones")
     return send_entity_write(plan, dry_run, reload=lambda _: None)
 
 

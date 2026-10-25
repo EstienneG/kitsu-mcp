@@ -334,8 +334,8 @@ def _simple_entity_tool(kind: str, collection: str, label_of: str):
                 payload["data"] = dict(custom_fields or {})
             if description is not None and kind in ("concept", "edit"):
                 payload["description"] = description
-            if parent_record:
-                payload["episode_id" if kind == "sequence" else "parent_id"] = parent_record["id"]
+            if parent_record:  # sequences and edits both take episode_id (gazu sends parent_id, which Zou ignores)
+                payload["episode_id"] = parent_record["id"]
             plan.request("POST", f"data/projects/{proj['id']}/{collection}", payload)
             plan.would = f"Create {kind} '{name.strip()}' in {proj['name']}"
             plan.message = f"Created {kind} {name.strip()}."

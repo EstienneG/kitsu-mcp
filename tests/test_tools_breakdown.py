@@ -86,3 +86,35 @@ async def test_project_delete_clears_scene_instances_first(call, fake, writable)
     fake.data["people"][0]["role"] = "admin"
     await call("manage_project", action="delete", project="Scene Show", force=True, confirm=True)
     assert all(p["id"] != project_id for p in fake.data["projects"])
+
+
+async def test_casting_edits_keep_labels(call, fake, writable):
+    """Zou rebuilds the whole casting and gives a link not sent with a label an empty one."""
+    assert fake.data["casting"]["s-1"][0]["label"] == "animate"
+    await call("set_casting", entity_id="s-1", action="add", assets=["Forest"])
+    hero = next(c for c in fake.data["casting"]["s-1"] if c["asset_id"] == "a-hero")
+    assert hero["label"] == "animate"
+
+
+async def test_casting_refuses_when_canceled_assets_would_be_dropped(call, fake, writable):
+    """Zou's casting read hides canceled assets, but its PUT deletes their links: refuse instead of dropping."""
+    shot = next(s for s in fake.data["shots"] if s["id"] == "s-1")
+    shot["entities_out"] = ["a-hero", "a-canceled"]  # a-canceled is cast but hidden from the read
+    plan = await call("set_casting", entity_id="s-1", action="add", assets=["Forest"], dry_run=True)
+    assert plan["verdict"] == "would_fail" and "canceled asset" in plan["reason"]
+    with pytest.raises(ToolError, match="drop them for good"):
+        await call("set_casting", entity_id="s-1", action="add", assets=["Forest"])
+    assert writes(fake) == []
+
+
+async def test_removing_from_an_episode_lists_the_shots_it_uncasts(call, fake, writable):
+    """Zou removes an asset that leaves an episode's casting from that episode's shots too."""
+    episode = {"id": "ep-1", "name": "E01", "project_id": "p-1", "type": "Episode"}
+    fake.data["episodes"].append(episode)
+    sequence = fake.data["sequences"][0]
+    sequence["parent_id"] = "ep-1"
+    fake.data["casting"]["ep-1"] = [{"asset_id": "a-hero", "asset_name": "Hero", "nb_occurences": 1, "label": ""}]
+    plan = await call("set_casting", entity_id="ep-1", action="remove", assets=["Hero"], dry_run=True)
+    assert any("also uncasts Hero from" in w and "SH010" in w for w in plan["warnings"])
+    await call("set_casting", entity_id="ep-1", action="remove", assets=["Hero"])
+    assert fake.data["casting"]["s-1"] == []  # what the warning said

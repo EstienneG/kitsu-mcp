@@ -113,7 +113,7 @@ def manage_person(
             plan.warnings.append(f"{name} can no longer log in; their tasks and history stay.")
     elif action == "invite":
         # Zou sends the email on a GET: never put this behind a read-only path.
-        plan.request("POST", f"actions/persons/{record['id']}/invite")
+        plan.request("GET", f"actions/persons/{record['id']}/invite")
         plan.would = f"Email {name} <{record.get('email')}> an invitation to set their password"
         plan.message = f"Invitation sent to {record.get('email')}."
         plan.warnings.append("This sends a real email.")
