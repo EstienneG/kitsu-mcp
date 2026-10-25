@@ -87,7 +87,15 @@ def test_kitsu_package_does_not_depend_on_server_or_tools():
     """kitsu/ is the Kitsu side; the server and tools build on it, never the other way round."""
     import ast
 
+    forbidden = ("kitsu_mcp.server", "kitsu_mcp.tools")
     for path in (Path(__file__).parents[1] / "src" / "kitsu_mcp" / "kitsu").glob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                assert not node.module.startswith(("kitsu_mcp.server", "kitsu_mcp.tools")), (path.name, node.module)
+            if isinstance(node, ast.Import):
+                modules = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                # `from kitsu_mcp import server` imports kitsu_mcp.server too.
+                modules = [node.module, *(f"{node.module}.{alias.name}" for alias in node.names)]
+            else:
+                continue
+            for module in modules:
+                assert not (module + ".").startswith(tuple(f + "." for f in forbidden)), (path.name, module)

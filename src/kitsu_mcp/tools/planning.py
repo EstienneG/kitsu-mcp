@@ -7,6 +7,7 @@ from typing import Literal
 
 from fastmcp.exceptions import ToolError
 
+from kitsu_mcp.kitsu import production
 from kitsu_mcp.kitsu.client import get_client
 from kitsu_mcp.kitsu.formatters import day
 from kitsu_mcp.kitsu.lookups import get_lookups
@@ -19,7 +20,7 @@ from kitsu_mcp.kitsu.models import (
     Schedule,
     ScheduleSpan,
 )
-from kitsu_mcp.kitsu.production import project_tasks, today
+from kitsu_mcp.kitsu.production import project_tasks
 from kitsu_mcp.kitsu.validation import iso_date
 from kitsu_mcp.server.app import READ_ONLY, tool
 
@@ -131,7 +132,7 @@ def production_schedule(project: str, task_types: list[str] | None = None) -> Sc
             open_by_type[type_id] += 1
         if due := day(record.raw.get("due_date")):
             dues[type_id].append(due)
-    now = today().isoformat()
+    now = production.today().isoformat()
     spans = []
     for item in items:
         type_id = item.get("task_type_id")

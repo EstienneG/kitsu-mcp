@@ -5,12 +5,7 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
-#### Internal
-- Source reorganised into packages: `kitsu/` (Kitsu client, lookups, production views, models), `server/`
-  (the FastMCP app, tool groups, HTTP mode, prompts, resources) and `tools/` by area, with `review/` and
-  `write/` split per subject. `kitsu_mcp.server:mcp` is unchanged; other import paths moved.
-
-## Added
+### Added
 - Tool groups. A conversation starts with 11 core tools (about 2,500 tokens instead of 9,000); `load_tools`
   adds the `browse`, `activity`, `planning`, `review` or `write` group when a task needs it, and the server
   tells the client its tool list changed. `KITSU_TOOL_GROUPS` lists groups from the start (default `write`;
@@ -31,6 +26,10 @@ change behaviour (called out under **Changed**).
 - Fewer tools for the same features (48 to 44), so agents see a shorter list: `my_tasks` is
   `get_person_tasks` without a person; `task_history` and `list_task_previews` are `get_task` with
   `include_history` / `include_previews`; `reply_to_comment` is `add_comment` with `reply_to`.
+- Source reorganised into packages: `kitsu/` (Kitsu client, lookups, production views, models), `server/`
+  (the FastMCP app, tool groups, HTTP mode, prompts, resources) and `tools/` by area, with `review/` and
+  `write/` split per subject. `kitsu_mcp.server:mcp` is unchanged; other module paths moved (for example
+  `kitsu_mcp.client` is now `kitsu_mcp.kitsu.client`).
 
 ## 0.3.2 — 2026-10-24
 
