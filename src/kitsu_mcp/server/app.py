@@ -4,6 +4,7 @@ import inspect
 
 from fastmcp import FastMCP
 
+# Here rather than in groups.py, which imports this module: the server instructions below need the map too.
 GROUPS: dict[str, str] = {
     "browse": "list assets, shots, sequences, episodes, people, types; custom fields; casting",
     "activity": "what changed lately on a project; the user's notifications",
@@ -14,7 +15,8 @@ GROUPS: dict[str, str] = {
 """Tool groups load_tools adds, and what each holds: the one description the server instructions, load_tools
 and the README follow (a test checks the README). A tool's group is its tag (see kitsu_mcp.server.groups)."""
 
-GROUP_SUMMARY = "; ".join(f"{name}: {holds}" for name, holds in GROUPS.items())
+# " | " between groups: the descriptions themselves use ";".
+GROUP_SUMMARY = " | ".join(f"{name}: {holds}" for name, holds in GROUPS.items())
 
 mcp = FastMCP(
     "kitsu",
