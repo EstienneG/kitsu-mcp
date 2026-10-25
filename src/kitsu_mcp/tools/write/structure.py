@@ -605,7 +605,6 @@ def manage_task(
         raise ToolError("create needs entity_ids and task_type")
     if len(entity_ids) > 50:
         raise ToolError("At most 50 entities per call; split the list")
-    ttype = lookups.task_type(task_type)
     if status:
         status_record = lookups.task_status(status)
     else:
@@ -615,8 +614,21 @@ def manage_task(
         status_record = defaults[0]
     people = [lookups.person(a)["id"] for a in assignees or []]
     created, skipped = [], []
-    for ref in dict.fromkeys(entity_ids):  # de-duplicated, order kept
-        entity = client.get(f"data/entities/{object_id(ref, 'entity', 'list_shots or list_assets')}")
+    entities = [
+        client.get(f"data/entities/{object_id(ref, 'entity', 'list_shots or list_assets')}")
+        for ref in dict.fromkeys(entity_ids)
+    ]  # de-duplicated, order kept
+    # An entity's `type` (Shot, Asset, Concept, ...) is the `for_entity` of the task types that apply to it.
+    kinds = {str(e.get("type")) for e in entities}
+    # One task type for the call; when a name repeats across kinds ("Concept"), the entities' kind decides.
+    ttype = lookups.task_type_for(task_type, kinds.pop()) if len(kinds) == 1 else lookups.task_type(task_type)
+    for entity in entities:
+        kind = str(entity.get("type"))
+        if ttype.get("for_entity") and str(ttype["for_entity"]).lower() != kind.lower():
+            plan.warnings.append(
+                f"{ttype['name']} is a task type for {ttype['for_entity']}s, and "
+                f"{entity.get('name')} is a {kind.lower()}: Kitsu will not show that task."
+            )
         existing = client.get("data/tasks", params={"entity_id": entity["id"], "task_type_id": ttype["id"]})
         if existing:
             skipped.append(entity.get("name") or entity["id"])

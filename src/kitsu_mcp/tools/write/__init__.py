@@ -9,10 +9,22 @@ from kitsu_mcp.tools.write import (
     comments,
     config,
     lifecycle,
+    people,
     playlists,
     schedule,
     structure,
     time,
 )
 
-__all__ = ["assignments", "breakdown", "comments", "config", "lifecycle", "playlists", "schedule", "structure", "time"]
+__all__ = [
+    "assignments",
+    "breakdown",
+    "comments",
+    "config",
+    "lifecycle",
+    "people",
+    "playlists",
+    "schedule",
+    "structure",
+    "time",
+]

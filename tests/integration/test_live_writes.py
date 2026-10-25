@@ -264,3 +264,66 @@ async def test_project_configuration(call, kitsu):
     finally:
         await call("manage_project", action="close", project=name)
         await call("manage_project", action="delete", project=name, force=True, confirm=True)
+
+
+async def test_people_and_studio(call, kitsu, tmp_path):
+    """Accounts and departments (Zou's people listing omits departments unless relations are asked for), days
+    off, playlist entry edits (a PUT replaces the whole list), notifications, and time: only an assignee's."""
+    from PIL import Image
+
+    name = f"{PROJECT} people"
+    email = "kitsu.mcp.test.people@gmail.com"  # Zou checks the domain takes mail
+    await call("manage_project", action="create", name=name)
+    person_id = None
+    try:
+        person = await call("manage_person", action="create", first_name="Probe", last_name="Artist", email=email)
+        person_id = person["id"]
+        department = kitsu.get("data/departments")[0]["name"]
+        await call("manage_person", action="add_department", person=email, department=department)
+        listed = next(p for p in (await call("list_people"))["people"] if p["full_name"] == "Probe Artist")
+        assert listed["departments"] == [department]
+        await call("manage_person", action="remove_department", person=email, department=department)
+
+        await call("manage_day_off", action="add", person=email, start="2026-12-24", end="2026-12-26")
+        sheet = await call("timesheet", person=email, start="2026-12-20", end="2026-12-31")
+        assert len(sheet["days_off"]) == 1
+
+        await call("manage_sequence", action="create", project=name, name="SQ01")
+        shot = await call("manage_shot", action="create", project=name, sequence="SQ01", name="SH010")
+        await call("manage_task", action="create", entity_ids=[shot["id"]], task_type="Animation")
+        task = kitsu.get(f"data/shots/{shot['id']}/tasks")[0]["id"]
+        refused = await call("log_time", task_id=task, minutes=60, day="2026-10-20", dry_run=True)
+        assert refused["verdict"] == "would_fail"  # not assigned: Zou would refuse
+        await call("assign_task", task_id=task, person="admin@example.com")
+        await call("log_time", task_id=task, minutes=60, day="2026-10-20")
+        await call("manage_time", action="set", task_id=task, day="2026-10-20", minutes=90)
+        assert kitsu.get(f"data/tasks/{task}")["duration"] == 90
+
+        frame = tmp_path / "frame.png"
+        Image.new("RGB", (64, 36)).save(frame)
+        await call("publish_preview", task_id=task, file_path=str(frame))
+        await call("publish_preview", task_id=task, file_path=str(frame))
+        revisions = sorted(kitsu.get(f"data/tasks/{task}/previews"), key=lambda p: p["revision"])
+        playlist = (await call("create_playlist", project=name, name="Dailies", for_entity="shot"))["playlist"]
+        await call("add_to_playlist", playlist_id=playlist["id"], task_ids=[task])
+        await call(
+            "manage_playlist",
+            playlist_id=playlist["id"],
+            action="set_preview",
+            entity_id=shot["id"],
+            preview_file_id=revisions[0]["id"],
+        )
+        entries = kitsu.get(f"data/playlists/{playlist['id']}").get("shots") or []
+        assert [e["preview_file_id"] for e in entries] == [revisions[0]["id"]]
+        await call("manage_playlist", playlist_id=playlist["id"], action="remove_entry", entity_id=shot["id"])
+        assert not kitsu.get(f"data/playlists/{playlist['id']}").get("shots")
+
+        await call("manage_my_notifications", action="subscribe", task_id=task)
+        await call("manage_my_notifications", action="mark_all_read")
+    finally:
+        if person_id:  # Zou keeps a person who still has data (days off), even when forced
+            for day_off in kitsu.get(f"data/persons/{person_id}/day-offs") or []:
+                kitsu.delete(f"data/day-offs/{day_off['id']}")
+            kitsu.delete(f"data/persons/{person_id}", {"force": True})
+        await call("manage_project", action="close", project=name)
+        await call("manage_project", action="delete", project=name, force=True, confirm=True)
