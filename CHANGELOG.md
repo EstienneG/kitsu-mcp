@@ -5,6 +5,8 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-25
+
 ### Added
 - Tool groups. A conversation starts with 12 core tools (about 2,500 tokens instead of 9,000); `load_tools`
   adds the `browse`, `activity`, `planning`, `review` or `write` group when a task needs it, and the server
@@ -31,6 +33,8 @@ change behaviour (called out under **Changed**).
   (the FastMCP app, tool groups, HTTP mode, prompts, resources) and `tools/` by area, with `review/` and
   `write/` split per subject. `kitsu_mcp.server:mcp` is unchanged; other module paths moved (for example
   `kitsu_mcp.client` is now `kitsu_mcp.kitsu.client`).
+- README rewritten for Kitsu users: what you can do by role, what it covers in Kitsu, safety, and client
+  setup with the Mistral clients first. Development, layout and release notes moved to CONTRIBUTING.md.
 
 ## 0.3.2 — 2026-10-24
 
