@@ -91,8 +91,9 @@ async def test_tasks_and_people(call):
     task = await call("get_task", task_id=anim["id"])
     assert "splines" in str(task["comments"])
     assert (await call("get_task", task_id=anim["id"], include_history=True))["history"]
-    assert (await call("get_person_tasks"))["total"] == 2
-    assert (await call("get_person_tasks", person="admin@example.com"))["total"] == 2
+    # The write tests may give the admin tasks in their own projects: count this project's only.
+    assert (await call("get_person_tasks", project=PROJECT))["total"] == 2
+    assert (await call("get_person_tasks", person="admin@example.com", project=PROJECT))["total"] == 2
     assert await call("workload", project=PROJECT)
 
 

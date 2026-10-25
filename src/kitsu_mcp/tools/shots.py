@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.kitsu import custom_fields as cf
@@ -5,7 +7,18 @@ from kitsu_mcp.kitsu import links
 from kitsu_mcp.kitsu.client import get_client
 from kitsu_mcp.kitsu.formatters import task_summary
 from kitsu_mcp.kitsu.lookups import check_names, get_lookups
-from kitsu_mcp.kitsu.models import CastAsset, CastIn, Named, Sequence, ShotCasting, ShotDetail, ShotList, ShotSummary
+from kitsu_mcp.kitsu.models import (
+    CastAsset,
+    CastIn,
+    EntityDetail,
+    EntitySummary,
+    Named,
+    Sequence,
+    ShotCasting,
+    ShotDetail,
+    ShotList,
+    ShotSummary,
+)
 from kitsu_mcp.kitsu.validation import Detail, Limit, Offset, object_id, to_number
 from kitsu_mcp.server.app import READ_ONLY, tool
 from kitsu_mcp.tools.assets import check_status_filters, matches_status_filters, statuses
@@ -206,3 +219,67 @@ def get_casting(
         )
         for c in client.get(f"data/assets/{asset_id}/cast-in")
     ]
+
+
+EntityKindPlus = Literal["concept", "edit", "scene", "sequence", "episode"]
+_COLLECTIONS = {
+    "concept": "concepts",
+    "edit": "edits",
+    "scene": "scenes",
+    "sequence": "sequences",
+    "episode": "episodes",
+}
+
+
+@tool(annotations=READ_ONLY, tags={"browse"})
+def list_entities(project: str, kind: EntityKindPlus, name_contains: str | None = None) -> list[EntitySummary]:
+    """List a production's concepts, edits (montages: animatics, trailers), scenes, sequences or episodes,
+    with the status of each task. For assets and shots use list_assets / list_shots; get_entity reads one.
+    """
+    client = get_client()
+    lookups = get_lookups()
+    project_id = lookups.project(project)["id"]
+    wanted = (name_contains or "").lower()
+    rows = []
+    for record in client.get(f"data/projects/{project_id}/{_COLLECTIONS[kind]}") or []:
+        if record.get("canceled") or (wanted and wanted not in (record.get("name") or "").lower()):
+            continue
+        tasks = client.get(f"data/{_COLLECTIONS[kind]}/{record['id']}/tasks") if kind in ("concept", "edit") else []
+        rows.append(
+            EntitySummary(
+                id=record["id"],
+                name=record.get("name") or record["id"],
+                kind=kind,
+                description=record.get("description") or None,
+                statuses={
+                    lookups.name("task_types", t.get("task_type_id")) or "?": lookups.name(
+                        "task_statuses", t.get("task_status_id"), "short_name"
+                    )
+                    for t in tasks
+                },
+            )
+        )
+    return sorted(rows, key=lambda r: r.name.lower())
+
+
+@tool(annotations=READ_ONLY, tags={"browse"})
+def get_entity(entity_id: str) -> EntityDetail:
+    """Get a concept, edit, scene, sequence or episode: description, custom field values and tasks (each with
+    its latest preview, which get_preview and the video tools take). For assets and shots use get_asset /
+    get_shot.
+    """
+    client = get_client()
+    lookups = get_lookups()
+    record = client.get(f"data/entities/{object_id(entity_id, 'entity', 'list_entities or search')}")
+    kind = str(record.get("type") or "").lower() or "entity"
+    collection = _COLLECTIONS.get(kind)
+    tasks = client.get(f"data/{collection}/{record['id']}/tasks") if kind in ("concept", "edit") else []
+    return EntityDetail(
+        id=record["id"],
+        name=record.get("name") or record["id"],
+        kind=kind,
+        project_id=record.get("project_id"),
+        description=record.get("description") or None,
+        custom_fields={k: v for k, v in (record.get("data") or {}).items() if v not in (None, "")},
+        tasks=[task_summary(t, lookups) for t in tasks],
+    )

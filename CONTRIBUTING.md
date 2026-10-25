@@ -31,8 +31,8 @@ only run against `127.0.0.1` or `localhost`, and clean up their own project; nev
 care about. CI sets it, since its container is thrown away after each run.
 
 **Context budgets.** Clients send every listed tool's name, description and arguments to the model at the
-start of a conversation. The 12 core tools are about 2,500 tokens, plus about 300 for the server
-instructions; with every group listed (67 tools, writes enabled) about 15,500. Tests keep the core list
+start of a conversation. The 12 core tools are about 2,700 tokens, plus about 300 for the server
+instructions; with every group listed (74 tools, writes enabled) about 17,000. Tests keep the core list
 (`tests/test_groups.py`) and the full list (`tests/test_registry.py`) under fixed budgets: raise them
 deliberately when a tool earns its place, and prefer putting new tools in a group rather than in core.
 

@@ -141,6 +141,8 @@ class FakeClient:
             return playlist
         if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)/add", path):
             task = self._task_or_404(m[1], path)
+            if m[3] not in task["assignees"]:  # Zou: only time logged by an assignee, whatever the role
+                raise ToolError(f"Permission denied for POST {path}")
             task["duration"] = (task["duration"] or 0) + data["duration"]
             entry = {"task_id": task["id"], "person_id": m[3], "date": m[2], "duration": data["duration"]}
             self.data.setdefault("time_spents", []).append(entry)
@@ -196,6 +198,39 @@ class FakeClient:
             comment = next(c for c in d["comments"].get(m[1], []) if c["id"] == m[2])
             comment.setdefault("previews", []).append(preview)
             return preview
+        if path == "data/persons":
+            person = {"id": self._new_id("person"), "full_name": f"{data['first_name']} {data['last_name']}", **data}
+            d["people"].append(person)
+            return person
+        if m := re.fullmatch(r"actions/persons/([^/]+)/departments/add", path):
+            person = self._by_id("people")[m[1]]
+            person.setdefault("departments", []).append(data["department_id"])
+            return person
+        if m := re.fullmatch(r"actions/persons/([^/]+)/invite", path):
+            d.setdefault("invited", []).append(m[1])
+            return {"success": True}
+        if path == "data/day-offs":
+            day_off = {"id": self._new_id("do"), **data}
+            d.setdefault("day_offs", []).append(day_off)
+            return day_off
+        if path == "actions/user/notifications/mark-all-as-read":
+            for n in d.get("notifications", []):
+                n["read"] = True
+            return {"success": True}
+        if m := re.fullmatch(r"actions/user/tasks/([^/]+)/subscribe", path):
+            d.setdefault("subscriptions", set()).add(m[1])
+            return {"task_id": m[1]}
+        if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)", path):
+            task = self._task_or_404(m[1], path)
+            if m[3] not in task["assignees"]:  # Zou: only time logged by an assignee, whatever the role
+                raise ToolError(f"Permission denied for POST {path}")
+            entries = d.setdefault("time_spents", [])
+            entries[:] = [
+                e for e in entries if not (e["task_id"] == m[1] and e["person_id"] == m[3] and e["date"] == m[2])
+            ]
+            entries.append({"task_id": m[1], "person_id": m[3], "date": m[2], "duration": data["duration"]})
+            task["duration"] = sum(e["duration"] for e in entries if e["task_id"] == m[1])
+            return entries[-1]
         if m := re.fullmatch(r"data/projects/([^/]+)/team", path):
             project = self._by_id("projects")[m[1]]
             project.setdefault("team", []).append(data["person_id"])
@@ -281,6 +316,27 @@ class FakeClient:
         if m := re.fullmatch(r"data/tasks/([^/]+)", path):
             self._task_or_404(m[1], path)
             d["tasks"] = [t for t in d["tasks"] if t["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"actions/persons/([^/]+)/departments/([^/]+)", path):
+            person = self._by_id("people")[m[1]]
+            person["departments"] = [x for x in person.get("departments") or [] if x != m[2]]
+            return ""
+        if m := re.fullmatch(r"data/day-offs/([^/]+)", path):
+            d["day_offs"] = [x for x in d.get("day_offs", []) if x["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/playlists/([^/]+)", path):
+            d["playlists"] = [x for x in d["playlists"] if x["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"actions/user/tasks/([^/]+)/unsubscribe", path):
+            d.setdefault("subscriptions", set()).discard(m[1])
+            return ""
+        if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)", path):
+            entries = d.get("time_spents", [])
+            entries[:] = [
+                e for e in entries if not (e["task_id"] == m[1] and e["person_id"] == m[3] and e["date"] == m[2])
+            ]
+            task = self._task_or_404(m[1], path)
+            task["duration"] = sum(e["duration"] for e in entries if e["task_id"] == m[1])
             return ""
         if m := re.fullmatch(r"data/projects/([^/]+)/team/([^/]+)", path):
             project = self._by_id("projects")[m[1]]
@@ -369,6 +425,18 @@ class FakeClient:
             task = self._task_or_404(m[1], path)
             task.update(data)
             return task
+        if m := re.fullmatch(r"data/persons/([^/]+)", path):
+            person = self._by_id("people")[m[1]]
+            person.update(data)  # person updates keep what they leave out
+            return person
+        if m := re.fullmatch(r"data/day-offs/([^/]+)", path):
+            day_off = next(x for x in self.data["day_offs"] if x["id"] == m[1])
+            day_off.update(data)
+            return day_off
+        if m := re.fullmatch(r"data/playlists/([^/]+)", path):
+            playlist = self._by_id("playlists")[m[1]]
+            playlist.update(data)  # `shots` replaces the whole entry list
+            return playlist
         if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors/([^/]+)", path):
             field = next(f for f in self.data["custom_fields"] if f["id"] == m[2])
             # Zou resets what an update leaves out: no data_type -> "string", no choices -> []
@@ -525,7 +593,10 @@ class FakeClient:
         simple = {
             "data/task-types": d["task_types"],
             "data/task-status": d["statuses"],
-            "data/persons": d["people"],
+            # Zou leaves departments out of the people listing unless asked for relations
+            "data/persons": d["people"]
+            if params.get("relations") == "true"
+            else [{k: v for k, v in p.items() if k != "departments"} for p in d["people"]],
             "data/projects": d["projects"],
             "data/projects/open": [p for p in d["projects"] if p["project_status_id"] == "ps-open"],
             "data/project-status": [{"id": "ps-open", "name": "Open"}, {"id": "ps-closed", "name": "Closed"}],

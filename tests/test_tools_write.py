@@ -35,6 +35,11 @@ WRITE_TOOLS = {
     "manage_custom_field",
     "manage_schedule",
     "manage_budget",
+    "manage_person",
+    "manage_day_off",
+    "manage_playlist",
+    "manage_my_notifications",
+    "manage_time",
 }
 
 
@@ -162,6 +167,16 @@ async def test_log_time_defaults_to_me(call, fake, writable):
     assert writes(fake) == [
         ("POST", f"actions/tasks/t-hero-mod/time-spents/2026-10-14/persons/{ALICE}/add", {"duration": 90})
     ]
+
+
+async def test_log_time_refuses_someone_not_assigned(call, fake, writable):
+    """Zou refuses time logged by someone not assigned to the task, whatever their role (checked on Zou 1.0.97):
+    the dry run says so instead of the call failing with a bare permission error."""
+    plan = await call("log_time", task_id="t-sh020-anim", minutes=60, day="2026-10-14", dry_run=True)
+    assert plan["verdict"] == "would_fail" and "assigned" in plan["reason"]
+    with pytest.raises(ToolError, match="assign_task first"):
+        await call("log_time", task_id="t-sh020-anim", minutes=60, day="2026-10-14")
+    assert writes(fake) == []
 
 
 async def test_log_time_bounds(call, fake, writable):

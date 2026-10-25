@@ -90,6 +90,11 @@ def fetch_task_full(task_id: str) -> dict:
     return get_client().get(f"data/tasks/{task_id}/full")
 
 
+def assignees_of(task: dict) -> list[str]:
+    """IDs of a task's assignees, from a `data/tasks/<id>/full` record (its `persons`)."""
+    return [p["id"] for p in task.get("persons") or []] or list(task.get("assignees") or [])
+
+
 def task_label(task: dict) -> str:
     """'SQ010 / SH010 / Animation': which task, for the one-line plan."""
     parts = [(task.get(k) or {}).get("name") for k in ("sequence", "entity", "task_type")]
