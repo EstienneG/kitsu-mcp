@@ -5,6 +5,14 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
+### Added
+- `structure` tools (writes): `manage_project`, `manage_episode`, `manage_sequence`, `manage_shot`,
+  `manage_asset`, `manage_concept`, `manage_edit` and `manage_task`, one tool per kind of record with an
+  `action` (create, update, delete; restore for shots; close and reopen for projects). Each has a dry run;
+  deletes also need `confirm=True`, and the dry run says whether Kitsu will cancel or delete.
+- Write tools are tested for real against throwaway Zou 1.0.43 and 1.0.97 containers in CI
+  (`KITSU_TEST_WRITES=1`, local hosts only).
+
 ## 0.4.0 — 2026-10-25
 
 ### Added

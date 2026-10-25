@@ -67,6 +67,7 @@ from kitsu_mcp.kitsu.models.tasks import (
 )
 from kitsu_mcp.kitsu.models.write import (
     DryRunResult,
+    EntityWriteResult,
     PlannedRequest,
     PlaylistEntry,
     PlaylistWriteResult,
@@ -75,6 +76,7 @@ from kitsu_mcp.kitsu.models.write import (
 )
 
 __all__ = [
+    "EntityWriteResult",
     "Activity",
     "ActivityItem",
     "AssetDetail",

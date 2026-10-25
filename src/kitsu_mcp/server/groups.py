@@ -36,7 +36,9 @@ _lock = threading.Lock()
 
 
 def group_of(tags: set[str]) -> str | None:
-    """The group a tool belongs to (core, or one of GROUPS); None for tools outside any group."""
+    """The group a tool belongs to (core, or one of GROUPS); None for tools outside any group. Write tools of a
+    specific group (structure, ...) carry the `write` tag too, which KITSU_ALLOW_WRITE gates; GROUPS lists
+    those groups before `write`, so the specific one wins."""
     if CORE in tags:
         return CORE
     return next((g for g in GROUPS if g in tags), None)
