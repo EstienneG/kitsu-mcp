@@ -7,13 +7,13 @@ from pathlib import Path
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
-from kitsu_mcp import links, video
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import comment as format_comment
-from kitsu_mcp.models import SavedVideo, VideoInfo
-from kitsu_mcp.tools.previews import _safe_filename
-from kitsu_mcp.video import ImageFormat, Probe, Quality
+from kitsu_mcp.kitsu import links, video
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import comment as format_comment
+from kitsu_mcp.kitsu.models import SavedVideo, VideoInfo
+from kitsu_mcp.kitsu.video import ImageFormat, Probe, Quality
+from kitsu_mcp.server.app import READ_ONLY, tool
+from kitsu_mcp.tools.review.previews import _safe_filename
 
 Moment = int | float | str
 

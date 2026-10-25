@@ -11,7 +11,7 @@ import pytest
 from fastmcp import Client
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp import video
+from kitsu_mcp.kitsu import video
 from kitsu_mcp.server import mcp
 from tests.synthetic_video import FPS, frame_colour, make_movie
 
@@ -542,7 +542,7 @@ def test_frames_are_exact_across_containers_and_start_offsets(tmp_path, name, st
 
 async def test_original_quality_with_production_ids(call, served, monkeypatch):
     """The fake's readable IDs are widened in conftest; this runs with the real UUID-only check."""
-    from kitsu_mcp import validation
+    from kitsu_mcp.kitsu import validation
 
     monkeypatch.setattr(validation, "id_pattern", validation.UUID)
     uuid = "1258b106-125e-499a-a19b-a3a3410638e3"

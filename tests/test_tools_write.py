@@ -258,7 +258,7 @@ async def test_add_to_episode_playlist_rejects_shots_of_other_episodes(call, sho
 
 
 async def test_create_playlist_reports_success_when_the_reload_fails(call, fake, writable, monkeypatch):
-    from kitsu_mcp.tools import write
+    from kitsu_mcp.tools.write import playlists as write
 
     monkeypatch.setattr(write, "playlist_detail", lambda raw: (_ for _ in ()).throw(ToolError("Kitsu is down")))
     result = await call("create_playlist", project="p-1", name="New", for_entity="asset")
@@ -345,7 +345,7 @@ async def test_add_to_playlist_rejects_entities_of_another_project(call, wra, wr
 
 
 async def test_add_to_playlist_reports_success_when_the_reload_fails(call, wra, writable, monkeypatch):
-    from kitsu_mcp.tools import write
+    from kitsu_mcp.tools.write import playlists as write
 
     monkeypatch.setattr(write, "playlist_detail", lambda raw: (_ for _ in ()).throw(ToolError("Kitsu is down")))
     result = await call("add_to_playlist", playlist_id="pl-shots", entity_ids=["s-1"])
@@ -610,7 +610,7 @@ async def test_add_to_playlist_dry_run_lists_adds_and_skips_without_writing(call
 
 
 def test_plan_send_reports_partial_progress(fake):
-    from kitsu_mcp.plans import PartialSendError, Plan
+    from kitsu_mcp.kitsu.plans import PartialSendError, Plan
 
     plan = Plan("test", would="two comments")
     plan.request("POST", "actions/tasks/t-hero-mod/comment", {"task_status_id": ST_WFA, "comment": "one"})
@@ -622,7 +622,7 @@ def test_plan_send_reports_partial_progress(fake):
 
 
 def test_plan_with_failed_check_sends_nothing(fake):
-    from kitsu_mcp.plans import Plan
+    from kitsu_mcp.kitsu.plans import Plan
 
     plan = Plan("test", would="a comment")
     plan.request("POST", "actions/tasks/t-hero-mod/comment", {"task_status_id": ST_WFA, "comment": "one"})

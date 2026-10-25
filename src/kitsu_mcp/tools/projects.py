@@ -2,10 +2,9 @@ from collections import Counter, defaultdict
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import (
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.lookups import get_lookups
+from kitsu_mcp.kitsu.models import (
     Named,
     Project,
     ProjectOverview,
@@ -15,7 +14,8 @@ from kitsu_mcp.models import (
     TaskType,
     TaskTypeProgress,
 )
-from kitsu_mcp.production import TaskRecord, day, project_entities, project_tasks
+from kitsu_mcp.kitsu.production import TaskRecord, day, project_entities, project_tasks
+from kitsu_mcp.server.app import READ_ONLY, tool
 
 
 @tool(annotations=READ_ONLY, tags={"core"})

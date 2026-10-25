@@ -1,11 +1,11 @@
 from collections import defaultdict
 
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import PeopleList, Person, PersonTask, PersonTaskBrief, PersonTaskList, Workload
-from kitsu_mcp.production import assigned_tasks, day, project_tasks
-from kitsu_mcp.validation import Detail, Limit, Offset
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.lookups import get_lookups
+from kitsu_mcp.kitsu.models import PeopleList, Person, PersonTask, PersonTaskBrief, PersonTaskList, Workload
+from kitsu_mcp.kitsu.production import assigned_tasks, day, project_tasks
+from kitsu_mcp.kitsu.validation import Detail, Limit, Offset
+from kitsu_mcp.server.app import READ_ONLY, tool
 
 
 def _person(p: dict, departments: dict[str, str], with_email: bool) -> Person:

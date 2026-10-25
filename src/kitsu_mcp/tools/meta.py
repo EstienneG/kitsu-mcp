@@ -6,13 +6,13 @@ from typing import Annotated, Any
 from fastmcp.exceptions import ToolError
 from pydantic import Field
 
-from kitsu_mcp import video
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
 from kitsu_mcp.config import without_userinfo
-from kitsu_mcp.lookups import ROLE_SETTINGS, get_lookups, names_in
-from kitsu_mcp.models import ServerInfo, User
-from kitsu_mcp.validation import MAX_LIMIT
+from kitsu_mcp.kitsu import video
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.lookups import ROLE_SETTINGS, get_lookups, names_in
+from kitsu_mcp.kitsu.models import ServerInfo, User
+from kitsu_mcp.kitsu.validation import MAX_LIMIT
+from kitsu_mcp.server.app import READ_ONLY, tool
 
 
 @tool(annotations=READ_ONLY, tags={"core"})

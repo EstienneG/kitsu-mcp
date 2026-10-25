@@ -9,11 +9,11 @@ from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.tests import run_server_async
 
-from kitsu_mcp import auth
-from kitsu_mcp import client as client_module
-from kitsu_mcp import lookups as lookups_module
-from kitsu_mcp.auth import Credentials, TTLCache, parse_authorization
-from kitsu_mcp.client import LoginRejected
+from kitsu_mcp.kitsu import auth
+from kitsu_mcp.kitsu import client as client_module
+from kitsu_mcp.kitsu import lookups as lookups_module
+from kitsu_mcp.kitsu.auth import Credentials, TTLCache, parse_authorization
+from kitsu_mcp.kitsu.client import LoginRejected
 from kitsu_mcp.server import mcp
 from tests.fakes import ALICE, BOB, FakeClient
 
@@ -273,7 +273,7 @@ def test_request_credentials_outside_http_is_none():
 def test_video_cache_is_per_user_with_one_shared_budget(fake, tmp_path):
     import stat
 
-    from kitsu_mcp import video
+    from kitsu_mcp.kitsu import video
 
     fake.settings.video_cache_dir = tmp_path / "cache"
     assert video.cache_dir() == tmp_path / "cache"  # stdio: the server's own folder
@@ -299,7 +299,7 @@ def test_video_cache_is_per_user_with_one_shared_budget(fake, tmp_path):
 def test_cache_folder_made_private_and_ownership_checked(fake, tmp_path):
     import stat
 
-    from kitsu_mcp import video
+    from kitsu_mcp.kitsu import video
 
     loose = tmp_path / "loose"
     loose.mkdir(mode=0o777)
@@ -317,7 +317,7 @@ def test_cache_folder_made_private_and_ownership_checked(fake, tmp_path):
 
 
 def test_cache_folder_owned_by_someone_else_is_refused(fake, tmp_path, monkeypatch):
-    from kitsu_mcp import video
+    from kitsu_mcp.kitsu import video
 
     fake.settings.video_cache_dir = tmp_path / "cache"
     real_uid = os.getuid()
@@ -327,7 +327,7 @@ def test_cache_folder_owned_by_someone_else_is_refused(fake, tmp_path, monkeypat
 
 
 def test_download_recreates_a_user_folder_evicted_meanwhile(fake, tmp_path, monkeypatch):
-    from kitsu_mcp import video
+    from kitsu_mcp.kitsu import video
 
     fake.settings.video_cache_dir = tmp_path
     fake.credentials = Credentials("alice@example.com", "right")

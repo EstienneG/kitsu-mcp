@@ -21,9 +21,9 @@ from fastmcp.server.middleware import Middleware
 from mcp_types import ToolListChangedNotification
 from pydantic import Field
 
-from kitsu_mcp.app import mcp, tool
-from kitsu_mcp.auth import TTLCache, parse_authorization
-from kitsu_mcp.http import LOCAL_TAG, over_http
+from kitsu_mcp.kitsu.auth import TTLCache, parse_authorization
+from kitsu_mcp.server.app import mcp, tool
+from kitsu_mcp.server.http import LOCAL_TAG, over_http
 
 CORE = "core"
 

@@ -6,9 +6,9 @@ pseudo-episode and a playlist for every episode under "all"; shots and tasks wit
 production routes, as Kitsu's getTaskPath does.
 """
 
-from kitsu_mcp.client import get_client
 from kitsu_mcp.config import without_userinfo
-from kitsu_mcp.lookups import get_lookups
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.lookups import get_lookups
 
 
 def _api() -> str:
@@ -67,7 +67,7 @@ def task_url(
 def download_url(preview: dict) -> str:
     """Direct download of a preview file's original upload, under its real file name. The link needs a Kitsu
     login: a browser signed in to Kitsu opens it; the server never fetches or forwards the file itself."""
-    from kitsu_mcp import video  # video imports this module's dependencies; keep the import local
+    from kitsu_mcp.kitsu import video  # video imports this module's dependencies; keep the import local
 
     folder = "movies" if video.is_video(preview) else "pictures"
     return f"{_api()}/{folder}/originals/preview-files/{preview['id']}/download"

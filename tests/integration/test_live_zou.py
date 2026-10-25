@@ -13,11 +13,11 @@ import os
 import pytest
 from fastmcp import Client
 
-from kitsu_mcp import client as client_module
 from kitsu_mcp import config
-from kitsu_mcp import lookups as lookups_module
-from kitsu_mcp.client import KitsuClient
-from kitsu_mcp.lookups import Lookups
+from kitsu_mcp.kitsu import client as client_module
+from kitsu_mcp.kitsu import lookups as lookups_module
+from kitsu_mcp.kitsu.client import KitsuClient
+from kitsu_mcp.kitsu.lookups import Lookups
 
 HOST = os.environ.get("KITSU_TEST_HOST")
 pytestmark = pytest.mark.skipif(not HOST, reason="KITSU_TEST_HOST not set (needs a seeded Zou)")

@@ -1,8 +1,8 @@
 """Raw Zou payloads → output models. Every tool formats through here."""
 
-from kitsu_mcp import links
-from kitsu_mcp.lookups import Lookups
-from kitsu_mcp.models import Comment, Reply, TaskDetail, TaskSummary
+from kitsu_mcp.kitsu import links
+from kitsu_mcp.kitsu.lookups import Lookups
+from kitsu_mcp.kitsu.models import Comment, Reply, TaskDetail, TaskSummary
 
 
 def day(value: str | None) -> str | None:

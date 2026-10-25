@@ -7,8 +7,7 @@ from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp import groups
-from kitsu_mcp.server import mcp
+from kitsu_mcp.server import groups, mcp
 from tests.test_http import basic, server  # noqa: F401  (fixture)
 
 CORE = {

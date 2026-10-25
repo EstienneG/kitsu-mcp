@@ -5,7 +5,12 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
-### Added
+#### Internal
+- Source reorganised into packages: `kitsu/` (Kitsu client, lookups, production views, models), `server/`
+  (the FastMCP app, tool groups, HTTP mode, prompts, resources) and `tools/` by area, with `review/` and
+  `write/` split per subject. `kitsu_mcp.server:mcp` is unchanged; other import paths moved.
+
+## Added
 - Tool groups. A conversation starts with 11 core tools (about 2,500 tokens instead of 9,000); `load_tools`
   adds the `browse`, `activity`, `planning`, `review` or `write` group when a task needs it, and the server
   tells the client its tool list changed. `KITSU_TOOL_GROUPS` lists groups from the start (default `write`;
