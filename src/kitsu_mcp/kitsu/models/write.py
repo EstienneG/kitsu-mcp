@@ -49,7 +49,7 @@ class PlaylistWriteResult(BaseModel):
 class PlannedRequest(BaseModel):
     method: str = Field(description="POST, PUT, DELETE, or UPLOAD (a local file sent as multipart)")
     path: str = Field(description="Zou API route")
-    payload: dict[str, Any]
+    payload: dict[str, Any] | list[Any] = Field(description="JSON body; a bare array for Zou's bulk routes")
 
 
 class DryRunResult(BaseModel):

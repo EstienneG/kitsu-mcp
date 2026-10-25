@@ -178,7 +178,40 @@ class FakeClient:
             task = {"id": self._new_id("t"), "duration": 0, "estimation": None, "due_date": None, **data}
             d["tasks"].append(task)
             return task
+        if m := re.fullmatch(r"actions/tasks/([^/]+)/comments/([^/]+)/add-preview", path):
+            task = self._task_or_404(m[1], path)
+            revision = (
+                max((p.get("revision") or 0 for p in d["preview_files"].values() if p["task_id"] == m[1]), default=0)
+                + 1
+            )
+            preview = {
+                "id": self._new_id("pf"),
+                "task_id": task["id"],
+                "revision": revision,
+                "status": "processing",
+                "extension": None,
+                "comment_id": m[2],
+            }
+            d["preview_files"][preview["id"]] = preview
+            comment = next(c for c in d["comments"].get(m[1], []) if c["id"] == m[2])
+            comment.setdefault("previews", []).append(preview)
+            return preview
+        if m := re.fullmatch(r"actions/projects/([^/]+)/delete-tasks", path):
+            assert isinstance(data, list), "Zou wants a bare JSON array of task IDs"
+            ids = [t for t in data if any(x["id"] == t and x["project_id"] == m[1] for x in d["tasks"])]
+            d["tasks"] = [t for t in d["tasks"] if t["id"] not in ids]
+            return ids
         return None
+
+    def upload(self, path: str, file_path: str, data: dict | None = None) -> Any:
+        self.calls.append(("UPLOAD", path, {"file": file_path, **(data or {})}))
+        if m := re.fullmatch(r"pictures/preview-files/([^/]+)", path):
+            preview = self.data["preview_files"][m[1]]
+            preview.update(
+                status="ready", extension=Path(file_path).suffix.lstrip(".").lower(), original_name=Path(file_path).stem
+            )
+            return preview
+        raise ToolError(f"Not found: {path} (no fake route)")
 
     def _entity_any(self, entity_id: str) -> dict | None:
         for kind in ("projects", "assets", "shots", "sequences", "episodes", "concepts", "edits"):
@@ -194,6 +227,20 @@ class FakeClient:
         if m := re.fullmatch(r"data/tasks/([^/]+)", path):
             self._task_or_404(m[1], path)
             d["tasks"] = [t for t in d["tasks"] if t["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/comments/([^/]+)", path):
+            for task_id, comments in d["comments"].items():
+                if any(c["id"] == m[1] for c in comments):
+                    d["comments"][task_id] = [c for c in comments if c["id"] != m[1]]
+                    # Zou deletes the comment's previews with it
+                    d["preview_files"] = {k: v for k, v in d["preview_files"].items() if v.get("comment_id") != m[1]}
+                    return ""
+            raise NotFoundError(f"Not found: {path}")
+        if m := re.fullmatch(r"data/tasks/([^/]+)/comments/([^/]+)/reply/([^/]+)", path):
+            comment = next((c for c in d["comments"].get(m[1], []) if c["id"] == m[2]), None)
+            if comment is None:
+                raise NotFoundError(f"Not found: {path}")
+            comment["replies"] = [r for r in comment.get("replies") or [] if r.get("id") != m[3]]
             return ""
         if m := re.fullmatch(r"data/projects/([^/]+)", path):
             project = self._by_id("projects").get(m[1])
@@ -229,6 +276,18 @@ class FakeClient:
             task = self._task_or_404(m[1], path)
             task.update(data)
             return task
+        if m := re.fullmatch(r"data/comments/([^/]+)", path):
+            for comments in self.data["comments"].values():
+                for comment in comments:
+                    if comment["id"] == m[1]:
+                        comment.update(data)
+                        return comment
+            raise NotFoundError(f"Not found: {path}")
+        if m := re.fullmatch(r"actions/preview-files/([^/]+)/set-main-preview", path):
+            preview = self.data["preview_files"][m[1]]
+            task = self._task_or_404(preview["task_id"], path)
+            self._entity(task["entity_id"])["preview_file_id"] = preview["id"]
+            return preview
         if m := re.fullmatch(r"data/(entities|projects|shots)/([^/]+)", path):
             record = self._entity_any(m[2])
             if record is None:

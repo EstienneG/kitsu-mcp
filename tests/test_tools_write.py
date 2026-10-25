@@ -23,6 +23,10 @@ WRITE_TOOLS = {
     "manage_concept",
     "manage_edit",
     "manage_task",
+    "task_action",
+    "publish_preview",
+    "batch_tasks",
+    "manage_comment",
 }
 
 

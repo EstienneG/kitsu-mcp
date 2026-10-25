@@ -224,9 +224,10 @@ defaults (core and write tools listed, write tools disabled).
 | `planning` | `workload`, `timesheet` (time logged per day and task over a period, with days off when Kitsu shows them), `quotas` (shots and frames per artist per day, week or month, in the count modes of Kitsu's Quotas page), `production_schedule` (each task type's planned dates vs. its tasks' due dates, late and unscheduled task types, milestones), `budget` (planned salary costs per person and department, as Kitsu's Budget page) |
 | `review` | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `download_previews`, `list_playlists`, `get_playlist`; with the `[video]` extra: `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | `structure` (opt-in) | `manage_project` (create, update, close, reopen, delete), `manage_episode`, `manage_sequence`, `manage_shot` (create, update, delete, restore), `manage_asset`, `manage_concept`, `manage_edit` (create, update, delete), `manage_task` (create tasks of a type on many entities, delete a task) |
+| `production` (opt-in) | `task_action` (start a task, submit it for review), `publish_preview` (a file as the task's next revision, with a status; stdio only), `batch_tasks` (status, assign, unassign, priority or delete up to 100 tasks), `manage_comment` (edit, delete, delete a reply) |
 | `write` (opt-in) | `add_comment` (or a reply to a comment), `acknowledge_comment`, `set_task_status`, `assign_task` (or unassign), `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview) |
 
-The 12 core tools cost a model about 2,500 tokens of context; every group listed, about 12,500.
+The 12 core tools cost a model about 2,500 tokens of context; every group listed, about 13,500.
 
 ### Links
 

@@ -112,3 +112,54 @@ async def test_structure_lifecycle(call, kitsu):
         await call("manage_project", action="close", project=PROJECT)
         await call("manage_project", action="delete", project=PROJECT, force=True, confirm=True)
     assert PROJECT not in [p["name"] for p in kitsu.get("data/projects")]
+
+
+async def test_task_lifecycle(call, kitsu, tmp_path):
+    """Start, submit, publish a real file, act in batch, edit and delete comments, on real Zou."""
+    from PIL import Image
+
+    name = f"{PROJECT} lifecycle"
+    await call("manage_project", action="create", name=name)
+    try:
+        await call("manage_sequence", action="create", project=name, name="SQ01")
+        shots = [
+            (await call("manage_shot", action="create", project=name, sequence="SQ01", name=f"SH0{i}0"))["id"]
+            for i in (1, 2, 3)
+        ]
+        await call("manage_task", action="create", entity_ids=shots, task_type="Animation")
+        tasks = [kitsu.get(f"data/shots/{s}/tasks")[0]["id"] for s in shots]
+
+        def status(task_id: str) -> str:
+            return kitsu.get(f"data/tasks/{task_id}/full")["task_status"]["short_name"].lower()
+
+        await call("task_action", action="start", task_id=tasks[0])
+        assert status(tasks[0]) == "wip"
+        await call("task_action", action="submit_for_review", task_id=tasks[0])
+        assert status(tasks[0]) == "wfa"
+
+        frame = tmp_path / "frame.png"
+        Image.new("RGB", (64, 36), (200, 80, 40)).save(frame)
+        published = await call("publish_preview", task_id=tasks[0], file_path=str(frame), comment="v1", set_main=True)
+        previews = kitsu.get(f"data/tasks/{tasks[0]}/previews")
+        assert published["ok"] and [p["revision"] for p in previews] == [1]
+        assert kitsu.get(f"data/entities/{shots[0]}")["preview_file_id"] == previews[0]["id"]
+
+        await call("batch_tasks", action="status", task_ids=tasks, status="wip")
+        assert all(status(t) == "wip" for t in tasks)
+        await call("batch_tasks", action="assign", task_ids=tasks, person="admin@example.com")
+        me = kitsu.user_id()
+        assert all(me in kitsu.get(f"data/tasks/{t}")["assignees"] for t in tasks)
+        await call("batch_tasks", action="unassign", task_ids=tasks)
+        await call("batch_tasks", action="priority", task_ids=tasks, priority=2)
+        assert all(kitsu.get(f"data/tasks/{t}")["priority"] == 2 for t in tasks)
+
+        comment = next(c for c in kitsu.get(f"data/tasks/{tasks[0]}/comments") if c.get("previews"))
+        await call("manage_comment", action="edit", task_id=tasks[0], comment_id=comment["id"], text="v1 fixed")
+        await call("manage_comment", action="delete", task_id=tasks[0], comment_id=comment["id"], confirm=True)
+        assert kitsu.get(f"data/tasks/{tasks[0]}/previews") == []  # Zou deletes a comment's previews with it
+
+        deleted = await call("batch_tasks", action="delete", task_ids=tasks[1:], confirm=True)
+        assert deleted["ok"] and all(kitsu.get(f"data/shots/{s}/tasks") == [] for s in shots[1:])
+    finally:
+        await call("manage_project", action="close", project=name)
+        await call("manage_project", action="delete", project=name, force=True, confirm=True)

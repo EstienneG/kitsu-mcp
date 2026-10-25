@@ -3,9 +3,14 @@
 Every write tool builds a `Plan` first (resolve names, read the current state, run the checks). With
 dry_run=True the tool returns `plan.preview()` and nothing is sent; otherwise it calls `plan.send()`, which
 sends exactly the planned requests. One code path builds both, so a preview never differs from the real call.
+
+A request can use what an earlier one returned: `{0.id}` in its path or payload values is the `id` of the first
+answer (`{1.id}` of the second, ...). Publishing needs it: the preview is attached to the comment created first.
+The dry run shows the placeholders as they are; `send` fills them in.
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
@@ -46,7 +51,10 @@ class Plan:
     """A failed check: the dry run reports would_fail, the real call refuses with this reason."""
 
     def request(
-        self, method: Literal["POST", "PUT", "DELETE", "UPLOAD"], path: str, payload: dict[str, Any] | None = None
+        self,
+        method: Literal["POST", "PUT", "DELETE", "UPLOAD"],
+        path: str,
+        payload: dict[str, Any] | list[Any] | None = None,
     ) -> None:
         """UPLOAD sends payload["file"] (a local path) as a multipart file, with the rest as form data."""
         self.requests.append(PlannedRequest(method=method, path=path, payload=payload or {}))
@@ -78,12 +86,36 @@ class Plan:
         answers = []
         for done, req in enumerate(self.requests):
             try:
-                answers.append(_send(client, req))
+                filled = PlannedRequest(
+                    method=req.method, path=_fill(req.path, answers), payload=_fill(req.payload, answers)
+                )
+                answers.append(_send(client, filled))
             except Exception as error:
                 if not done:
                     raise
                 raise PartialSendError(done, len(self.requests), error) from error
         return answers
+
+
+_PLACEHOLDER = re.compile(r"\{(\d+)\.(\w+)\}")
+
+
+def _fill(value: Any, answers: list[Any]) -> Any:
+    """Replace `{n.field}` with field of the n-th answer, in strings and inside lists and dicts."""
+    if isinstance(value, str):
+
+        def sub(m: re.Match) -> str:
+            index, key = int(m[1]), m[2]
+            if index >= len(answers) or not isinstance(answers[index], dict) or key not in answers[index]:
+                raise ToolError(f"Kitsu's answer to request {index + 1} has no '{key}' to continue with")
+            return str(answers[index][key])
+
+        return _PLACEHOLDER.sub(sub, value)
+    if isinstance(value, list):
+        return [_fill(v, answers) for v in value]
+    if isinstance(value, dict):
+        return {k: _fill(v, answers) for k, v in value.items()}
+    return value
 
 
 def _send(client, req: PlannedRequest) -> Any:
@@ -92,7 +124,10 @@ def _send(client, req: PlannedRequest) -> Any:
     if req.method == "PUT":
         return client.put(req.path, req.payload)
     if req.method == "DELETE":
-        return client.delete(req.path, req.payload or None)
+        params = req.payload if isinstance(req.payload, dict) else None  # DELETE takes query params, a dict
+        return client.delete(req.path, params or None)
+    if not isinstance(req.payload, dict):
+        raise ToolError("An upload needs a dict payload with the file path under 'file'")
     data = {k: v for k, v in req.payload.items() if k != "file"}
     return client.upload(req.path, req.payload["file"], data or None)
 
