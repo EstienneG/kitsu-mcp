@@ -45,8 +45,11 @@ class Plan:
     failure: str | None = None
     """A failed check: the dry run reports would_fail, the real call refuses with this reason."""
 
-    def request(self, method: Literal["POST", "PUT"], path: str, payload: dict[str, Any]) -> None:
-        self.requests.append(PlannedRequest(method=method, path=path, payload=payload))
+    def request(
+        self, method: Literal["POST", "PUT", "DELETE", "UPLOAD"], path: str, payload: dict[str, Any] | None = None
+    ) -> None:
+        """UPLOAD sends payload["file"] (a local path) as a multipart file, with the rest as form data."""
+        self.requests.append(PlannedRequest(method=method, path=path, payload=payload or {}))
 
     def fail(self, reason: str) -> None:
         """Record a failed check; the first one is the reason given."""
@@ -74,14 +77,24 @@ class Plan:
         client = get_client()
         answers = []
         for done, req in enumerate(self.requests):
-            send = client.post if req.method == "POST" else client.put
             try:
-                answers.append(send(req.path, req.payload))
+                answers.append(_send(client, req))
             except Exception as error:
                 if not done:
                     raise
                 raise PartialSendError(done, len(self.requests), error) from error
         return answers
+
+
+def _send(client, req: PlannedRequest) -> Any:
+    if req.method == "POST":
+        return client.post(req.path, req.payload)
+    if req.method == "PUT":
+        return client.put(req.path, req.payload)
+    if req.method == "DELETE":
+        return client.delete(req.path, req.payload or None)
+    data = {k: v for k, v in req.payload.items() if k != "file"}
+    return client.upload(req.path, req.payload["file"], data or None)
 
 
 def current_user() -> dict:

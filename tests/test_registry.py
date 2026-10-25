@@ -58,10 +58,10 @@ def test_tool_functions_are_callable_directly(fake):
 
 
 # What clients put in the model's context before any call: every tool's name, description and input schema.
-# 39.9k characters (about 10k tokens) with every group and write tools on, as of 48 tools. Most sessions
+# 49.8k characters (about 12.5k tokens) with every group and write tools on, as of 56 tools. Most sessions
 # only list the core tools (see test_groups). Raise this deliberately, with the
 # README's "Context cost" paragraph, when a new tool earns its place.
-TOOL_LIST_BUDGET_CHARS = 41_000
+TOOL_LIST_BUDGET_CHARS = 51_000
 
 
 async def test_tool_list_stays_within_its_context_budget():

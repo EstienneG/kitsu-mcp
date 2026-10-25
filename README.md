@@ -223,9 +223,10 @@ defaults (core and write tools listed, write tools disabled).
 | `activity` | `project_activity` (comments, status changes and uploads since a date, by person or task type), `my_notifications` (the user's Kitsu inbox) |
 | `planning` | `workload`, `timesheet` (time logged per day and task over a period, with days off when Kitsu shows them), `quotas` (shots and frames per artist per day, week or month, in the count modes of Kitsu's Quotas page), `production_schedule` (each task type's planned dates vs. its tasks' due dates, late and unscheduled task types, milestones), `budget` (planned salary costs per person and department, as Kitsu's Budget page) |
 | `review` | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `download_previews`, `list_playlists`, `get_playlist`; with the `[video]` extra: `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
+| `structure` (opt-in) | `manage_project` (create, update, close, reopen, delete), `manage_episode`, `manage_sequence`, `manage_shot` (create, update, delete, restore), `manage_asset`, `manage_concept`, `manage_edit` (create, update, delete), `manage_task` (create tasks of a type on many entities, delete a task) |
 | `write` (opt-in) | `add_comment` (or a reply to a comment), `acknowledge_comment`, `set_task_status`, `assign_task` (or unassign), `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview) |
 
-The 12 core tools cost a model about 2,500 tokens of context; every group listed, about 10,000.
+The 12 core tools cost a model about 2,500 tokens of context; every group listed, about 12,500.
 
 ### Links
 
@@ -242,6 +243,11 @@ estimate, time logged), and `warnings` (e.g. Kitsu may refuse a status your role
 (archived status, inactive person, start date after due date, over 24 h logged in a day), `verdict` is
 `would_fail` with the `reason`, and the real call refuses with the same reason. Invalid arguments (bad IDs,
 unknown names) are errors either way. Agents are told to dry-run first and show the user the plan.
+
+**Deletes** (`action="delete"` on the `manage_*` tools) also need `confirm=True`; without it they refuse, so
+an agent cannot delete by picking the wrong action. Kitsu cancels (hides) a shot, asset, concept or edit that
+has tasks rather than deleting it; `force=True` deletes it and its tasks for good, and the dry run says which
+will happen. Projects can only be deleted once closed.
 
 ### Prompts and resources
 

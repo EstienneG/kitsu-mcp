@@ -15,6 +15,14 @@ WRITE_TOOLS = {
     "log_time",
     "create_playlist",
     "add_to_playlist",
+    "manage_project",
+    "manage_episode",
+    "manage_sequence",
+    "manage_shot",
+    "manage_asset",
+    "manage_concept",
+    "manage_edit",
+    "manage_task",
 }
 
 
@@ -585,6 +593,10 @@ async def test_every_write_tool_has_dry_run(writable, all_groups):
     for name, t in tagged.items():
         assert t.parameters["properties"]["dry_run"]["default"] is False, name
         assert "dry_run=True" in (t.description or ""), name
+        actions = t.parameters["properties"].get("action", {}).get("enum", [])
+        if "delete" in actions:  # deleting needs an explicit confirmation, documented
+            assert t.parameters["properties"]["confirm"]["default"] is False, name
+            assert "confirm=True" in (t.description or ""), name
 
 
 async def test_create_playlist_dry_run_writes_nothing_and_plans_the_real_call(call, fake, writable):

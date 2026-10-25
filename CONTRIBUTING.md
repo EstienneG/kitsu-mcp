@@ -26,9 +26,13 @@ production; writes are blocked. Add to them when a change depends on what Zou re
     uv run python tests/integration/seed.py http://127.0.0.1:8090/api
     KITSU_TEST_HOST=http://127.0.0.1:8090/api uv run pytest tests/integration
 
+Add `KITSU_TEST_WRITES=1` to also run the write tools for real (`tests/integration/test_live_writes.py`). They
+only run against `127.0.0.1` or `localhost`, and clean up their own project; never use them on a Kitsu you
+care about. CI sets it, since its container is thrown away after each run.
+
 **Context budgets.** Clients send every listed tool's name, description and arguments to the model at the
 start of a conversation. The 12 core tools are about 2,500 tokens, plus about 300 for the server
-instructions; with every group listed (48 tools, writes enabled) about 10,000. Tests keep the core list
+instructions; with every group listed (56 tools, writes enabled) about 12,500. Tests keep the core list
 (`tests/test_groups.py`) and the full list (`tests/test_registry.py`) under fixed budgets: raise them
 deliberately when a tool earns its place, and prefer putting new tools in a group rather than in core.
 

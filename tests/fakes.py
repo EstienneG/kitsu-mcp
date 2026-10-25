@@ -29,6 +29,7 @@ class FakeClient:
 
     def _entity(self, entity_id: str) -> dict:
         entity = {**self._by_id("assets"), **self._by_id("shots"), **self._by_id("sequences")}.get(entity_id)
+        entity = entity or self._entity_any(entity_id)
         if entity is None:
             raise ToolError(f"Not found: data/entities/{entity_id}")
         return entity
@@ -144,6 +145,76 @@ class FakeClient:
             entry = {"task_id": task["id"], "person_id": m[3], "date": m[2], "duration": data["duration"]}
             self.data.setdefault("time_spents", []).append(entry)
             return entry
+        if created := self._create(path, data):
+            return created
+        raise ToolError(f"Not found: {path} (no fake route)")
+
+    # --- structure writes, as the dev Zou does them (checked on Zou 1.0.97) -----------------------------
+    def _new_id(self, prefix: str) -> str:
+        return f"{prefix}-new-{len(self.calls)}"
+
+    def _create(self, path: str, data: dict) -> dict | None:
+        d = self.data
+        if path == "data/projects":
+            project = {**data, "id": self._new_id("p"), "project_status_id": "ps-open"}
+            d["projects"].append(project)
+            if data.get("production_type") == "tvshow":  # Zou adds a first episode to every TV show
+                d["episodes"].append({"id": self._new_id("ep"), "name": "E01", "project_id": project["id"]})
+            return project
+        if m := re.fullmatch(r"data/projects/([^/]+)/(episodes|sequences|shots|concepts|edits)", path):
+            kind = m[2]
+            record = {"id": self._new_id(kind[:2]), "project_id": m[1], "canceled": False, "data": {}, **data}
+            if kind == "sequences":
+                record["parent_id"] = data.get("episode_id")
+            if kind == "shots":
+                record["parent_id"] = data["sequence_id"]
+            d.setdefault(kind, []).append(record)
+            return record
+        if m := re.fullmatch(r"data/projects/([^/]+)/asset-types/([^/]+)/assets/new", path):
+            asset = {"id": self._new_id("a"), "project_id": m[1], "entity_type_id": m[2], "canceled": False, **data}
+            d["assets"].append(asset)
+            return asset
+        if path == "data/tasks":
+            task = {"id": self._new_id("t"), "duration": 0, "estimation": None, "due_date": None, **data}
+            d["tasks"].append(task)
+            return task
+        return None
+
+    def _entity_any(self, entity_id: str) -> dict | None:
+        for kind in ("projects", "assets", "shots", "sequences", "episodes", "concepts", "edits"):
+            for record in self.data.get(kind, []):
+                if record["id"] == entity_id:
+                    return record
+        return None
+
+    def delete(self, path: str, params: dict | None = None) -> Any:
+        self.calls.append(("DELETE", path, params or {}))
+        force = bool((params or {}).get("force"))
+        d = self.data
+        if m := re.fullmatch(r"data/tasks/([^/]+)", path):
+            self._task_or_404(m[1], path)
+            d["tasks"] = [t for t in d["tasks"] if t["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)", path):
+            project = self._by_id("projects").get(m[1])
+            if project is None:
+                raise NotFoundError(f"Not found: {path}")
+            if project["project_status_id"] != "ps-closed":
+                raise ToolError(f"Kitsu rejected DELETE {path}: Only closed projects can be deleted")
+            d["projects"] = [p for p in d["projects"] if p["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/(assets|shots|concepts|edits|sequences|episodes)/([^/]+)", path):
+            kind, record_id = m[1], m[2]
+            if not any(r["id"] == record_id for r in d.get(kind, [])):
+                raise NotFoundError(f"Not found: {path}")
+            if kind in ("assets", "shots", "concepts", "edits"):
+                has_tasks = any(t["entity_id"] == record_id for t in d["tasks"])
+                if has_tasks and not force:  # Zou cancels instead of deleting
+                    next(r for r in d[kind] if r["id"] == record_id)["canceled"] = True
+                    return ""
+                d["tasks"] = [t for t in d["tasks"] if t["entity_id"] != record_id]
+            d[kind] = [r for r in d[kind] if r["id"] != record_id]
+            return ""
         raise ToolError(f"Not found: {path} (no fake route)")
 
     def put(self, path: str, data: dict) -> Any:
@@ -158,6 +229,14 @@ class FakeClient:
             task = self._task_or_404(m[1], path)
             task.update(data)
             return task
+        if m := re.fullmatch(r"data/(entities|projects|shots)/([^/]+)", path):
+            record = self._entity_any(m[2])
+            if record is None:
+                raise NotFoundError(f"Not found: {path}")
+            if "data" in data:  # Zou merges custom fields
+                record["data"] = {**(record.get("data") or {}), **data["data"]}
+            record.update({k: v for k, v in data.items() if k != "data"})
+            return record
         if path == "actions/tasks/clear-assignation":
             # Zou answers with the tasks it changed, silently skipping those the caller may not unassign.
             changed = []
@@ -325,6 +404,12 @@ class FakeClient:
             ]
         if m := re.fullmatch(r"data/(assets|shots|entities)/([^/]+)", path):
             return self._entity(m[2])
+        if m := re.fullmatch(r"data/(sequences|episodes|concepts|edits)/([^/]+)", path):
+            if (record := self._entity_any(m[2])) is None:
+                raise NotFoundError(f"Not found: {path}")
+            return record
+        if m := re.fullmatch(r"data/(concepts|edits)/([^/]+)/tasks", path):
+            return self._tasks_for(m[2])
         if m := re.fullmatch(r"data/(assets|shots|entities)/([^/]+)/tasks", path):
             return self._tasks_for(m[2])
         if m := re.fullmatch(r"data/tasks/([^/]+)/full", path):
