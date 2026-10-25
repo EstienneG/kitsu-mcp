@@ -10,11 +10,11 @@ from kitsu_mcp.server.app import tool
 from kitsu_mcp.tools.write.common import (
     ADDITIVE_IDEMPOTENT,
     WRITE,
-    check_lead,
-    finish,
-    label,
-    load_task,
-    write_result,
+    fetch_task_full,
+    send_or_preview,
+    task_label,
+    warn_unless_lead,
+    written_task_result,
 )
 
 
@@ -29,21 +29,21 @@ def assign_task(task_id: str, person: str, remove: bool = False, dry_run: bool =
     """
     task_id = object_id(task_id, "task", "search_tasks")
     record = get_lookups().person(person)
-    task = load_task(task_id)
+    task = fetch_task_full(task_id)
     name = record.get("full_name") or record["id"]
     people = task.get("persons") or []
     current = [p.get("full_name") or p["id"] for p in people]
     assigned = record["id"] in (task.get("assignees") or [])
     plan = Plan("assign_task", would="")
     plan.before = {"assignees": current}
-    check_lead(plan, "unassign tasks" if remove else "assign tasks")
+    warn_unless_lead(plan, "unassign tasks" if remove else "assign tasks")
     if remove:
         if not assigned:
-            plan.would = f"Nothing: {name} is not assigned to {label(task)}"
+            plan.would = f"Nothing: {name} is not assigned to {task_label(task)}"
             plan.warnings.append(f"{name} is not assigned: no request is sent.")
             plan.after, plan.message = plan.before, f"{name} was not assigned; nothing changed."
-            return finish(plan, task_id, dry_run)
-        plan.would, plan.message = f"Unassign {name} from {label(task)}", f"Unassigned {name}."
+            return send_or_preview(plan, task_id, dry_run)
+        plan.would, plan.message = f"Unassign {name} from {task_label(task)}", f"Unassigned {name}."
         plan.request("PUT", "actions/tasks/clear-assignation", {"task_ids": [task_id], "person_id": record["id"]})
         plan.after = {"assignees": [p.get("full_name") or p["id"] for p in people if p["id"] != record["id"]]}
         if dry_run:
@@ -51,12 +51,12 @@ def assign_task(task_id: str, person: str, remove: bool = False, dry_run: bool =
         # Zou skips tasks the caller may not unassign (another department) and answers with those it changed.
         if task_id not in (plan.send()[0] or []):
             raise ToolError(f"Kitsu did not unassign {name}: your role or department may not allow it")
-        return write_result(plan.message, task_id)
-    plan.would, plan.message = f"Assign {name} to {label(task)}", f"Assigned {name}."
+        return written_task_result(plan.message, task_id)
+    plan.would, plan.message = f"Assign {name} to {task_label(task)}", f"Assigned {name}."
     plan.request("PUT", f"actions/persons/{record['id']}/assign", {"task_ids": [task_id]})
     plan.after = {"assignees": current if assigned else [*current, name]}
     if not record.get("active", True):
         plan.fail(f"{name} is an inactive Kitsu account.")
     if assigned:
         plan.warnings.append(f"{name} is already assigned: nothing changes.")
-    return finish(plan, task_id, dry_run)
+    return send_or_preview(plan, task_id, dry_run)

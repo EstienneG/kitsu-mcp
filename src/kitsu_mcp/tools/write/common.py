@@ -20,34 +20,34 @@ ADDITIVE_IDEMPOTENT = {"readOnlyHint": False, "destructiveHint": False, "idempot
 OVERWRITE = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
 
 
-def load_task(task_id: str) -> dict:
+def fetch_task_full(task_id: str) -> dict:
     return get_client().get(f"data/tasks/{task_id}/full")
 
 
-def label(task: dict) -> str:
+def task_label(task: dict) -> str:
     """'SQ010 / SH010 / Animation': which task, for the one-line plan."""
     parts = [(task.get(k) or {}).get("name") for k in ("sequence", "entity", "task_type")]
     return " / ".join(p for p in parts if p) or task["id"]
 
 
-def finish(plan: Plan, task_id: str, dry_run: bool) -> WriteResult | DryRunResult:
+def send_or_preview(plan: Plan, task_id: str, dry_run: bool) -> WriteResult | DryRunResult:
     """Return the plan (dry run), or send it and report the task as it is now."""
     if dry_run:
         return plan.preview()
     plan.send()
-    return write_result(plan.message, task_id)
+    return written_task_result(plan.message, task_id)
 
 
-def write_result(message: str, task_id: str) -> WriteResult:
+def written_task_result(message: str, task_id: str) -> WriteResult:
     """The write already succeeded: a failing re-read must not make it look failed (and invite a retry)."""
     try:
-        task = task_detail(load_task(task_id))
+        task = task_detail(fetch_task_full(task_id))
     except Exception as error:  # noqa: BLE001 - any failure here happens after a successful write
         return WriteResult(ok=True, message=f"{message} (Could not reload the task: {error})", task=None)
     return WriteResult(ok=True, message=message, task=task)
 
 
-def check_lead(plan: Plan, action: str, user: dict | None = None) -> None:
+def warn_unless_lead(plan: Plan, action: str, user: dict | None = None) -> None:
     """Kitsu normally keeps assigning, scheduling and logging time for others to admins, managers and
     supervisors. Studios can set this up differently, so it is a warning, not a refusal."""
     role = (user or current_user()).get("role")
@@ -55,12 +55,12 @@ def check_lead(plan: Plan, action: str, user: dict | None = None) -> None:
         plan.warnings.append(f"Kitsu may refuse: your role ({role}) usually cannot {action}.")
 
 
-def plan_comment(tool_name: str, task_id: str, text: str, status: str | None) -> tuple[Plan, dict, str, str]:
+def plan_task_comment(tool_name: str, task_id: str, text: str, status: str | None) -> tuple[Plan, dict, str, str]:
     """A comment, with an optional status change. Kitsu requires a status on every comment, so it defaults to
     the current one. Returns the plan, the task, and the previous and new status short names."""
     task_id = object_id(task_id, "task", "search_tasks")
     lookups = get_lookups()
-    task = load_task(task_id)
+    task = fetch_task_full(task_id)
     status_id = lookups.task_status(status)["id"] if status else task["task_status_id"]
     record = lookups.index("task_statuses").get(status_id, {})
     previous = task["task_status"]["short_name"]

@@ -16,7 +16,7 @@ from kitsu_mcp.tools.write.common import (
     ADDITIVE,
     ADDITIVE_IDEMPOTENT,
     WRITE,
-    load_task,
+    fetch_task_full,
 )
 
 MAX_PLAYLIST_ADDS = 50
@@ -183,7 +183,7 @@ def add_to_playlist(
                 )
             )
 
-    tasks = [load_task(t) for t in task_ids]
+    tasks = [fetch_task_full(t) for t in task_ids]
     for task in tasks:
         check_entity(task["entity_id"], f"Task {task['id']}")
     for entity_id in entity_ids:
@@ -209,7 +209,9 @@ def add_to_playlist(
                 "current preview is broken in Kitsu; pass task_type to pick a revision",
             )
             continue
-        preview_task = load_task(preview["task_id"])["task_type_id"] if preview and preview.get("task_id") else None
+        preview_task = (
+            fetch_task_full(preview["task_id"])["task_type_id"] if preview and preview.get("task_id") else None
+        )
         plan(entity_id, entity_id, preview, preview_task, "no preview uploaded")
 
     write_plan = Plan("add_to_playlist", would=f"Add {len(planned)} to playlist '{playlist['name']}'")
