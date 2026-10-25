@@ -139,8 +139,8 @@ def set_task_status(task_id: str, status: str, comment: str = "", dry_run: bool 
 
 
 @tool(annotations=ADDITIVE_IDEMPOTENT, tags=WRITE)
-def assign_task(task_id: str, person: str, dry_run: bool = False) -> WriteResult | DryRunResult:
-    """Add a person (name, email or ID) to a task's assignees.
+def assign_task(task_id: str, person: str, remove: bool = False, dry_run: bool = False) -> WriteResult | DryRunResult:
+    """Add a person (name, email or ID) to a task's assignees, or take them off it with remove=True.
 
     dry_run=True: check everything with reads only and return the plan instead of writing: `would`, the
     exact `requests`, the assignees `before`/`after` and `warnings`; verdict "would_fail" gives the `reason`
@@ -151,14 +151,31 @@ def assign_task(task_id: str, person: str, dry_run: bool = False) -> WriteResult
     task = _task(task_id)
     name = record.get("full_name") or record["id"]
     current = [p.get("full_name") or p["id"] for p in task.get("persons") or []]
-    plan = Plan("assign_task", would=f"Assign {name} to {_label(task)}", message=f"Assigned {name}.")
-    plan.request("PUT", f"actions/persons/{record['id']}/assign", {"task_ids": [task_id]})
+    assigned = record["id"] in (task.get("assignees") or [])
+    plan = Plan("assign_task", would="")
     plan.before = {"assignees": current}
-    plan.after = {"assignees": current if record["id"] in task.get("assignees", []) else [*current, name]}
-    _check_lead(plan, "assign tasks")
+    _check_lead(plan, "unassign tasks" if remove else "assign tasks")
+    if remove:
+        if not assigned:
+            plan.would = f"Nothing: {name} is not assigned to {_label(task)}"
+            plan.warnings.append(f"{name} is not assigned: no request is sent.")
+            plan.after, plan.message = plan.before, f"{name} was not assigned; nothing changed."
+            return _finish(plan, task_id, dry_run)
+        plan.would, plan.message = f"Unassign {name} from {_label(task)}", f"Unassigned {name}."
+        plan.request("PUT", "actions/tasks/clear-assignation", {"task_ids": [task_id], "person_id": record["id"]})
+        plan.after = {"assignees": [p for p in current if p != name]}
+        if dry_run:
+            return plan.preview()
+        # Zou skips tasks the caller may not unassign (another department) and answers with those it changed.
+        if task_id not in (plan.send()[0] or []):
+            raise ToolError(f"Kitsu did not unassign {name}: your role or department may not allow it")
+        return _result(plan.message, task_id)
+    plan.would, plan.message = f"Assign {name} to {_label(task)}", f"Assigned {name}."
+    plan.request("PUT", f"actions/persons/{record['id']}/assign", {"task_ids": [task_id]})
+    plan.after = {"assignees": current if assigned else [*current, name]}
     if not record.get("active", True):
         plan.fail(f"{name} is an inactive Kitsu account.")
-    if record["id"] in (task.get("assignees") or []):
+    if assigned:
         plan.warnings.append(f"{name} is already assigned: nothing changes.")
     return _finish(plan, task_id, dry_run)
 

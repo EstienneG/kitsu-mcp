@@ -83,3 +83,11 @@ async def test_timesheet_for_someone_and_a_range(call):
     assert september["total_minutes"] == 500
     with pytest.raises(ToolError, match="after end"):
         await call("timesheet", start="2026-10-10", end="2026-10-01")
+
+
+async def test_timesheet_shows_days_off_overlapping_the_period(call):
+    sheet = await call("timesheet")  # 2026-10-09 .. 2026-10-15
+    assert sheet["days_off"] == [{"start": "2026-10-09", "end": "2026-10-12", "description": "Trip"}]
+    assert (await call("timesheet", person="Bob Leroy"))["days_off"] == []
+    august = await call("timesheet", start="2026-08-10", end="2026-08-20")
+    assert [d["start"] for d in august["days_off"]] == ["2026-08-03"]

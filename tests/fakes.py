@@ -451,6 +451,77 @@ def seed() -> dict[str, Any]:
             {"task_id": "t-forest-mod", "person_id": BOB, "date": "2026-10-13", "duration": 120},
         ],
         "me": ALICE,
+        "day_offs": [
+            {"id": "do-1", "person_id": ALICE, "date": "2026-10-09", "end_date": "2026-10-12", "description": "Trip"},
+            {"id": "do-2", "person_id": ALICE, "date": "2026-08-03", "end_date": "2026-08-14", "description": None},
+        ],
+        "schedule_items": [
+            # Task-type spans (no object_id): Modeling ended before today (2026-10-15) with work still open.
+            {
+                "id": "si-mod",
+                "task_type_id": TT_MODEL,
+                "object_id": None,
+                "start_date": "2026-02-01",
+                "end_date": "2026-09-30",
+                "man_days": 40,
+            },
+            {
+                "id": "si-anim",
+                "task_type_id": TT_ANIM,
+                "object_id": None,
+                "start_date": "2026-06-01",
+                "end_date": "2026-11-30",
+                "man_days": None,
+            },
+        ],
+        "milestones": [
+            {"id": "ms-2", "date": "2026-12-01", "name": "Delivery", "task_type_id": None},
+            {"id": "ms-1", "date": "2026-11-01", "name": "Anim lock", "task_type_id": TT_ANIM},
+        ],
+        # Zou's quotas answer: person -> period -> measure -> {key: value}; weeks are unpadded ("2026-7").
+        "quotas": {
+            ALICE: {
+                "week": {
+                    "count": {"2026-7": 1.0, "2026-40": 2.0, "2026-41": 0},
+                    "frames": {"2026-7": 0, "2026-40": 96, "2026-41": 0},
+                    "seconds": {"2026-7": 0, "2026-40": 4.0, "2026-41": 0},
+                    "drawings": {},
+                },
+                "month": {"count": {"2026-02": 1.0, "2026-10": 2.0}, "frames": {"2026-10": 96}},
+            },
+            BOB: {"week": {"count": {"2026-40": 0}, "frames": {}}},
+        },
+        "budgets": [
+            {"id": "b-1", "project_id": PROJECT, "name": "First pass", "revision": 1, "currency": "EUR"},
+            {"id": "b-2", "project_id": PROJECT, "name": "Revised", "revision": 2, "currency": "EUR"},
+        ],
+        "budget_entries": {
+            "b-2": [
+                # 3 months at 100/day (20 days a month), October set by hand to 500.
+                {
+                    "id": "be-1",
+                    "person_id": ALICE,
+                    "department_id": "dep-anim",
+                    "position": "artist",
+                    "seniority": "mid",
+                    "start_date": "2026-09-01",
+                    "months_duration": 3,
+                    "daily_salary": 100,
+                    "exceptions": {"2026-10": 500, "2027-05": 9999},
+                },
+                {
+                    "id": "be-2",
+                    "person_id": BOB,
+                    "department_id": "dep-model",
+                    "position": "supervisor",
+                    "seniority": "senior",
+                    "start_date": "2026-11-01",
+                    "months_duration": 1,
+                    "daily_salary": 200,
+                    "exceptions": {},
+                },
+            ],
+        },
     }
 
 
@@ -600,6 +671,16 @@ class FakeClient:
             task = self._task_or_404(m[1], path)
             task.update(data)
             return task
+        if path == "actions/tasks/clear-assignation":
+            # Zou answers with the tasks it changed, silently skipping those the caller may not unassign.
+            changed = []
+            for task_id in data["task_ids"]:
+                task = self._task_or_404(task_id, path)
+                if task_id in self.data.get("unassign_denied", ()):
+                    continue
+                task["assignees"] = [a for a in task["assignees"] if a != data.get("person_id")]
+                changed.append(task_id)
+            return changed
         raise ToolError(f"Not found: {path} (no fake route)")
 
     def _task_or_404(self, task_id: str, path: str) -> dict:
@@ -776,4 +857,18 @@ class FakeClient:
                 if entry["task_id"] == m[1]:
                     spent.setdefault(entry["person_id"], []).append(entry)
             return spent
+        if m := re.fullmatch(r"data/persons/([^/]+)/day-offs", path):
+            return [o for o in d.get("day_offs", []) if o["person_id"] == m[1]]
+        if m := re.fullmatch(r"data/projects/([^/]+)/schedule-items/task-types", path):
+            return d.get("schedule_items", []) if m[1] == PROJECT else []
+        if m := re.fullmatch(r"data/projects/([^/]+)/milestones", path):
+            return d.get("milestones", []) if m[1] == PROJECT else []
+        if m := re.fullmatch(r"data/projects/([^/]+)/quotas/([^/]+)", path):
+            if params.get("count_mode") not in ("weighted", "feedback", "done"):
+                raise ToolError("count_mode must be equal to weighted, weigtheddone, feedback, or done")
+            return d.get("quotas", {}) if m[2] == TT_ANIM else {}
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets", path):
+            return [b for b in d.get("budgets", []) if b["project_id"] == m[1]]
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)/entries", path):
+            return d.get("budget_entries", {}).get(m[2], [])
         raise ToolError(f"Not found: {path} (no fake route)")
