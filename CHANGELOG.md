@@ -13,7 +13,8 @@ change behaviour (called out under **Changed**).
 - `production` tools (writes): `task_action` (start, submit for review), `publish_preview` (a file as the next
   revision, with a status; stdio only), `batch_tasks` (status, assign, unassign, priority or delete up to 100
   tasks) and `manage_comment` (edit, delete, delete a reply).
-- Breakdown: `set_casting` (add, remove or replace the assets cast in a shot or episode) and `manage_scene`
+- Breakdown: `set_casting` (add, remove or replace the assets cast in a shot or episode; keeps labels, refuses
+  when it would drop canceled assets, and lists the shots an episode change uncasts) and `manage_scene`
   (create, rename, link shots, instance assets); `get_casting` also answers for an episode or a whole sequence.
 - `admin` tools (writes): `manage_project_team`, `manage_project_settings` (task types, statuses, asset types
   and status automations a production uses), `manage_custom_field`, `manage_schedule` (task type dates,

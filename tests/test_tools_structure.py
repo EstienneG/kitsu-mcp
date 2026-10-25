@@ -177,3 +177,12 @@ async def test_structure_tools_need_writes_and_sit_in_their_group(call, fake):
     assert "write tools need KITSU_ALLOW_WRITE" in listed  # nothing is enabled without writes
     with pytest.raises(ToolError, match="Unknown tool"):
         await call("manage_shot", action="create", project="Demo Short", sequence="SQ010", name="X")
+
+
+async def test_edit_in_an_episode_sends_episode_id(call, fake, writable):
+    """Zou's new-edit route reads episode_id; gazu's parent_id is ignored, leaving the edit out of the episode."""
+    await call("manage_project", action="create", name="Edit Show", production_type="tvshow")
+    edit = await call("manage_edit", action="create", project="Edit Show", name="Animatic", episode="E01")
+    record = next(e for e in fake.data["edits"] if e["id"] == edit["id"])
+    episode = next(e for e in fake.data["episodes"] if e["project_id"] == record["project_id"])
+    assert record["parent_id"] == episode["id"]

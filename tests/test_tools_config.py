@@ -121,11 +121,14 @@ async def test_schedule_rows_and_milestones(call, fake, writable, admin):
     assert all(m["id"] != milestone["id"] for m in fake.data["milestones"])
 
 
-async def test_schedule_creation_is_for_admins(call, fake, writable):
+async def test_schedule_creation_warns_non_managers(call, fake, writable):
+    """Zou lets admins and the production's managers create schedule rows and milestones (older Zou keeps
+    schedule rows to admins), so other roles get a warning rather than a refusal."""
     plan = await call(
         "manage_schedule", project="Demo Short", action="add_milestone", name="Lock", date="2026-12-20", dry_run=True
     )
-    assert plan["verdict"] == "would_fail" and "only admins" in plan["reason"]
+    assert plan["verdict"] == "would_succeed"
+    assert any("admins and the production's managers" in w for w in plan["warnings"])
 
 
 async def test_budget_lines_use_zous_fields_and_update_sends_the_whole_line(call, fake, writable):

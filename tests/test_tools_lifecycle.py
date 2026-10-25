@@ -107,3 +107,14 @@ async def test_publish_is_hidden_on_the_hosted_server(writable):
 
     tool = await mcp.get_tool("publish_preview")
     assert "local" in tool.tags  # the HTTP policy hides `local` tools and refuses their calls
+
+
+async def test_text_that_looks_like_a_placeholder_is_sent_as_written(call, fake, writable):
+    """Plans fill `{n.id}` in paths only: a comment containing "{0.id}" must go out exactly as the dry run showed."""
+    text = "Rename with '{0.id}' template"
+    plan = await call(
+        "batch_tasks", action="status", task_ids=["t-sh020-anim"], status="wip", comment=text, dry_run=True
+    )
+    assert plan["requests"][0]["payload"]["comment"] == text
+    await call("batch_tasks", action="status", task_ids=["t-sh020-anim"], status="wip", comment=text)
+    assert fake.data["comments"]["t-sh020-anim"][0]["text"] == text

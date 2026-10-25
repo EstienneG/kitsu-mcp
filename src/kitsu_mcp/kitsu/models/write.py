@@ -47,7 +47,10 @@ class PlaylistWriteResult(BaseModel):
 
 
 class PlannedRequest(BaseModel):
-    method: str = Field(description="POST, PUT, DELETE, or UPLOAD (a local file sent as multipart)")
+    method: str = Field(
+        description="POST, PUT, DELETE, UPLOAD (a local file sent as multipart), or GET for a Zou action "
+        "with a side effect (an invitation email)"
+    )
     path: str = Field(description="Zou API route")
     payload: dict[str, Any] | list[Any] = Field(description="JSON body; a bare array for Zou's bulk routes")
 

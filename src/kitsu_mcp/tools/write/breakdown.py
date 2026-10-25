@@ -56,13 +56,15 @@ def set_casting(
 
     action: add (cast these assets, keeping the others), remove (uncast them), or replace (the casting becomes
     exactly `assets`). assets: names or IDs. occurrences: asset -> how many times it appears (default 1; with
-    add, also updates an asset already cast). dry_run=True: show which assets come and go without writing;
-    show it to the user first.
+    add, also updates an asset already cast). Labels already set in Kitsu are kept. Removing an asset from an
+    episode's casting also removes it from that episode's shots (Kitsu does it; the plan lists them).
+    dry_run=True: show which assets come and go without writing; show it to the user first.
     """
+    client = get_client()
     entity = _entity(entity_id)
     project_id = entity["project_id"]
     route = f"data/projects/{project_id}/entities/{entity['id']}/casting"
-    current = {c["asset_id"]: c for c in get_client().get(route) or []}
+    current = {c["asset_id"]: c for c in client.get(route) or []}
     index = _assets_by_ref(project_id)
     given = [_asset(index, a) for a in dict.fromkeys(assets)]
     counts = {_asset(index, k)["id"]: v for k, v in (occurrences or {}).items()}
@@ -85,15 +87,34 @@ def set_casting(
     added = sorted(set(after) - set(before))
     removed = sorted(set(before) - set(after))
     recounted = sorted(n for n in set(after) & set(before) if after[n] != before[n])
+    label = entity.get("name") or entity["id"]
     plan = Plan("set_casting", would="")
     if before != after:
-        plan.request("PUT", route, [{"asset_id": a, "nb_occurences": n} for a, n in new.items()])  # whole list
+        # Zou rebuilds the whole casting from this list: keep each link's label, or it comes back empty.
+        plan.request(
+            "PUT",
+            route,
+            [
+                {"asset_id": a, "nb_occurences": n, "label": (current.get(a) or {}).get("label") or ""}
+                for a, n in new.items()
+            ],
+        )
+        # Zou's casting read hides canceled assets, but the PUT deletes their links too, for good.
+        hidden = [a for a in entity.get("entities_out") or [] if a not in current]
+        if hidden:
+            plan.fail(
+                f"{label} is also cast with {len(hidden)} canceled asset(s) Kitsu does not show, and changing the "
+                "casting here would drop them for good; restore or remove them in Kitsu first."
+            )
+        if str(entity.get("type")) == "Episode" and removed:
+            shots = _episode_shots_casting(project_id, entity["id"], {a for a in current if a not in new})
+            for shot, gone in shots.items():
+                plan.warnings.append(f"Kitsu also uncasts {', '.join(gone)} from {shot}.")
     changes = [
         f"+{', '.join(added)}" if added else "",
         f"-{', '.join(removed)}" if removed else "",
         f"count of {', '.join(recounted)}" if recounted else "",
     ]
-    label = entity.get("name") or entity["id"]
     plan.would = f"Casting of {label}: " + ("; ".join(c for c in changes if c) or "no change")
     plan.message = f"Casting of {label} updated: {len(after)} asset(s)."
     plan.before, plan.after = {"casting": before}, {"casting": after}
@@ -104,8 +125,29 @@ def set_casting(
     if before == after:
         plan.warnings.append("Nothing changes: no request is sent.")
     return send_entity_write(
-        plan, dry_run, reload=lambda _: {"id": entity["id"], "name": label, "casting": get_client().get(route)}
+        plan, dry_run, reload=lambda _: {"id": entity["id"], "name": label, "casting": client.get(route)}
     )
+
+
+def _episode_shots_casting(project_id: str, episode_id: str, assets: set[str]) -> dict[str, list[str]]:
+    """The shots of an episode that cast any of `assets`: Kitsu uncasts them there too when they leave the
+    episode's casting. {"SQ01 / SH010": [asset names]}."""
+    client = get_client()
+    found: dict[str, list[str]] = {}
+    for sequence in client.get(f"data/projects/{project_id}/sequences") or []:
+        if sequence.get("parent_id") != episode_id:
+            continue
+        by_shot = client.get(f"data/projects/{project_id}/sequences/{sequence['id']}/casting") or {}
+        shots = {
+            s["id"]: s["name"]
+            for s in client.get("data/shots", params={"project_id": project_id})
+            if s.get("parent_id") == sequence["id"]
+        }
+        for shot_id, cast in by_shot.items():
+            gone = [c.get("asset_name") or c["asset_id"] for c in cast if c["asset_id"] in assets]
+            if gone:
+                found[f"{sequence['name']} / {shots.get(shot_id, shot_id)}"] = gone
+    return found
 
 
 @tool(annotations=MANAGE, tags=WRITE | {"structure"})

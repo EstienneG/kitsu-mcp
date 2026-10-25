@@ -98,6 +98,8 @@ async def test_structure_lifecycle(call, kitsu):
         assert kitsu.get(f"data/assets/{asset['id']}")["description"] == "The hero"
         concept = await call("manage_concept", action="create", project=PROJECT, name="Hero sketch")
         edit = await call("manage_edit", action="create", project=PROJECT, name="Animatic", episode="E01")
+        episode_id = next(e["id"] for e in kitsu.get(f"data/projects/{project['id']}/episodes") if e["name"] == "E01")
+        assert kitsu.get(f"data/edits/{edit['id']}")["parent_id"] == episode_id  # Zou reads episode_id
         for tool, key, record in (
             ("manage_asset", "asset_id", asset),
             ("manage_concept", "concept_id", concept),
@@ -181,9 +183,11 @@ async def test_breakdown(call, kitsu):
             route = f"data/projects/{shot['entity']['project_id']}/entities/{shot['id']}/casting"
             return {c["asset_name"]: c["nb_occurences"] for c in kitsu.get(route)}
 
-        await call("set_casting", entity_id=shot["id"], action="add", assets=["Hero"])
+        route = f"data/projects/{shot['entity']['project_id']}/entities/{shot['id']}/casting"
+        kitsu.put(route, [{"asset_id": hero["id"], "nb_occurences": 1, "label": "fixed"}])  # a label set in Kitsu
         await call("set_casting", entity_id=shot["id"], action="add", assets=["Sword"], occurrences={"Sword": 2})
         assert cast() == {"Hero": 1, "Sword": 2}
+        assert {c["asset_name"]: c["label"] for c in kitsu.get(route)}["Hero"] == "fixed"  # kept
         await call("set_casting", entity_id=shot["id"], action="remove", assets=["Hero"])
         assert cast() == {"Sword": 2}
         by_sequence = await call("get_casting", sequence_id=sequence["id"])

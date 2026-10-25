@@ -166,7 +166,7 @@ class FakeClient:
         if m := re.fullmatch(r"data/projects/([^/]+)/(episodes|sequences|shots|concepts|edits)", path):
             kind = m[2]
             record = {"id": self._new_id(kind[:2]), "project_id": m[1], "canceled": False, "data": {}, **data}
-            if kind == "sequences":
+            if kind in ("sequences", "edits"):  # Zou reads episode_id; a parent_id sent is ignored
                 record["parent_id"] = data.get("episode_id")
             if kind == "shots":
                 record["parent_id"] = data["sequence_id"]
@@ -206,9 +206,8 @@ class FakeClient:
             person = self._by_id("people")[m[1]]
             person.setdefault("departments", []).append(data["department_id"])
             return person
-        if m := re.fullmatch(r"actions/persons/([^/]+)/invite", path):
-            d.setdefault("invited", []).append(m[1])
-            return {"success": True}
+        if re.fullmatch(r"actions/persons/([^/]+)/invite", path):
+            raise ToolError(f"Kitsu error on POST {path}: MethodNotAllowedException")  # Zou routes it as a GET
         if path == "data/day-offs":
             day_off = {"id": self._new_id("do"), **data}
             d.setdefault("day_offs", []).append(day_off)
@@ -466,13 +465,23 @@ class FakeClient:
         if m := re.fullmatch(r"data/projects/([^/]+)/entities/([^/]+)/casting", path):
             assert isinstance(data, list), "Zou takes the whole casting as a list"
             names = {a["id"]: a for a in self.data["assets"]}
-            self.data["casting"][m[2]] = [  # Zou replaces the whole casting
+            previous = {c["asset_id"] for c in self.data["casting"].get(m[2], [])}
+            if any(e["id"] == m[2] for e in self.data.get("episodes", [])):
+                # Zou uncasts what leaves an episode's casting from the episode's shots too
+                gone = previous - {c["asset_id"] for c in data}
+                sequences = {q["id"] for q in self.data["sequences"] if q.get("parent_id") == m[2]}
+                for shot in self.data["shots"]:
+                    if shot.get("parent_id") in sequences and shot["id"] in self.data["casting"]:
+                        self.data["casting"][shot["id"]] = [
+                            c for c in self.data["casting"][shot["id"]] if c["asset_id"] not in gone
+                        ]
+            self.data["casting"][m[2]] = [  # Zou rebuilds the whole casting: links not sent are gone
                 {
                     "asset_id": c["asset_id"],
                     "asset_name": names.get(c["asset_id"], {}).get("name"),
                     "asset_type_name": "Character",
                     "nb_occurences": c["nb_occurences"],
-                    "label": "",
+                    "label": c.get("label", ""),  # Zou: a label not sent comes back empty
                 }
                 for c in data
             ]
@@ -605,6 +614,9 @@ class FakeClient:
         }
         if path in simple:
             return simple[path]
+        if m := re.fullmatch(r"actions/persons/([^/]+)/invite", path):  # a GET that sends an email
+            d.setdefault("invited", []).append(m[1])
+            return {"success": True}
         if path == "auth/authenticated":
             return {"user": self._by_id("people")[d["me"]]}
         if path == "data/assets/with-tasks":
