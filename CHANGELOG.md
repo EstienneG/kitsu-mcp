@@ -13,6 +13,8 @@ change behaviour (called out under **Changed**).
 - `production` tools (writes): `task_action` (start, submit for review), `publish_preview` (a file as the next
   revision, with a status; stdio only), `batch_tasks` (status, assign, unassign, priority or delete up to 100
   tasks) and `manage_comment` (edit, delete, delete a reply).
+- Breakdown: `set_casting` (add, remove or replace the assets cast in a shot or episode) and `manage_scene`
+  (create, rename, link shots, instance assets); `get_casting` also answers for an episode or a whole sequence.
 - Write tools are tested for real against throwaway Zou 1.0.43 and 1.0.97 containers in CI
   (`KITSU_TEST_WRITES=1`, local hosts only).
 

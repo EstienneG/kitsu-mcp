@@ -5,7 +5,7 @@ from kitsu_mcp.kitsu import links
 from kitsu_mcp.kitsu.client import get_client
 from kitsu_mcp.kitsu.formatters import task_summary
 from kitsu_mcp.kitsu.lookups import check_names, get_lookups
-from kitsu_mcp.kitsu.models import CastAsset, CastIn, Named, Sequence, ShotDetail, ShotList, ShotSummary
+from kitsu_mcp.kitsu.models import CastAsset, CastIn, Named, Sequence, ShotCasting, ShotDetail, ShotList, ShotSummary
 from kitsu_mcp.kitsu.validation import Detail, Limit, Offset, object_id, to_number
 from kitsu_mcp.server.app import READ_ONLY, tool
 from kitsu_mcp.tools.assets import check_status_filters, matches_status_filters, statuses
@@ -156,15 +156,21 @@ def get_shot(shot_id: str) -> ShotDetail:
 
 
 @tool(annotations=READ_ONLY, tags={"browse"})
-def get_casting(shot_id: str | None = None, asset_id: str | None = None) -> list[CastAsset] | list[CastIn]:
-    """Casting (the breakdown), either way: the assets cast in a shot (shot_id), or the shots an asset
-    is cast in (asset_id)."""
-    if bool(shot_id) == bool(asset_id):
-        raise ToolError("Pass exactly one of shot_id or asset_id")
+def get_casting(
+    shot_id: str | None = None,
+    asset_id: str | None = None,
+    sequence_id: str | None = None,
+    episode_id: str | None = None,
+) -> list[CastAsset] | list[CastIn] | list[ShotCasting]:
+    """Casting (the breakdown), any way round. Pass exactly one of: shot_id (the assets cast in that shot),
+    episode_id (the assets cast in that episode), sequence_id (each shot of the sequence with its assets), or
+    asset_id (the shots that asset is cast in). set_casting changes it."""
+    given = [x for x in (shot_id, asset_id, sequence_id, episode_id) if x]
+    if len(given) != 1:
+        raise ToolError("Pass exactly one of shot_id, asset_id, sequence_id or episode_id")
     client = get_client()
-    if shot_id:
-        shot_id = object_id(shot_id, "shot", "list_shots")
-        project_id = client.get(f"data/shots/{shot_id}")["project_id"]
+
+    def assets(items: list[dict]) -> list[CastAsset]:
         return [
             CastAsset(
                 asset_id=c["asset_id"],
@@ -173,7 +179,21 @@ def get_casting(shot_id: str | None = None, asset_id: str | None = None) -> list
                 occurrences=c.get("nb_occurences"),
                 label=c.get("label"),
             )
-            for c in client.get(f"data/projects/{project_id}/entities/{shot_id}/casting")
+            for c in items
+        ]
+
+    if shot_id or episode_id:
+        kind, finder = ("shot", "list_shots") if shot_id else ("episode", "list_episodes")
+        entity_id = object_id(shot_id or episode_id or "", kind, finder)
+        project_id = client.get(f"data/entities/{entity_id}")["project_id"]
+        return assets(client.get(f"data/projects/{project_id}/entities/{entity_id}/casting"))
+    if sequence_id:
+        sequence = client.get(f"data/sequences/{object_id(sequence_id, 'sequence', 'list_sequences')}")
+        by_shot = client.get(f"data/projects/{sequence['project_id']}/sequences/{sequence['id']}/casting") or {}
+        names = {s["id"]: s["name"] for s in client.get("data/shots", params={"project_id": sequence["project_id"]})}
+        return [
+            ShotCasting(shot_id=s, shot=names.get(s), assets=assets(items))
+            for s, items in sorted(by_shot.items(), key=lambda kv: names.get(kv[0]) or "")
         ]
     asset_id = object_id(asset_id or "", "asset", "list_assets")
     return [

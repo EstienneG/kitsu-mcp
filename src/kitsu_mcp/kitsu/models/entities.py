@@ -91,6 +91,14 @@ class CastIn(BaseModel):
     occurrences: int | None
 
 
+class ShotCasting(BaseModel):
+    """One shot of a sequence and the assets cast in it (get_casting with sequence_id)."""
+
+    shot_id: str
+    shot: str | None
+    assets: list[CastAsset]
+
+
 class CustomField(BaseModel):
     """A project's custom field (Kitsu "metadata descriptor")."""
 

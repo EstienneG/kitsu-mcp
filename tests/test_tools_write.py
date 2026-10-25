@@ -27,6 +27,8 @@ WRITE_TOOLS = {
     "publish_preview",
     "batch_tasks",
     "manage_comment",
+    "set_casting",
+    "manage_scene",
 }
 
 
