@@ -115,11 +115,12 @@ def production_schedule(project: str, task_types: list[str] | None = None) -> Sc
     info = client.get(f"data/projects/{lookups.project(project)['id']}")
     project_id = info["id"]
     wanted = {lookups.task_type(t)["id"] for t in task_types or []}
-    # The plain read: Kitsu's schedule route (schedule-items/task-types) creates missing items as it reads.
+    # The project's items as stored: Kitsu's schedule page route (schedule-items/task-types) creates missing
+    # items as it reads, and the generic data/schedule-items/ list is for admins only.
     declared = set(info.get("task_types") or [])
     items = [
         i
-        for i in client.get("data/schedule-items/", params={"project_id": project_id})
+        for i in client.get(f"data/projects/{project_id}/schedule-items")
         if not i.get("object_id") and i.get("task_type_id") and (not declared or i["task_type_id"] in declared)
     ]
     open_by_type: dict[str, int] = defaultdict(int)
