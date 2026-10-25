@@ -5,6 +5,11 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
+## 0.5.1 — 2026-10-25
+
+### Changed
+- README: Le Chat, which is retired, is no longer listed among the Mistral clients.
+
 ## 0.5.0 — 2026-10-25
 
 ### Added
