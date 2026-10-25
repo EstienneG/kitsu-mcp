@@ -135,7 +135,8 @@ permissions. Once it runs, people add it as a connector: see
 
 (or build it yourself with `docker build -t kitsu-mcp .`). Pin a version tag such as `:0.4.0` in production.
 
-To try it locally without a proxy, run `KITSU_HOST=... kitsu-mcp --http`, which listens on 127.0.0.1:8000.
+To try it locally without a proxy, run `KITSU_HOST=... uvx --from 'kitsu-mcp[video]' kitsu-mcp --http`, which
+listens on 127.0.0.1:8000.
 
 The supported entry point is `kitsu-mcp --http` (`--host` / `--port`, or `KITSU_HTTP_HOST` / `PORT`): it
 applies the TLS check below, which `fastmcp run` would skip. The MCP endpoint is `/mcp`; `/health` answers

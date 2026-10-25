@@ -32,5 +32,5 @@ permissions still apply: the server cannot do anything the person's account cann
 
 ## Known limitations
 
-- Kitsu accounts with two-factor authentication cannot log in through the server.
+- Kitsu accounts with two-factor authentication cannot log in (locally or through the hosted server).
 - API tokens (Kitsu bot accounts) are not supported yet; logins use an email and password.
