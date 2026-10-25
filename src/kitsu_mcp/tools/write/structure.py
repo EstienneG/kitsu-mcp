@@ -14,7 +14,7 @@ from kitsu_mcp.kitsu import links
 from kitsu_mcp.kitsu.client import get_client
 from kitsu_mcp.kitsu.lookups import get_lookups
 from kitsu_mcp.kitsu.models import DryRunResult, EntityWriteResult
-from kitsu_mcp.kitsu.plans import Plan
+from kitsu_mcp.kitsu.plans import Plan, current_user
 from kitsu_mcp.kitsu.validation import iso_date, object_id
 from kitsu_mcp.server.app import tool
 from kitsu_mcp.tools.write.common import (
@@ -119,6 +119,16 @@ def _delete(plan: Plan, kind: str, record: dict, label: str, force: bool, tasks:
             plan.warnings.append(f"force=True also deletes its {tasks} task(s), their comments and previews.")
     plan.before = {"exists": True, "canceled": bool(record.get("canceled"))}
     plan.after = {"exists": canceled, "canceled": canceled}
+
+
+def _scene_asset_instances(project_id: str) -> list[str]:
+    """IDs of the asset instances placed in the project's scenes ({asset id: [instances]} per scene)."""
+    client = get_client()
+    ids: list[str] = []
+    for scene in client.get(f"data/projects/{project_id}/scenes") or []:
+        for instances in (client.get(f"data/scenes/{scene['id']}/asset-instances") or {}).values():
+            ids += [i["id"] for i in instances]
+    return ids
 
 
 def _task_count(kind: str, entity_id: str) -> int:
@@ -525,8 +535,20 @@ def manage_project(
         plan.before, plan.after = {"open": not is_closed}, {"open": action == "reopen"}
         result = send_entity_write(plan, dry_run)
     else:
+        # Zou's forced project delete does not remove asset instances placed in scenes, and the database then
+        # refuses (Zou answers 500). Remove them first; their route is for admins only.
+        instances = _scene_asset_instances(record["id"]) if force else []
+        for instance_id in instances:
+            plan.request("DELETE", f"data/asset-instances/{instance_id}")
         plan.request("DELETE", f"data/projects/{record['id']}", {"force": True} if force else {})
         plan.would = f"Delete {label}" + (" and everything in it" if force else "")
+        if instances:
+            plan.would += f" (first its {len(instances)} asset instance(s) in scenes, which Kitsu leaves behind)"
+            if current_user().get("role") != "admin":
+                plan.fail(
+                    f"{label} has {len(instances)} asset instance(s) in scenes, which only an admin can "
+                    "remove before deleting it (Kitsu fails otherwise); ask an admin."
+                )
         plan.message = f"Deleted {label}."
         plan.before, plan.after = {"exists": True}, {"exists": False}
         if not is_closed:

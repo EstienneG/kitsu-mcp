@@ -196,6 +196,22 @@ class FakeClient:
             comment = next(c for c in d["comments"].get(m[1], []) if c["id"] == m[2])
             comment.setdefault("previews", []).append(preview)
             return preview
+        if m := re.fullmatch(r"data/projects/([^/]+)/scenes", path):
+            scene = {
+                "id": self._new_id("sc"),
+                "project_id": m[1],
+                "name": data["name"],
+                "parent_id": data["sequence_id"],
+            }
+            d.setdefault("scenes", []).append(scene)
+            return scene
+        if m := re.fullmatch(r"data/scenes/([^/]+)/shots", path):
+            d.setdefault("scene_shots", {}).setdefault(m[1], []).append(data["shot_id"])
+            return {"id": m[1]}
+        if m := re.fullmatch(r"data/scenes/([^/]+)/asset-instances", path):
+            inst = {"id": self._new_id("ai"), "scene_id": m[1], "asset_id": data["asset_id"]}
+            d.setdefault("asset_instances", []).append(inst)
+            return inst
         if m := re.fullmatch(r"actions/projects/([^/]+)/delete-tasks", path):
             assert isinstance(data, list), "Zou wants a bare JSON array of task IDs"
             ids = [t for t in data if any(x["id"] == t and x["project_id"] == m[1] for x in d["tasks"])]
@@ -214,7 +230,7 @@ class FakeClient:
         raise ToolError(f"Not found: {path} (no fake route)")
 
     def _entity_any(self, entity_id: str) -> dict | None:
-        for kind in ("projects", "assets", "shots", "sequences", "episodes", "concepts", "edits"):
+        for kind in ("projects", "assets", "shots", "sequences", "episodes", "concepts", "edits", "scenes"):
             for record in self.data.get(kind, []):
                 if record["id"] == entity_id:
                     return record
@@ -227,6 +243,12 @@ class FakeClient:
         if m := re.fullmatch(r"data/tasks/([^/]+)", path):
             self._task_or_404(m[1], path)
             d["tasks"] = [t for t in d["tasks"] if t["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/scenes/([^/]+)/shots/([^/]+)", path):
+            d.setdefault("scene_shots", {})[m[1]] = [s for s in d["scene_shots"].get(m[1], []) if s != m[2]]
+            return ""
+        if m := re.fullmatch(r"data/asset-instances/([^/]+)", path):
+            d["asset_instances"] = [i for i in d.get("asset_instances", []) if i["id"] != m[1]]
             return ""
         if m := re.fullmatch(r"data/comments/([^/]+)", path):
             for task_id, comments in d["comments"].items():
@@ -248,6 +270,9 @@ class FakeClient:
                 raise NotFoundError(f"Not found: {path}")
             if project["project_status_id"] != "ps-closed":
                 raise ToolError(f"Kitsu rejected DELETE {path}: Only closed projects can be deleted")
+            scenes = {sc["id"] for sc in d.get("scenes", []) if sc["project_id"] == m[1]}
+            if any(i["scene_id"] in scenes for i in d.get("asset_instances", [])):  # Zou's force delete bug
+                raise ToolError(f"Kitsu error on DELETE {path}: ServerErrorException")
             d["projects"] = [p for p in d["projects"] if p["id"] != m[1]]
             return ""
         if m := re.fullmatch(r"data/(assets|shots|concepts|edits|sequences|episodes)/([^/]+)", path):
@@ -276,6 +301,20 @@ class FakeClient:
             task = self._task_or_404(m[1], path)
             task.update(data)
             return task
+        if m := re.fullmatch(r"data/projects/([^/]+)/entities/([^/]+)/casting", path):
+            assert isinstance(data, list), "Zou takes the whole casting as a list"
+            names = {a["id"]: a for a in self.data["assets"]}
+            self.data["casting"][m[2]] = [  # Zou replaces the whole casting
+                {
+                    "asset_id": c["asset_id"],
+                    "asset_name": names.get(c["asset_id"], {}).get("name"),
+                    "asset_type_name": "Character",
+                    "nb_occurences": c["nb_occurences"],
+                    "label": "",
+                }
+                for c in data
+            ]
+            return self.data["casting"][m[2]]
         if m := re.fullmatch(r"data/comments/([^/]+)", path):
             for comments in self.data["comments"].values():
                 for comment in comments:
@@ -448,6 +487,20 @@ class FakeClient:
             return d["people"]
         if m := re.fullmatch(r"data/projects/([^/]+)/entities/([^/]+)/casting", path):
             return d["casting"].get(m[2], [])
+        if m := re.fullmatch(r"data/projects/([^/]+)/sequences/([^/]+)/casting", path):
+            shots = [s["id"] for s in d["shots"] if s.get("parent_id") == m[2]]
+            return {sid: d["casting"][sid] for sid in shots if d["casting"].get(sid)}
+        if m := re.fullmatch(r"data/projects/([^/]+)/scenes", path):
+            return [sc for sc in d.get("scenes", []) if sc["project_id"] == m[1]]
+        if m := re.fullmatch(r"data/scenes/([^/]+)/shots", path):
+            ids = d.get("scene_shots", {}).get(m[1], [])
+            return [s for s in d["shots"] if s["id"] in ids]
+        if m := re.fullmatch(r"data/scenes/([^/]+)/asset-instances", path):
+            by_asset: dict = {}  # Zou answers {asset id: [instances]}
+            for inst in d.get("asset_instances", []):
+                if inst["scene_id"] == m[1]:
+                    by_asset.setdefault(inst["asset_id"], []).append(inst)
+            return by_asset
         if m := re.fullmatch(r"data/assets/([^/]+)/cast-in", path):
             return [
                 {

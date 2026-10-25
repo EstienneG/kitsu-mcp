@@ -163,3 +163,37 @@ async def test_task_lifecycle(call, kitsu, tmp_path):
     finally:
         await call("manage_project", action="close", project=name)
         await call("manage_project", action="delete", project=name, force=True, confirm=True)
+
+
+async def test_breakdown(call, kitsu):
+    """Casting add/remove keep the rest (Zou replaces the whole list), sequence casting, scenes; and deleting a
+    project whose scenes hold asset instances, which Zou's own forced delete fails on."""
+    name = f"{PROJECT} breakdown"
+    await call("manage_project", action="create", name=name)
+    try:
+        asset_type = kitsu.get("data/asset-types")[0]["name"]
+        hero = await call("manage_asset", action="create", project=name, asset_type=asset_type, name="Hero")
+        await call("manage_asset", action="create", project=name, asset_type=asset_type, name="Sword")
+        sequence = await call("manage_sequence", action="create", project=name, name="SQ01")
+        shot = await call("manage_shot", action="create", project=name, sequence="SQ01", name="SH010")
+
+        def cast() -> dict:
+            route = f"data/projects/{shot['entity']['project_id']}/entities/{shot['id']}/casting"
+            return {c["asset_name"]: c["nb_occurences"] for c in kitsu.get(route)}
+
+        await call("set_casting", entity_id=shot["id"], action="add", assets=["Hero"])
+        await call("set_casting", entity_id=shot["id"], action="add", assets=["Sword"], occurrences={"Sword": 2})
+        assert cast() == {"Hero": 1, "Sword": 2}
+        await call("set_casting", entity_id=shot["id"], action="remove", assets=["Hero"])
+        assert cast() == {"Sword": 2}
+        by_sequence = await call("get_casting", sequence_id=sequence["id"])
+        assert [(s["shot"], [a["name"] for a in s["assets"]]) for s in by_sequence] == [("SH010", ["Sword"])]
+
+        scene = await call("manage_scene", action="create", project=name, sequence="SQ01", name="SC01")
+        await call("manage_scene", action="add_shot", scene_id=scene["id"], shot_id=shot["id"])
+        await call("manage_scene", action="add_asset", scene_id=scene["id"], asset_id=hero["id"])
+        assert [s["id"] for s in kitsu.get(f"data/scenes/{scene['id']}/shots")] == [shot["id"]]
+    finally:
+        await call("manage_project", action="close", project=name)
+        await call("manage_project", action="delete", project=name, force=True, confirm=True)
+    assert name not in [p["name"] for p in kitsu.get("data/projects")]
