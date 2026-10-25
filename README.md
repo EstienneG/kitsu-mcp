@@ -132,7 +132,7 @@ permissions. Once it runs, people add it as a connector: see
     docker run -p 8000:8000 -e KITSU_HOST=https://your-studio.cg-wire.com/api -e KITSU_BEHIND_TLS=true \
       ghcr.io/estienneg/kitsu-mcp:latest
 
-(or build it yourself with `docker build -t kitsu-mcp .`). Pin a version tag such as `:0.5.0` in production.
+(or build it yourself with `docker build -t kitsu-mcp .`). Pin a version tag such as `:0.5.1` in production.
 
 To try it locally without a proxy, run `KITSU_HOST=... uvx --from 'kitsu-mcp[video]' kitsu-mcp --http`, which
 listens on 127.0.0.1:8000.
