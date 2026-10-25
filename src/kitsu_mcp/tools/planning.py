@@ -25,9 +25,9 @@ from kitsu_mcp.validation import iso_date
 
 PLANNING = {"planning"}
 Period = Literal["day", "week", "month"]
-# Zou's modes: "done" counts shots on the day they were approved; "feedback" on the day they were first sent
-# for review; "weighted" spreads each approved shot over the days time was logged on it.
-CountMode = Literal["done", "feedback", "weighted"]
+# Zou's modes (Kitsu's Quotas page): a shot counts on the day it was first sent for review ("feedback") or
+# approved ("done"); the weighted modes spread it over the days time was logged on it instead.
+CountMode = Literal["feedback", "done", "weighted", "weighteddone"]
 
 
 @tool(annotations=READ_ONLY, tags=PLANNING)
@@ -42,8 +42,9 @@ def quotas(
     """Output per artist for one task type, as Kitsu's Quotas page: shots (and frames, seconds and
     drawings when the shots have them) per day, week or month.
 
-    count_mode: "done" (default) counts a shot when it was approved; "feedback" when it was first sent for
-    review; "weighted" spreads each approved shot over the days time was logged on it. since: YYYY-MM-DD,
+    count_mode: "done" (default) counts a shot on the day it was approved; "feedback" on the day it was
+    first sent for review; "weighted" / "weighteddone" spread it (by feedback / approval date) over the days
+    time was logged on it, as Kitsu's "weighted" options do. since: YYYY-MM-DD,
     keeps periods from that date on (default: all). person: name, email or ID. Periods are "YYYY-MM-DD"
     (day), "YYYY-WW" (ISO week) or "YYYY-MM" (month); people are sorted by total shots.
     """
@@ -55,7 +56,8 @@ def quotas(
     start = _period_key(since, period) if since else None
     rows = []
     for pid, by_period in (raw or {}).items():
-        if person_id and pid != person_id:
+        # Zou adds a "total" entry, everyone summed, next to the people.
+        if pid == "total" or (person_id and pid != person_id):
             continue
         measures = by_period.get(period) or {}
         shots = _since(measures.get("count") or {}, start)
@@ -105,13 +107,21 @@ def production_schedule(project: str, task_types: list[str] | None = None) -> Sc
 
     task_types: names or short names (default: all scheduled). `late` lists task types whose planned end
     has passed while tasks are still open; get one with search_tasks(task_types=[...], overdue=True).
+    Task types nobody scheduled in Kitsu are left out (`unscheduled` names those with tasks).
     """
     client = get_client()
     lookups = get_lookups()
-    info = lookups.project(project)
+    # The full record: the cached project list does not say which task types the project declares.
+    info = client.get(f"data/projects/{lookups.project(project)['id']}")
     project_id = info["id"]
     wanted = {lookups.task_type(t)["id"] for t in task_types or []}
-    items = client.get(f"data/projects/{project_id}/schedule-items/task-types")
+    # The plain read: Kitsu's schedule route (schedule-items/task-types) creates missing items as it reads.
+    declared = set(info.get("task_types") or [])
+    items = [
+        i
+        for i in client.get("data/schedule-items/", params={"project_id": project_id})
+        if not i.get("object_id") and i.get("task_type_id") and (not declared or i["task_type_id"] in declared)
+    ]
     open_by_type: dict[str, int] = defaultdict(int)
     dues: dict[str, list[str]] = defaultdict(list)
     for record in project_tasks(client, lookups, project_id):
@@ -150,12 +160,19 @@ def production_schedule(project: str, task_types: list[str] | None = None) -> Sc
         if not wanted or not m.get("task_type_id") or m.get("task_type_id") in wanted
     ]
     milestones.sort(key=lambda m: m.date or "")
+    scheduled = {i["task_type_id"] for i in items}
+    unscheduled = sorted(
+        lookups.name("task_types", t) or t
+        for t in set(dues) | set(open_by_type)
+        if t and t not in scheduled and (not wanted or t in wanted) and (not declared or t in declared)
+    )
     return Schedule(
         project=info["name"],
         start=day(info.get("start_date")),
         end=day(info.get("end_date")),
         task_types=spans,
         late=[s.task_type for s in spans if s.late],
+        unscheduled=unscheduled,
         milestones=milestones,
     )
 

@@ -138,7 +138,8 @@ def set_task_status(task_id: str, status: str, comment: str = "", dry_run: bool 
     return _finish(plan, task["id"], dry_run)
 
 
-@tool(annotations=ADDITIVE_IDEMPOTENT, tags=WRITE)
+# Takes people off a task with remove=True.
+@tool(annotations={**ADDITIVE_IDEMPOTENT, "destructiveHint": True}, tags=WRITE)
 def assign_task(task_id: str, person: str, remove: bool = False, dry_run: bool = False) -> WriteResult | DryRunResult:
     """Add a person (name, email or ID) to a task's assignees, or take them off it with remove=True.
 
@@ -150,7 +151,8 @@ def assign_task(task_id: str, person: str, remove: bool = False, dry_run: bool =
     record = get_lookups().person(person)
     task = _task(task_id)
     name = record.get("full_name") or record["id"]
-    current = [p.get("full_name") or p["id"] for p in task.get("persons") or []]
+    people = task.get("persons") or []
+    current = [p.get("full_name") or p["id"] for p in people]
     assigned = record["id"] in (task.get("assignees") or [])
     plan = Plan("assign_task", would="")
     plan.before = {"assignees": current}
@@ -163,7 +165,7 @@ def assign_task(task_id: str, person: str, remove: bool = False, dry_run: bool =
             return _finish(plan, task_id, dry_run)
         plan.would, plan.message = f"Unassign {name} from {_label(task)}", f"Unassigned {name}."
         plan.request("PUT", "actions/tasks/clear-assignation", {"task_ids": [task_id], "person_id": record["id"]})
-        plan.after = {"assignees": [p for p in current if p != name]}
+        plan.after = {"assignees": [p.get("full_name") or p["id"] for p in people if p["id"] != record["id"]]}
         if dry_run:
             return plan.preview()
         # Zou skips tasks the caller may not unassign (another department) and answers with those it changed.

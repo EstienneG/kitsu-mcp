@@ -473,6 +473,15 @@ def seed() -> dict[str, Any]:
                 "end_date": "2026-11-30",
                 "man_days": None,
             },
+            # A per-shot item (object_id set) is not a task-type span.
+            {
+                "id": "si-sh010",
+                "task_type_id": TT_ANIM,
+                "object_id": "s-1",
+                "start_date": "2026-07-01",
+                "end_date": "2026-07-02",
+                "man_days": None,
+            },
         ],
         "milestones": [
             {"id": "ms-2", "date": "2026-12-01", "name": "Delivery", "task_type_id": None},
@@ -490,6 +499,8 @@ def seed() -> dict[str, Any]:
                 "month": {"count": {"2026-02": 1.0, "2026-10": 2.0}, "frames": {"2026-10": 96}},
             },
             BOB: {"week": {"count": {"2026-40": 0}, "frames": {}}},
+            # Zou sums everyone under "total".
+            "total": {"week": {"count": {"2026-7": 1.0, "2026-40": 2.0}, "frames": {"2026-40": 96}}},
         },
         "budgets": [
             {"id": "b-1", "project_id": PROJECT, "name": "First pass", "revision": 1, "currency": "EUR"},
@@ -858,13 +869,17 @@ class FakeClient:
                     spent.setdefault(entry["person_id"], []).append(entry)
             return spent
         if m := re.fullmatch(r"data/persons/([^/]+)/day-offs", path):
+            if m[1] in d.get("day_offs_denied", ()):
+                raise ToolError(f"Permission denied for GET {path}")
             return [o for o in d.get("day_offs", []) if o["person_id"] == m[1]]
-        if m := re.fullmatch(r"data/projects/([^/]+)/schedule-items/task-types", path):
-            return d.get("schedule_items", []) if m[1] == PROJECT else []
+        if path == "data/schedule-items/":
+            return [i for i in d.get("schedule_items", []) if params.get("project_id") == PROJECT]
+        if re.fullmatch(r"data/projects/([^/]+)/schedule-items/task-types", path):
+            raise AssertionError("schedule-items/task-types creates missing items in Zou: never read it")
         if m := re.fullmatch(r"data/projects/([^/]+)/milestones", path):
             return d.get("milestones", []) if m[1] == PROJECT else []
         if m := re.fullmatch(r"data/projects/([^/]+)/quotas/([^/]+)", path):
-            if params.get("count_mode") not in ("weighted", "feedback", "done"):
+            if params.get("count_mode") not in ("weighted", "weighteddone", "feedback", "done"):
                 raise ToolError("count_mode must be equal to weighted, weigtheddone, feedback, or done")
             return d.get("quotas", {}) if m[2] == TT_ANIM else {}
         if m := re.fullmatch(r"data/projects/([^/]+)/budgets", path):

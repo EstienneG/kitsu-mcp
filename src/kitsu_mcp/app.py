@@ -14,7 +14,7 @@ mcp = FastMCP(
         'and estimates are in minutes. List tools return compact rows by default (detail="full" for '
         "more). Use kitsu_get for any read the other tools don't cover. Only the core tools are listed at "
         "first: call load_tools to add a group (browse: list assets, shots, people, types, casting; activity: "
-        "recent changes, notifications; planning: workload, timesheets, quotas, schedule, days off, budget; "
+        "recent changes, notifications; planning: workload, timesheets, quotas, schedule, budget; "
         "review: previews, playlists, movie review; write: comments, statuses, assignments, schedules, time "
         "logs, playlists). Write tools only exist when the server runs with KITSU_ALLOW_WRITE=true. For write "
         "tools, call with dry_run=True first and show the user the plan before writing; then confirm with the "
