@@ -1,0 +1,19 @@
+# Keeps the GitHub Actions in .github/workflows current. The release workflow pins actions to commit SHAs
+# (it can publish to PyPI and push images); Dependabot updates the SHA and its "# vX.Y.Z" comment together.
+# CI uses major tags, and setup-uv an exact version (it publishes no major tags).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # A release must be a week old before it is proposed: time for a compromised one to be caught and pulled.
+    cooldown:
+      default-days: 7
+    # Minor and patch bumps together; each major bump gets its own PR, to read its breaking changes.
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: CI
