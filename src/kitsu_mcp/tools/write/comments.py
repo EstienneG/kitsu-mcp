@@ -11,10 +11,10 @@ from kitsu_mcp.tools.write.common import (
     ADDITIVE,
     ADDITIVE_IDEMPOTENT,
     WRITE,
-    finish,
-    label,
-    load_task,
-    plan_comment,
+    fetch_task_full,
+    plan_task_comment,
+    send_or_preview,
+    task_label,
 )
 
 
@@ -40,11 +40,12 @@ def add_comment(
         if status is not None:
             raise ToolError("A reply cannot change the status: leave status out, or post a comment instead")
         return _reply(task_id, reply_to, text, dry_run)
-    plan, task, previous, new = plan_comment("add_comment", task_id, text, status)
+    plan, task, previous, new = plan_task_comment("add_comment", task_id, text, status)
     changed = new != previous
-    plan.would = f"Comment on {label(task)}" + (f" and change its status from {previous} to {new}" if changed else "")
+    status_change = f" and change its status from {previous} to {new}" if changed else ""
+    plan.would = f"Comment on {task_label(task)}{status_change}"
     plan.message = f"Comment posted{f'; status set to {new}' if changed else ''}."
-    return finish(plan, task["id"], dry_run)
+    return send_or_preview(plan, task["id"], dry_run)
 
 
 @tool(annotations={**ADDITIVE, "destructiveHint": True}, tags=WRITE)
@@ -56,15 +57,15 @@ def set_task_status(task_id: str, status: str, comment: str = "", dry_run: bool 
     exact `requests`, `before`/`after` status and `warnings`; verdict "would_fail" gives the `reason` the
     real call would be refused (e.g. an archived status). Show it to the user first.
     """
-    plan, task, previous, new = plan_comment("set_task_status", task_id, comment, status)
+    plan, task, previous, new = plan_task_comment("set_task_status", task_id, comment, status)
     if previous == new:
-        plan.would = f"Comment on {label(task)}; its status is already {new}"
+        plan.would = f"Comment on {task_label(task)}; its status is already {new}"
         plan.warnings.append(f"The status is already {new}: only a comment is added.")
         plan.message = f"Status was already {new}; comment posted."
     else:
-        plan.would = f"Change {label(task)} from {previous} to {new}"
+        plan.would = f"Change {task_label(task)} from {previous} to {new}"
         plan.message = f"Status changed from {previous} to {new}."
-    return finish(plan, task["id"], dry_run)
+    return send_or_preview(plan, task["id"], dry_run)
 
 
 def _comment(task_id: str, comment_id: str) -> dict:
@@ -82,18 +83,18 @@ def _excerpt(text: str | None) -> str:
 
 def _reply(task_id: str, comment_id: str, text: str, dry_run: bool) -> WriteResult | DryRunResult:
     task_id = object_id(task_id, "task", "search_tasks")
-    task = load_task(task_id)
+    task = fetch_task_full(task_id)
     record = _comment(task_id, comment_id)
     author = (record.get("person") or {}).get("full_name") or "someone"
     plan = Plan(
         "add_comment",
-        would=f"Reply on {label(task)} to {author}'s comment {_excerpt(record.get('text'))}",
+        would=f"Reply on {task_label(task)} to {author}'s comment {_excerpt(record.get('text'))}",
         message="Reply posted.",
     )
     plan.request("POST", f"data/tasks/{task_id}/comments/{record['id']}/reply", {"text": text})
     plan.before = {"replies": len(record.get("replies") or [])}
     plan.after = {"replies": len(record.get("replies") or []) + 1}
-    return finish(plan, task_id, dry_run)
+    return send_or_preview(plan, task_id, dry_run)
 
 
 @tool(annotations=ADDITIVE_IDEMPOTENT, tags=WRITE)
@@ -105,22 +106,22 @@ def acknowledge_comment(task_id: str, comment_id: str, dry_run: bool = False) ->
     user first.
     """
     task_id = object_id(task_id, "task", "search_tasks")
-    task = load_task(task_id)
+    task = fetch_task_full(task_id)
     record = _comment(task_id, comment_id)
     user = current_user()
     acknowledged = record.get("acknowledgements") or []
     plan = Plan(
         "acknowledge_comment",
-        would=f"Acknowledge the comment {_excerpt(record.get('text'))} on {label(task)}",
+        would=f"Acknowledge the comment {_excerpt(record.get('text'))} on {task_label(task)}",
         message="Comment acknowledged.",
     )
     plan.before = {"acknowledged": user["id"] in acknowledged}
     plan.after = {"acknowledged": True}
     if user["id"] in acknowledged:
         # Zou's route toggles: sending it again would remove the acknowledgement.
-        plan.would = f"Nothing: you already acknowledged this comment on {label(task)}"
+        plan.would = f"Nothing: you already acknowledged this comment on {task_label(task)}"
         plan.warnings.append("Already acknowledged: no request is sent.")
         plan.message = "Already acknowledged; nothing changed."
     else:
         plan.request("POST", f"data/tasks/{task_id}/comments/{record['id']}/ack", {})
-    return finish(plan, task_id, dry_run)
+    return send_or_preview(plan, task_id, dry_run)

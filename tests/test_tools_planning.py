@@ -1,7 +1,7 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from tests.fakes import BOB, PROJECT, TT_ANIM
+from tests.fake_data import BOB, PROJECT, TT_ANIM
 
 
 async def test_quotas_per_person_with_unpadded_weeks_in_order(call, fake):
