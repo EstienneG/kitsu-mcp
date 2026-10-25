@@ -57,3 +57,23 @@ def readable_ids(monkeypatch):
     from kitsu_mcp import validation
 
     monkeypatch.setattr(validation, "id_pattern", re.compile(f"{validation.UUID.pattern}|[a-z0-9]+(?:-[a-z0-9]+)*"))
+
+
+@pytest.fixture(autouse=True)
+def fresh_groups():
+    """Each test starts with the default tool groups and nothing loaded."""
+    from kitsu_mcp import groups
+
+    groups.reset()
+    groups.set_default_groups("write")
+    yield
+    groups.reset()
+    groups.set_default_groups("write")
+
+
+@pytest.fixture
+def all_groups():
+    """List every tool, as KITSU_TOOL_GROUPS=all does (for tests about the whole registry)."""
+    from kitsu_mcp import groups
+
+    groups.set_default_groups("all")

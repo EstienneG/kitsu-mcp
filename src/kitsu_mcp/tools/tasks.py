@@ -21,7 +21,7 @@ from kitsu_mcp.validation import MAX_LIMIT, Detail, Limit, Offset, iso_date, obj
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
 
 
-@tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def get_task(
     task_id: str,
     include_comments: bool = True,
@@ -64,7 +64,7 @@ def _status_changes(raw_comments: list[dict]) -> list[StatusChange]:
     return changes
 
 
-@tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def search_tasks(
     project: str,
     task_types: list[str] | None = None,

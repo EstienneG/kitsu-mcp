@@ -457,7 +457,7 @@ async def test_tools_explain_how_to_install_the_extra(call, served, without_av, 
     assert served.calls == []  # fails before touching Kitsu
 
 
-async def test_without_extra_tools_stay_listed_and_previews_say_so(call, without_av, tmp_path):
+async def test_without_extra_tools_stay_listed_and_previews_say_so(call, without_av, tmp_path, all_groups):
     names = {t.name for t in await mcp.list_tools()}
     assert {"get_video_info", "review_video", "download_video"} <= names
     assert not video.available()

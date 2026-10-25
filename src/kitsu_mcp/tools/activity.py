@@ -124,7 +124,7 @@ _SEARCH_KINDS = ("asset", "shot", "sequence", "episode", "edit", "concept", "per
 _PROJECT_ROUTES = (("sequence", "sequences"), ("episode", "episodes"), ("edit", "edits"), ("concept", "concepts"))
 
 
-@tool(annotations=READ_ONLY, tags={"activity"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def search(query: str, project: str | None = None, kinds: list[str] | None = None, limit: Limit = 30) -> SearchResults:
     """Find anything by name: assets, shots, sequences, episodes, edits, concepts and people.
 
@@ -185,7 +185,7 @@ def search(query: str, project: str | None = None, kinds: list[str] | None = Non
     return SearchResults(total=len(hits), hits=hits[:limit])
 
 
-@tool(annotations=READ_ONLY, tags={"people"})
+@tool(annotations=READ_ONLY, tags={"planning"})
 def timesheet(person: str | None = None, start: str | None = None, end: str | None = None) -> Timesheet:
     """Time a person logged over a period, in minutes: per day and per task.
 

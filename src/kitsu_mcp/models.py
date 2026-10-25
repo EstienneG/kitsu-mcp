@@ -142,7 +142,9 @@ class TaskDetail(BaseModel):
     last_comment_date: str | None = None
     last_preview_file_id: str | None = Field(None, description="Latest upload; video tools accept it")
     comments: list[Comment] | None = None
-    history: list[StatusChange] | None = Field(default=None, description="include_history: status changes, oldest first")
+    history: list[StatusChange] | None = Field(
+        default=None, description="include_history: status changes, oldest first"
+    )
     previews: list[PreviewFile] | None = Field(default=None, description="include_previews: newest revision first")
     url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 

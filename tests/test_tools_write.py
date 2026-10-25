@@ -33,7 +33,7 @@ async def test_write_tools_hidden_by_default():
     assert not WRITE_TOOLS & {t.name for t in await mcp.list_tools()}
 
 
-async def test_write_tools_are_annotated(writable):
+async def test_write_tools_are_annotated(writable, all_groups):
     tools = {t.name: t for t in await mcp.list_tools()}
     assert set(tools) >= WRITE_TOOLS
     for name in WRITE_TOOLS:
@@ -551,7 +551,7 @@ async def test_dry_run_log_appends_jsonl(call, fake, writable, tmp_path, monkeyp
     assert len(log.read_text().splitlines()) == 2, "real calls are not logged"
 
 
-async def test_every_write_tool_has_dry_run(writable):
+async def test_every_write_tool_has_dry_run(writable, all_groups):
     """Any tool tagged write (not just the ones listed here) must offer dry_run, documented."""
     tagged = {t.name: t for t in await mcp.list_tools() if "write" in (t.tags or set())}
     assert set(tagged) == WRITE_TOOLS, "WRITE_TOOLS is out of date"
