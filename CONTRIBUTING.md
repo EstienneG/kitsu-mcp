@@ -73,3 +73,7 @@ The Release workflow checks the tag matches the version, runs the checks, then p
 PyPI and the Docker image to `ghcr.io/estienneg/kitsu-mcp` (tags `X.Y.Z`, `X.Y` and `latest`).
 PyPI uses trusted publishing, so no token is stored: the `kitsu-mcp` project on PyPI has this repository
 as its publisher (workflow `release.yml`, environment `pypi`).
+
+The release workflow can publish, so its actions are pinned to commit SHAs (with a `# vX.Y.Z` comment) rather
+than tags that could be moved; CI uses major tags. Dependabot (`.github/dependabot.yml`) proposes updates for
+both weekly, in one grouped PR. Keep new actions in `release.yml` pinned the same way.
