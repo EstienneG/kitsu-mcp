@@ -15,6 +15,9 @@ change behaviour (called out under **Changed**).
   tasks) and `manage_comment` (edit, delete, delete a reply).
 - Breakdown: `set_casting` (add, remove or replace the assets cast in a shot or episode) and `manage_scene`
   (create, rename, link shots, instance assets); `get_casting` also answers for an episode or a whole sequence.
+- `admin` tools (writes): `manage_project_team`, `manage_project_settings` (task types, statuses, asset types
+  and status automations a production uses), `manage_custom_field`, `manage_schedule` (task type dates,
+  milestones) and `manage_budget` (budget versions and salary lines).
 - Write tools are tested for real against throwaway Zou 1.0.43 and 1.0.97 containers in CI
   (`KITSU_TEST_WRITES=1`, local hosts only).
 

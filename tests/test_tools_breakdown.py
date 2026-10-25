@@ -5,14 +5,14 @@ route replaces the whole casting, sequence casting is {shot id: [assets]}, scene
 import pytest
 from fastmcp.exceptions import ToolError
 
-from tests.test_tools_write import writable, writes  # noqa: F401  (fixture)
+from tests.conftest import writes
 
 
 def cast(fake, shot_id: str) -> dict[str, int]:
     return {c["asset_name"]: c["nb_occurences"] for c in fake.data["casting"].get(shot_id, [])}
 
 
-async def test_add_and_remove_keep_the_rest_of_the_casting(call, fake, writable):  # noqa: F811
+async def test_add_and_remove_keep_the_rest_of_the_casting(call, fake, writable):
     assert cast(fake, "s-1") == {"Hero": 1}
     plan = await call(
         "set_casting", entity_id="s-1", action="add", assets=["Forest"], occurrences={"Forest": 2}, dry_run=True
@@ -29,7 +29,7 @@ async def test_add_and_remove_keep_the_rest_of_the_casting(call, fake, writable)
     assert plan["requests"] == [] and any("Not cast already: Hero" in w for w in plan["warnings"])
 
 
-async def test_replace_warns_about_what_it_uncasts(call, fake, writable):  # noqa: F811
+async def test_replace_warns_about_what_it_uncasts(call, fake, writable):
     await call("set_casting", entity_id="s-1", action="add", assets=["Forest"])
     plan = await call("set_casting", entity_id="s-1", action="replace", assets=["Forest"], dry_run=True)
     assert any("replace uncasts 1 asset(s) not in the list: Hero" in w for w in plan["warnings"])
@@ -39,7 +39,7 @@ async def test_replace_warns_about_what_it_uncasts(call, fake, writable):  # noq
         await call("set_casting", entity_id="s-1", action="add", assets=["Hero"], occurrences={"Hero": 0})
 
 
-async def test_get_casting_every_way_round(call, fake, writable):  # noqa: F811
+async def test_get_casting_every_way_round(call, fake, writable):
     await call("set_casting", entity_id="s-2", action="add", assets=["Hero", "Forest"])
     by_sequence = await call("get_casting", sequence_id=fake.data["shots"][0]["parent_id"])
     assert {s["shot"]: {a["name"] for a in s["assets"]} for s in by_sequence} == {
@@ -51,7 +51,7 @@ async def test_get_casting_every_way_round(call, fake, writable):  # noqa: F811
         await call("get_casting", shot_id="s-1", asset_id="a-hero")
 
 
-async def test_scenes(call, fake, writable):  # noqa: F811
+async def test_scenes(call, fake, writable):
     sequence = fake.data["sequences"][0]
     scene = await call("manage_scene", action="create", project="Demo Short", sequence=sequence["name"], name="SC01")
     with pytest.raises(ToolError, match="already has a scene"):
@@ -66,7 +66,7 @@ async def test_scenes(call, fake, writable):  # noqa: F811
         await call("manage_scene", action="remove_shot", scene_id=scene["id"], shot_id="s-1")
 
 
-async def test_project_delete_clears_scene_instances_first(call, fake, writable):  # noqa: F811
+async def test_project_delete_clears_scene_instances_first(call, fake, writable):
     """Zou's forced project delete fails while scenes hold asset instances: the tool removes them first."""
     created = await call("manage_project", action="create", name="Scene Show")
     project_id = created["id"]

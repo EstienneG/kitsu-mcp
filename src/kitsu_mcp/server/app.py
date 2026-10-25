@@ -14,6 +14,8 @@ GROUPS: dict[str, str] = {
     "(if the server allows writes)",
     "production": "start tasks, submit for review, publish previews, act on many tasks at once, edit or delete "
     "comments (if the server allows writes)",
+    "admin": "production settings: team, task types and statuses used, custom fields, schedule and milestones, "
+    "budgets (if the server allows writes)",
     "write": "comments, status changes, assignments, schedules, time logs, playlists (if the server allows)",
 }
 """Tool groups load_tools adds, and what each holds: the one description the server instructions, load_tools

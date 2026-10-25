@@ -197,3 +197,70 @@ async def test_breakdown(call, kitsu):
         await call("manage_project", action="close", project=name)
         await call("manage_project", action="delete", project=name, force=True, confirm=True)
     assert name not in [p["name"] for p in kitsu.get("data/projects")]
+
+
+async def test_project_configuration(call, kitsu):
+    """Team, settings, custom fields (Zou resets what an update leaves out), schedule and milestones (admin
+    routes), and budget lines (Zou's salary fields; a partial update would be refused)."""
+    name = f"{PROJECT} config"
+    created = await call("manage_project", action="create", name=name)
+    project_id = created["id"]
+    try:
+        await call("manage_project_team", project=name, action="add", people=["admin@example.com"])
+        assert kitsu.user_id() in kitsu.get(f"data/projects/{project_id}")["team"]
+        await call(
+            "manage_project_settings", project=name, action="add", task_types=["Animation"], task_statuses=["wip"]
+        )
+        assert len(kitsu.get(f"data/projects/{project_id}")["task_types"]) == 1
+
+        await call(
+            "manage_custom_field",
+            project=name,
+            action="create",
+            name="Difficulty",
+            entity_type="Shot",
+            data_type="list",
+            choices=["easy", "hard"],
+        )
+        await call(
+            "manage_custom_field", project=name, action="update", name="Difficulty", choices=["easy", "medium", "hard"]
+        )
+        await call("manage_custom_field", project=name, action="update", name="Difficulty", new_name="Complexity")
+        field = next(d for d in kitsu.get(f"data/projects/{project_id}/metadata-descriptors"))
+        assert (field["name"], field["data_type"], field["choices"]) == (
+            "Complexity",
+            "list",
+            ["easy", "medium", "hard"],
+        )
+
+        await call(
+            "manage_schedule",
+            project=name,
+            action="set_task_type_dates",
+            task_type="Animation",
+            start_date="2026-11-01",
+            end_date="2026-12-15",
+        )
+        await call("manage_schedule", project=name, action="add_milestone", name="Lock", date="2026-12-20")
+        assert [m["name"] for m in kitsu.get(f"data/projects/{project_id}/milestones")] == ["Lock"]
+
+        await call("manage_budget", project=name, action="create", name="v1", currency="EUR")
+        department = kitsu.get("data/departments")[0]["name"]
+        await call(
+            "manage_budget",
+            project=name,
+            action="add_line",
+            budget="v1",
+            department=department,
+            start_month="2026-11",
+            months=3,
+            daily_rate=250,
+        )
+        assert (await call("budget", project=name))["total"] == 15000
+        budget_id = kitsu.get(f"data/projects/{project_id}/budgets")[0]["id"]
+        line = kitsu.get(f"data/projects/{project_id}/budgets/{budget_id}/entries")[0]
+        await call("manage_budget", project=name, action="update_line", budget="v1", line_id=line["id"], months=4)
+        assert (await call("budget", project=name))["total"] == 20000
+    finally:
+        await call("manage_project", action="close", project=name)
+        await call("manage_project", action="delete", project=name, force=True, confirm=True)
