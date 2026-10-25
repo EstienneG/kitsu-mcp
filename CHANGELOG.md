@@ -5,6 +5,8 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
+## 0.5.0 — 2026-10-25
+
 ### Added
 - `structure` tools (writes): `manage_project`, `manage_episode`, `manage_sequence`, `manage_shot`,
   `manage_asset`, `manage_concept`, `manage_edit` and `manage_task`, one tool per kind of record with an
