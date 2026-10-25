@@ -13,11 +13,9 @@ change behaviour (called out under **Changed**).
   tells the client its tool list changed. `KITSU_TOOL_GROUPS` lists groups from the start (default `write`;
   `all` for clients that do not refresh their tool list). Groups only change what is listed: the server
   accepts calls to any of its tools, and write tools still need `KITSU_ALLOW_WRITE`.
-
 - `planning` tools: `quotas` (output per artist per day, week or month, as Kitsu's Quotas page, in its four
-  count modes),
-  `production_schedule` (task types' planned dates against their tasks' due dates, late task types,
-  milestones) and `budget` (planned salary costs per person and department, computed as Kitsu does).
+  count modes), `production_schedule` (task types' planned dates against their tasks' due dates, late task
+  types, milestones) and `budget` (planned salary costs per person and department, computed as Kitsu does).
 - `timesheet` lists the person's days off in the period (when Kitsu lets the caller see them).
 - `assign_task(remove=True)` unassigns someone, and reports it when Kitsu refuses (it skips tasks silently).
 
@@ -34,7 +32,8 @@ change behaviour (called out under **Changed**).
   `write/` split per subject. `kitsu_mcp.server:mcp` is unchanged; other module paths moved (for example
   `kitsu_mcp.client` is now `kitsu_mcp.kitsu.client`).
 - README rewritten for Kitsu users: what you can do by role, what it covers in Kitsu, safety, and client
-  setup with the Mistral clients first. Development, layout and release notes moved to CONTRIBUTING.md.
+  setup with the Mistral clients first. The setup commands now include the `[video]` extra. Development,
+  layout and release notes moved to CONTRIBUTING.md.
 
 ## 0.3.2 — 2026-10-24
 
