@@ -12,10 +12,10 @@ from kitsu_mcp.server.app import tool
 from kitsu_mcp.tools.write.common import (
     OVERWRITE,
     WRITE,
-    check_lead,
-    finish,
-    label,
-    load_task,
+    fetch_task_full,
+    send_or_preview,
+    task_label,
+    warn_unless_lead,
 )
 
 
@@ -45,15 +45,17 @@ def update_task_schedule(
         changes["estimation"] = estimation_minutes
     if not changes:
         raise ToolError("Nothing to update: pass start_date, due_date or estimation_minutes")
-    task = load_task(task_id)
+    task = fetch_task_full(task_id)
     current = {"start_date": day(task.get("start_date")), "due_date": day(task.get("due_date"))}
     current["estimation"] = task.get("estimation")
     shown = ", ".join(f"{k} to {v:g}" if isinstance(v, float) else f"{k} to {v}" for k, v in changes.items())
-    plan = Plan("update_task_schedule", would=f"Set {shown} on {label(task)}", message=f"Updated {', '.join(changes)}.")
+    plan = Plan(
+        "update_task_schedule", would=f"Set {shown} on {task_label(task)}", message=f"Updated {', '.join(changes)}."
+    )
     plan.request("PUT", f"data/tasks/{task_id}", changes)
     plan.before = {k: current[k] for k in changes}
     plan.after = dict(changes)
-    check_lead(plan, "change task schedules")
+    warn_unless_lead(plan, "change task schedules")
     start, due = {**current, **changes}["start_date"], {**current, **changes}["due_date"]
     if ({"start_date", "due_date"} & set(changes)) and start and due and start > due:
         plan.fail(f"The start date ({start}) would be after the due date ({due}).")
@@ -61,4 +63,4 @@ def update_task_schedule(
         plan.warnings.append(f"The due date {changes['due_date']} is in the past: the task will show as overdue.")
     if plan.before == plan.after:
         plan.warnings.append("These are the current values: nothing changes.")
-    return finish(plan, task_id, dry_run)
+    return send_or_preview(plan, task_id, dry_run)
