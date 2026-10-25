@@ -2,7 +2,8 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.kitsu.lookups import Lookups
-from tests.fakes import ST_WFA, TT_MODEL, FakeClient
+from tests.fake_data import ST_WFA, TT_MODEL
+from tests.fakes import FakeClient
 
 
 def test_resolves_by_id_name_and_short_name_case_insensitively():

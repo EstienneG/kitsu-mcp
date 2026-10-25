@@ -20,9 +20,10 @@ change behaviour (called out under **Changed**).
 - `assign_task(remove=True)` unassigns someone, and reports it when Kitsu refuses (it skips tasks silently).
 
 ### Changed
-- **Only the 12 core tools are listed at first.** Agents add the rest with `load_tools`. If your client does
-  not refresh its tool list when told to (or only lets the model call listed tools), set
-  `KITSU_TOOL_GROUPS=all` to list every tool from the start, as before.
+- **Only the 12 core tools are listed at first** (`refresh_cache` among them, so agents can refetch names
+  without loading a group). Agents add the rest with `load_tools`. If your client does not refresh its tool
+  list when told to (or only lets the model call listed tools), set `KITSU_TOOL_GROUPS=all` to list every
+  tool from the start, as before.
 - Fewer tools for the same features (48 to 44), so agents see a shorter list: `my_tasks` is
   `get_person_tasks` without a person; `task_history` and `list_task_previews` are `get_task` with
   `include_history` / `include_previews`; `reply_to_comment` is `add_comment` with `reply_to`.

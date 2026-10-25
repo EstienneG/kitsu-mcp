@@ -14,10 +14,10 @@ from kitsu_mcp.server.app import tool
 from kitsu_mcp.tools.write.common import (
     ADDITIVE,
     WRITE,
-    check_lead,
-    finish,
-    label,
-    load_task,
+    fetch_task_full,
+    send_or_preview,
+    task_label,
+    warn_unless_lead,
 )
 
 
@@ -44,13 +44,13 @@ def log_time(
     when = iso_date(day, "day") if day else date.today().isoformat()
     lookups = get_lookups()
     record = lookups.person(person) if person else None
-    task = load_task(task_id)
+    task = fetch_task_full(task_id)
     user = current_user()
     person_id = record["id"] if record else user["id"]
     name = (record or user).get("full_name") or person_id
     plan = Plan(
         "log_time",
-        would=f"Log {minutes} min on {label(task)} for {name} on {when}",
+        would=f"Log {minutes} min on {task_label(task)} for {name} on {when}",
         message=f"Logged {minutes} min on {when}.",
     )
     plan.request("POST", f"actions/tasks/{task_id}/time-spents/{when}/persons/{person_id}/add", {"duration": minutes})
@@ -59,9 +59,9 @@ def log_time(
     plan.before = {"task_total": total, "person_day": that_day}
     plan.after = {"task_total": total + minutes, "person_day": that_day + minutes}
     if person_id != user["id"]:
-        check_lead(plan, "log time for someone else", user)
+        warn_unless_lead(plan, "log time for someone else", user)
     if that_day + minutes > 24 * 60:
         plan.fail(f"{name} would have {that_day + minutes:g} min logged on this task on {when}, over 24 h.")
     if when > date.today().isoformat():
         plan.warnings.append(f"{when} is in the future.")
-    return finish(plan, task_id, dry_run)
+    return send_or_preview(plan, task_id, dry_run)
