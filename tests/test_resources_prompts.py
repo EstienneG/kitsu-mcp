@@ -21,7 +21,7 @@ async def test_template_resources(fake):
     assert task["entity"] == "Hero"
 
 
-async def test_prompts_mention_the_tools_they_rely_on(fake):
+async def test_prompts_mention_the_tools_they_rely_on(fake, all_groups):
     tool_names = {t.name for t in await mcp.list_tools()}
     async with Client(mcp) as client:
         prompts = await client.list_prompts()

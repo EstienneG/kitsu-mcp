@@ -15,7 +15,7 @@ from kitsu_mcp.models import ServerInfo, User
 from kitsu_mcp.validation import MAX_LIMIT
 
 
-@tool(annotations=READ_ONLY, tags={"meta"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def whoami() -> User:
     """The Kitsu user the server is logged in as, and how the server is set up (`server`): version,
     Kitsu host, whether write and video tools are available, page size limit and the status-role
@@ -67,7 +67,7 @@ def _version() -> str:
 _SAFE_ROUTE = re.compile(r"data(/[A-Za-z0-9_.-]+)*/?")
 
 
-@tool(annotations=READ_ONLY, tags={"meta"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def kitsu_get(path: str, params: dict | None = None, max_items: Annotated[int, Field(ge=1, le=MAX_LIMIT)] = 100) -> Any:
     """Run a raw read-only GET on a Zou `data/` route, e.g. path="data/projects/open".
 
@@ -141,7 +141,7 @@ def _too_big(answer: Any) -> dict:
     }
 
 
-@tool(annotations={"readOnlyHint": True, "idempotentHint": True}, tags={"meta"})
+@tool(annotations={"readOnlyHint": True, "idempotentHint": True}, tags={"browse"})
 def refresh_cache() -> str:
     """Drop cached reference data (projects, task types, statuses, people, departments, custom fields) so the
     next call refetches it."""

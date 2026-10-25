@@ -1,7 +1,7 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from tests.fakes import ALICE
+from tests.fakes import ALICE, BOB
 
 
 async def test_project_activity_lists_changes_newest_first(call):
@@ -83,3 +83,19 @@ async def test_timesheet_for_someone_and_a_range(call):
     assert september["total_minutes"] == 500
     with pytest.raises(ToolError, match="after end"):
         await call("timesheet", start="2026-10-10", end="2026-10-01")
+
+
+async def test_timesheet_shows_days_off_overlapping_the_period(call):
+    sheet = await call("timesheet")  # 2026-10-09 .. 2026-10-15
+    assert sheet["days_off"] == [{"start": "2026-10-09", "end": "2026-10-12", "description": "Trip"}]
+    assert (await call("timesheet", person="Bob Leroy"))["days_off"] == []
+    august = await call("timesheet", start="2026-08-10", end="2026-08-20")
+    assert [d["start"] for d in august["days_off"]] == ["2026-08-03"]
+
+
+async def test_timesheet_survives_hidden_days_off(call, fake):
+    """Kitsu checks days off apart from time logs: a supervisor may see one but not the other."""
+    fake.data["day_offs_denied"] = {BOB}
+    sheet = await call("timesheet", person="Bob Leroy", start="2026-10-01", end="2026-10-31")
+    assert sheet["total_minutes"] == 120
+    assert sheet["days_off"] is None and "days off" in sheet["note"]

@@ -13,6 +13,7 @@ def project_status_report(project: str) -> str:
         "2. Call search_tasks with overdue=True and group_by='assignee', and list the most urgent overdue tasks "
         "per person.\n"
         "3. Call workload and point out anyone overloaded and how much open work is unassigned.\n"
+        "4. Call production_schedule and flag task types past their planned end, and the next milestones.\n"
         "End with three concrete recommendations. Use tables where they help."
     )
 
@@ -34,10 +35,10 @@ def review_queue(project: str) -> str:
 def my_day() -> str:
     """Plan the logged-in artist's day."""
     return (
-        "Call my_notifications for what is new (comments, replies, mentions, assignments), then my_tasks, then "
-        "get_task on each task that is in retake, was mentioned in a notification, or has a due date within the next "
-        "week. Summarize what changed (latest supervisor comments), and propose an order to work in, most urgent "
-        "first, with one line of reasoning per task."
+        "Call my_notifications for what is new (comments, replies, mentions, assignments), then get_person_tasks "
+        "(no person: the user's own), then get_task on each task that is in retake, was mentioned in a notification, "
+        "or has a due date within the next week. Summarize what changed (latest supervisor comments), and propose "
+        "an order to work in, most urgent first, with one line of reasoning per task."
     )
 
 

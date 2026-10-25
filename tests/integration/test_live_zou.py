@@ -90,8 +90,8 @@ async def test_tasks_and_people(call):
     anim = next(t for t in tasks if t["task_type"] == "Animation")
     task = await call("get_task", task_id=anim["id"])
     assert "splines" in str(task["comments"])
-    assert await call("task_history", task_id=anim["id"])
-    assert len(await call("my_tasks")) == 2
+    assert (await call("get_task", task_id=anim["id"], include_history=True))["history"]
+    assert (await call("get_person_tasks"))["total"] == 2
     assert (await call("get_person_tasks", person="admin@example.com"))["total"] == 2
     assert await call("workload", project=PROJECT)
 
@@ -106,3 +106,48 @@ async def test_activity_search_and_timesheet(call):
     assert ("asset", "Hero") in {(h["kind"], h["name"]) for h in (await call("search", query="hero"))["hits"]}
     sheet = await call("timesheet", start="2020-01-01", end="2030-12-31")
     assert sheet["person"] == "Super Admin" and sheet["total_minutes"] >= 0
+
+
+async def test_planning_views(call, live_client):
+    """Shapes these Zou versions return for quotas, schedule, budgets and days off; and that reading the
+    schedule creates nothing (Kitsu's own schedule route adds missing items as it reads)."""
+    project_id = next(p["id"] for p in await call("list_projects") if p["name"] == PROJECT)
+    before = live_client.get(f"data/projects/{project_id}/schedule-items")
+    schedule = await call("production_schedule", project=PROJECT)
+    assert live_client.get(f"data/projects/{project_id}/schedule-items") == before
+    assert schedule["project"] == PROJECT and isinstance(schedule["unscheduled"], list)
+    for mode in ("done", "feedback", "weighted", "weighteddone"):
+        quotas = await call("quotas", project=PROJECT, task_type="Animation", count_mode=mode)
+        assert "total" not in {p["person"] for p in quotas["people"]}
+    with pytest.raises(Exception, match="no budget"):
+        await call("budget", project=PROJECT)
+    assert (await call("timesheet", start="2020-01-01", end="2030-12-31"))["days_off"] == []
+
+
+async def test_planning_views_as_a_producer(live_client):
+    """Producers (Kitsu role manager) are who these views are for: they must not need admin-only routes."""
+    from kitsu_mcp.server import mcp
+    from tests.integration.seed import PRODUCER
+
+    settings = config.Settings(host=HOST, user=PRODUCER[0], password=PRODUCER[1])  # type: ignore[arg-type]
+    producer = KitsuClient(settings)
+    producer.post = live_client.post  # type: ignore[method-assign]  (blocked)
+    producer.put = live_client.put  # type: ignore[method-assign]
+    client_module.set_client(producer)
+    lookups_module.set_lookups(Lookups(producer, ttl=300))
+    try:
+        async with Client(mcp) as session:
+            assert (await session.call_tool("whoami", {})).data["role"] == "manager"
+            schedule = await session.call_tool("production_schedule", {"project": PROJECT})
+            assert schedule.structured_content["result"]["project"] == PROJECT
+            await session.call_tool("quotas", {"project": PROJECT, "task_type": "Animation"})
+            # Days off may be hidden from a producer while time logs are not; Zou 1.0.43 hides both.
+            try:
+                sheet = (await session.call_tool("timesheet", {"person": "Super Admin"})).data
+            except Exception as error:
+                assert "time-spents" in str(error), error
+            else:
+                assert sheet["person"] == "Super Admin"
+    finally:
+        client_module.set_client(live_client)
+        lookups_module.set_lookups(Lookups(live_client, ttl=300))

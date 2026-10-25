@@ -96,6 +96,35 @@ class Comment(BaseModel):
     acknowledged_by: list[str] = Field(default_factory=list, description="People who acknowledged the comment")
 
 
+class PreviewFile(BaseModel):
+    id: str
+    revision: int | None
+    position: int | None = Field(None, description="Order within the revision; 1 is the main file")
+    extension: str | None
+    is_movie: bool | None
+    original_name: str | None
+    status: str | None
+    validation_status: str | None
+    width: int | None
+    height: int | None
+    created_at: str | None
+    is_video: bool = Field(
+        default=False, description="A movie, detected from the extension (is_movie is unreliable); see the video tools"
+    )
+    duration: float | None = Field(default=None, description="Seconds, for movies")
+    note: str | None = None
+    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
+    download_url: str | None = Field(None, description="Original upload; opens in a browser signed in to Kitsu")
+
+
+class StatusChange(BaseModel):
+    date: str | None
+    author: str | None
+    status: str | None
+    previous_status: str | None
+    text: str | None
+
+
 class TaskDetail(BaseModel):
     id: str
     project: str | None
@@ -113,6 +142,10 @@ class TaskDetail(BaseModel):
     last_comment_date: str | None = None
     last_preview_file_id: str | None = Field(None, description="Latest upload; video tools accept it")
     comments: list[Comment] | None = None
+    history: list[StatusChange] | None = Field(
+        default=None, description="include_history: status changes, oldest first"
+    )
+    previews: list[PreviewFile] | None = Field(default=None, description="include_previews: newest revision first")
     url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
 
@@ -155,35 +188,6 @@ class TaskList(BaseModel):
     by_assignee: list[AssigneeGroup] | None = Field(
         default=None, description="Set with group_by='assignee', instead of tasks"
     )
-
-
-class StatusChange(BaseModel):
-    date: str | None
-    author: str | None
-    status: str | None
-    previous_status: str | None
-    text: str | None
-
-
-class TaskHistory(BaseModel):
-    id: str
-    entity: str | None
-    task_type: str | None
-    current_status: str | None
-    time_logged: float | None = Field(description="Minutes")
-    estimation: float | None = Field(description="Minutes")
-    retake_count: int | None
-    changes: list[StatusChange] = Field(description="Status changes, oldest first")
-
-
-class MyTask(BaseModel):
-    id: str
-    project: str | None
-    entity: str | None
-    entity_type: str | None
-    task_type: str | None
-    status: str | None
-    due_date: str | None
 
 
 class AssetSummary(BaseModel):
@@ -363,27 +367,6 @@ class ProjectOverview(BaseModel):
     by_task_type: list[TaskTypeProgress]
 
 
-class PreviewFile(BaseModel):
-    id: str
-    revision: int | None
-    position: int | None = Field(None, description="Order within the revision; 1 is the main file")
-    extension: str | None
-    is_movie: bool | None
-    original_name: str | None
-    status: str | None
-    validation_status: str | None
-    width: int | None
-    height: int | None
-    created_at: str | None
-    is_video: bool = Field(
-        default=False, description="A movie, detected from the extension (is_movie is unreliable); see the video tools"
-    )
-    duration: float | None = Field(default=None, description="Seconds, for movies")
-    note: str | None = None
-    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
-    download_url: str | None = Field(None, description="Original upload; opens in a browser signed in to Kitsu")
-
-
 class RecentPreview(BaseModel):
     """An upload from the project's activity feed."""
 
@@ -471,6 +454,12 @@ class TimesheetTask(BaseModel):
     minutes: float
 
 
+class DayOff(BaseModel):
+    start: str | None
+    end: str | None
+    description: str | None = None
+
+
 class Timesheet(BaseModel):
     person: str | None
     start: str
@@ -478,6 +467,76 @@ class Timesheet(BaseModel):
     total_minutes: float
     by_day: list[TimesheetDay]
     by_task: list[TimesheetTask]
+    days_off: list[DayOff] | None = Field(
+        default=None, description="Days off overlapping the period; None when Kitsu does not let you see them"
+    )
+    note: str | None = None
+
+
+class PersonQuota(BaseModel):
+    person: str
+    total_shots: float = Field(description="Shots counted (fractions in weighted mode)")
+    total_frames: float | None = None
+    total_seconds: float | None = None
+    total_drawings: float | None = None
+    shots: dict[str, float] = Field(description="Period -> shots, periods without output left out")
+    frames: dict[str, float] | None = None
+
+
+class Quotas(BaseModel):
+    task_type: str
+    period: str
+    count_mode: str
+    since: str | None
+    people: list[PersonQuota]
+
+
+class ScheduleSpan(BaseModel):
+    task_type: str
+    start: str | None = Field(description="Planned start, YYYY-MM-DD")
+    end: str | None = Field(description="Planned end")
+    man_days: float | None = None
+    open_tasks: int
+    first_due: str | None = Field(description="Earliest due date of its tasks")
+    last_due: str | None = Field(description="Latest due date of its tasks: after `end` means planned late")
+    late: bool = Field(description="Planned end passed with tasks still open")
+
+
+class Milestone(BaseModel):
+    date: str | None
+    name: str | None
+    task_type: str | None = None
+
+
+class Schedule(BaseModel):
+    project: str
+    start: str | None
+    end: str | None
+    task_types: list[ScheduleSpan]
+    late: list[str]
+    unscheduled: list[str] = Field(default_factory=list, description="Task types with tasks but no planned dates")
+    milestones: list[Milestone]
+
+
+class BudgetLine(BaseModel):
+    person: str | None
+    department: str | None
+    position: str | None
+    seniority: str | None
+    start: str | None
+    months: int
+    daily_rate: float
+    cost: float
+
+
+class Budget(BaseModel):
+    project: str
+    name: str | None
+    revision: int | None
+    currency: str | None
+    total: float
+    by_department: dict[str, float]
+    lines: list[BudgetLine]
 
 
 class SavedPreview(BaseModel):

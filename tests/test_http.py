@@ -218,10 +218,10 @@ async def test_kitsu_outage_is_not_counted_as_failed_logins(server):
 
 
 async def test_my_tasks_follow_the_caller(server):
-    alice = await call(server, basic("alice@example.com", "right"), "my_tasks")
-    bob = await call(server, basic("bob@example.com", "right"), "my_tasks")
-    assert {t["id"] for t in alice} == {"t-hero-mod"}
-    assert {t["id"] for t in bob} == {"t-forest-mod", "t-sh010-comp"}
+    alice = await call(server, basic("alice@example.com", "right"), "get_person_tasks")
+    bob = await call(server, basic("bob@example.com", "right"), "get_person_tasks")
+    assert {t["id"] for t in alice["tasks"]} == {"t-hero-mod"}
+    assert {t["id"] for t in bob["tasks"]} == {"t-forest-mod", "t-sh010-comp"}
 
 
 async def test_missing_credentials_never_fall_back_to_the_server_login(server, monkeypatch):
@@ -235,7 +235,7 @@ async def test_missing_credentials_never_fall_back_to_the_server_login(server, m
     assert client_module._server_client is None
 
 
-async def test_local_disk_tools_are_hidden_over_http(server, tmp_path):
+async def test_local_disk_tools_are_hidden_over_http(server, tmp_path, all_groups):
     headers = basic("alice@example.com", "right")
     async with Client(StreamableHttpTransport(server, headers=headers)) as session:
         names = {t.name for t in await session.list_tools()}
@@ -246,7 +246,7 @@ async def test_local_disk_tools_are_hidden_over_http(server, tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-async def test_local_disk_tools_stay_over_stdio():
+async def test_local_disk_tools_stay_over_stdio(all_groups):
     async with Client(mcp) as session:
         names = {t.name for t in await session.list_tools()}
     assert {"download_previews", "download_video"} <= names
