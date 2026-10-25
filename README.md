@@ -225,9 +225,10 @@ defaults (core and write tools listed, write tools disabled).
 | `review` | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `download_previews`, `list_playlists`, `get_playlist`; with the `[video]` extra: `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | `structure` (opt-in) | `manage_project` (create, update, close, reopen, delete), `manage_episode`, `manage_sequence`, `manage_shot` (create, update, delete, restore), `manage_asset`, `manage_concept`, `manage_edit` (create, update, delete), `manage_task` (create tasks of a type on many entities, delete a task), `manage_scene` (create, rename, link shots, instance assets) |
 | `production` (opt-in) | `task_action` (start a task, submit it for review), `publish_preview` (a file as the task's next revision, with a status; stdio only), `batch_tasks` (status, assign, unassign, priority or delete up to 100 tasks), `manage_comment` (edit, delete, delete a reply), `set_casting` (add, remove or replace the assets cast in a shot or episode) |
+| `admin` (opt-in) | `manage_project_team`, `manage_project_settings` (task types, statuses, asset types and status automations a production uses), `manage_custom_field` (create, update, delete a metadata column), `manage_schedule` (task type dates, milestones), `manage_budget` (budget versions and salary lines) |
 | `write` (opt-in) | `add_comment` (or a reply to a comment), `acknowledge_comment`, `set_task_status`, `assign_task` (or unassign), `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview) |
 
-The 12 core tools cost a model about 2,500 tokens of context; every group listed, about 14,000.
+The 12 core tools cost a model about 2,500 tokens of context; every group listed, about 15,500.
 
 ### Links
 

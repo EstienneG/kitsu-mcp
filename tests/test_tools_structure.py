@@ -8,8 +8,8 @@ deleted, and every new TV show gets an episode E01.
 import pytest
 from fastmcp.exceptions import ToolError
 
+from tests.conftest import writes
 from tests.fake_data import PROJECT, TT_ANIM, TT_MODEL
-from tests.test_tools_write import writable, writes  # noqa: F401  (fixture)
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def seq(fake):
     return fake.data["sequences"][0]
 
 
-async def test_create_shot_then_refuse_its_name_again(call, fake, writable, seq):  # noqa: F811
+async def test_create_shot_then_refuse_its_name_again(call, fake, writable, seq):
     plan = await call(
         "manage_shot",
         action="create",
@@ -50,7 +50,7 @@ async def test_create_shot_then_refuse_its_name_again(call, fake, writable, seq)
         await call("manage_shot", action="create", project="Demo Short", sequence=seq["name"], name="sh099")
 
 
-async def test_update_sends_only_changed_custom_fields(call, fake, writable, seq):  # noqa: F811
+async def test_update_sends_only_changed_custom_fields(call, fake, writable, seq):
     shot = (
         await call(
             "manage_shot",
@@ -73,7 +73,7 @@ async def test_update_sends_only_changed_custom_fields(call, fake, writable, seq
         await call("manage_shot", action="update", shot_id=shot)
 
 
-async def test_delete_needs_confirm_and_cancels_a_shot_with_tasks(call, fake, writable):  # noqa: F811
+async def test_delete_needs_confirm_and_cancels_a_shot_with_tasks(call, fake, writable):
     shot = fake.data["shots"][0]  # has tasks in the seed
     with pytest.raises(ToolError, match="confirm=True"):
         await call("manage_shot", action="delete", shot_id=shot["id"])
@@ -93,7 +93,7 @@ async def test_delete_needs_confirm_and_cancels_a_shot_with_tasks(call, fake, wr
     assert all(t["entity_id"] != shot["id"] for t in fake.data["tasks"])
 
 
-async def test_assets_create_update_delete(call, fake, writable):  # noqa: F811
+async def test_assets_create_update_delete(call, fake, writable):
     created = await call("manage_asset", action="create", project="Demo Short", asset_type="Character", name="Villain")
     assert created["ok"] and created["url"]
     with pytest.raises(ToolError, match="already has a Character 'Villain'"):
@@ -105,7 +105,7 @@ async def test_assets_create_update_delete(call, fake, writable):  # noqa: F811
     assert all(a["id"] != created["id"] for a in fake.data["assets"])
 
 
-async def test_tasks_create_skips_existing_and_delete(call, fake, writable):  # noqa: F811
+async def test_tasks_create_skips_existing_and_delete(call, fake, writable):
     shots = [s["id"] for s in fake.data["shots"]]
     before = len(fake.data["tasks"])
     plan = await call("manage_task", action="create", entity_ids=shots + shots[:1], task_type="Animation", dry_run=True)
@@ -125,7 +125,7 @@ async def test_tasks_create_skips_existing_and_delete(call, fake, writable):  # 
     assert all(t["id"] != task["id"] for t in fake.data["tasks"])
 
 
-async def test_sequences_episodes_concepts_edits(call, fake, writable):  # noqa: F811
+async def test_sequences_episodes_concepts_edits(call, fake, writable):
     sequence = await call("manage_sequence", action="create", project="Demo Short", name="SQ900")
     assert sequence["ok"]
     with pytest.raises(ToolError, match="already has a sequence"):
@@ -143,7 +143,7 @@ async def test_sequences_episodes_concepts_edits(call, fake, writable):  # noqa:
         assert (await call(tool, action="delete", confirm=True, **{key: record["id"]}))["ok"]
 
 
-async def test_tv_show_episodes_and_project_lifecycle(call, fake, writable):  # noqa: F811
+async def test_tv_show_episodes_and_project_lifecycle(call, fake, writable):
     created = await call("manage_project", action="create", name="New Show", production_type="tvshow", fps=25)
     assert created["ok"] and "E01" in created["message"]
     assert created["entity"]["name"] == "New Show"

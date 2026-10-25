@@ -4,6 +4,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.server import mcp
+from tests.conftest import writes
 from tests.fake_data import ALICE, BOB, ST_DONE, ST_WFA, TT_ANIM
 
 WRITE_TOOLS = {
@@ -29,18 +30,12 @@ WRITE_TOOLS = {
     "manage_comment",
     "set_casting",
     "manage_scene",
+    "manage_project_team",
+    "manage_project_settings",
+    "manage_custom_field",
+    "manage_schedule",
+    "manage_budget",
 }
-
-
-@pytest.fixture
-def writable():
-    mcp.enable(tags={"write"})
-    yield
-    mcp.disable(tags={"write"})
-
-
-def writes(fake):
-    return [(method, path, data) for method, path, data in fake.calls if method != "GET"]
 
 
 async def test_write_tools_hidden_by_default():

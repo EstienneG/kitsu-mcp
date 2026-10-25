@@ -196,6 +196,44 @@ class FakeClient:
             comment = next(c for c in d["comments"].get(m[1], []) if c["id"] == m[2])
             comment.setdefault("previews", []).append(preview)
             return preview
+        if m := re.fullmatch(r"data/projects/([^/]+)/team", path):
+            project = self._by_id("projects")[m[1]]
+            project.setdefault("team", []).append(data["person_id"])
+            return project
+        if m := re.fullmatch(
+            r"data/projects/([^/]+)/settings/(task-types|task-status|asset-types|status-automations)", path
+        ):
+            field = {
+                "task-types": "task_types",
+                "task-status": "task_statuses",
+                "asset-types": "asset_types",
+                "status-automations": "status_automations",
+            }[m[2]]
+            project = self._by_id("projects")[m[1]]
+            project.setdefault(field, []).append(next(iter(v for k, v in data.items() if k.endswith("_id"))))
+            return project
+        if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors", path):
+            field = {"id": self._new_id("md"), "project_id": m[1], "field_name": data["name"].lower(), **data}
+            d["custom_fields"].append(field)
+            return field
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets", path):
+            budget = {"id": self._new_id("b"), "project_id": m[1], "revision": 1, **data}
+            d.setdefault("budgets", []).append(budget)
+            return budget
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)/entries", path):
+            if not data.get("department_id"):  # Zou's entry is a salary line: gazu's name/amount are refused
+                raise ToolError(f"Kitsu rejected POST {path}: Validation error. (department_id: Field required)")
+            entry = {"id": self._new_id("be"), "budget_id": m[2], "person_id": None, "exceptions": {}, **data}
+            d.setdefault("budget_entries", {}).setdefault(m[2], []).append(entry)
+            return entry
+        if path == "data/schedule-items":
+            item = {"id": self._new_id("si"), "object_id": None, "man_days": None, **data}
+            d.setdefault("schedule_items", []).append(item)
+            return item
+        if path == "data/milestones":
+            milestone = {"id": self._new_id("ms"), "task_type_id": None, **data}
+            d.setdefault("milestones", []).append(milestone)
+            return milestone
         if m := re.fullmatch(r"data/projects/([^/]+)/scenes", path):
             scene = {
                 "id": self._new_id("sc"),
@@ -243,6 +281,36 @@ class FakeClient:
         if m := re.fullmatch(r"data/tasks/([^/]+)", path):
             self._task_or_404(m[1], path)
             d["tasks"] = [t for t in d["tasks"] if t["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)/team/([^/]+)", path):
+            project = self._by_id("projects")[m[1]]
+            project["team"] = [p for p in project.get("team", []) if p != m[2]]
+            return ""
+        if m := re.fullmatch(
+            r"data/projects/([^/]+)/settings/(task-types|task-status|asset-types|status-automations)"
+            r"/([^/]+)",
+            path,
+        ):
+            field = {
+                "task-types": "task_types",
+                "task-status": "task_statuses",
+                "asset-types": "asset_types",
+                "status-automations": "status_automations",
+            }[m[2]]
+            project = self._by_id("projects")[m[1]]
+            project[field] = [x for x in project.get(field, []) if x != m[3]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors/([^/]+)", path):
+            d["custom_fields"] = [f for f in d["custom_fields"] if f["id"] != m[2]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)/entries/([^/]+)", path):
+            d["budget_entries"][m[2]] = [e for e in d["budget_entries"][m[2]] if e["id"] != m[3]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)", path):
+            d["budgets"] = [b for b in d["budgets"] if b["id"] != m[2]]
+            return ""
+        if m := re.fullmatch(r"data/milestones/([^/]+)", path):
+            d["milestones"] = [ms for ms in d["milestones"] if ms["id"] != m[1]]
             return ""
         if m := re.fullmatch(r"data/scenes/([^/]+)/shots/([^/]+)", path):
             d.setdefault("scene_shots", {})[m[1]] = [s for s in d["scene_shots"].get(m[1], []) if s != m[2]]
@@ -301,6 +369,32 @@ class FakeClient:
             task = self._task_or_404(m[1], path)
             task.update(data)
             return task
+        if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors/([^/]+)", path):
+            field = next(f for f in self.data["custom_fields"] if f["id"] == m[2])
+            # Zou resets what an update leaves out: no data_type -> "string", no choices -> []
+            field.update(
+                name=data.get("name", field["name"]),
+                data_type=data.get("data_type", "string"),
+                choices=data.get("choices", []),
+                for_client=data.get("for_client", False),
+                departments=data.get("departments", []),
+            )
+            return field
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)/entries/([^/]+)", path):
+            entry = next(e for e in self.data["budget_entries"][m[2]] if e["id"] == m[3])
+            required = ("department_id", "start_date", "months_duration", "daily_salary")
+            if any(data.get(k) is None for k in required):  # Zou writes None into what is left out, then refuses
+                raise ToolError(f"Kitsu error on PUT {path}: ServerErrorException")
+            entry.update({**data, "exceptions": data.get("exceptions") or {}})
+            return entry
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)", path):
+            budget = next(b for b in self.data["budgets"] if b["id"] == m[2])
+            budget.update(data)
+            return budget
+        if m := re.fullmatch(r"data/schedule-items/([^/]+)", path):
+            item = next(i for i in self.data["schedule_items"] if i["id"] == m[1])
+            item.update(data)
+            return item
         if m := re.fullmatch(r"data/projects/([^/]+)/entities/([^/]+)/casting", path):
             assert isinstance(data, list), "Zou takes the whole casting as a list"
             names = {a["id"]: a for a in self.data["assets"]}
@@ -548,11 +642,11 @@ class FakeClient:
         if path == "data/schedule-items/":
             raise ToolError(f"Permission denied for GET {path}")  # Zou: admins only; tools must not need it
         if m := re.fullmatch(r"data/projects/([^/]+)/schedule-items", path):
-            return d.get("schedule_items", []) if m[1] == PROJECT else []
+            return [i for i in d.get("schedule_items", []) if i.get("project_id", PROJECT) == m[1]]
         if re.fullmatch(r"data/projects/([^/]+)/schedule-items/task-types", path):
             raise AssertionError("schedule-items/task-types creates missing items in Zou: never read it")
         if m := re.fullmatch(r"data/projects/([^/]+)/milestones", path):
-            return d.get("milestones", []) if m[1] == PROJECT else []
+            return [ms for ms in d.get("milestones", []) if ms.get("project_id", PROJECT) == m[1]]
         if m := re.fullmatch(r"data/projects/([^/]+)/quotas/([^/]+)", path):
             if params.get("count_mode") not in ("weighted", "weighteddone", "feedback", "done"):
                 raise ToolError("count_mode must be equal to weighted, weigtheddone, feedback, or done")

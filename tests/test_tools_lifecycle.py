@@ -4,7 +4,7 @@ publishing chains comment -> add-preview -> upload, and deleting a comment delet
 import pytest
 from fastmcp.exceptions import ToolError
 
-from tests.test_tools_write import writable, writes  # noqa: F401  (fixture)
+from tests.conftest import writes
 
 
 def status(fake, task_id: str) -> str:
@@ -12,7 +12,7 @@ def status(fake, task_id: str) -> str:
     return next(s for s in fake.data["statuses"] if s["id"] == task["task_status_id"])["short_name"]
 
 
-async def test_start_and_submit_for_review_pick_the_role_statuses(call, fake, writable):  # noqa: F811
+async def test_start_and_submit_for_review_pick_the_role_statuses(call, fake, writable):
     plan = await call("task_action", action="start", task_id="t-sh020-anim", dry_run=True)
     assert plan["after"] == {"status": "wip"} and writes(fake) == []
     await call("task_action", action="start", task_id="t-sh020-anim")
@@ -23,7 +23,7 @@ async def test_start_and_submit_for_review_pick_the_role_statuses(call, fake, wr
     assert "already wfa" in again["warnings"][0]
 
 
-async def test_publish_chains_three_requests_and_numbers_the_revision(call, fake, writable, tmp_path):  # noqa: F811
+async def test_publish_chains_three_requests_and_numbers_the_revision(call, fake, writable, tmp_path):
     movie = tmp_path / "sh020_v001.mp4"
     movie.write_bytes(b"\0" * 1024)
     plan = await call("publish_preview", task_id="t-sh020-anim", file_path=str(movie), set_main=True, dry_run=True)
@@ -46,7 +46,7 @@ async def test_publish_chains_three_requests_and_numbers_the_revision(call, fake
     assert nxt["after"]["revision"] == 2
 
 
-async def test_publish_refuses_missing_files_and_warns_on_odd_ones(call, fake, writable, tmp_path):  # noqa: F811
+async def test_publish_refuses_missing_files_and_warns_on_odd_ones(call, fake, writable, tmp_path):
     with pytest.raises(ToolError, match="No file at"):
         await call("publish_preview", task_id="t-sh020-anim", file_path=str(tmp_path / "nope.png"))
     odd = tmp_path / "notes.txt"
@@ -55,7 +55,7 @@ async def test_publish_refuses_missing_files_and_warns_on_odd_ones(call, fake, w
     assert any("may not preview .txt" in w for w in plan["warnings"])
 
 
-async def test_batch_status_assign_priority_skip_what_is_already_so(call, fake, writable):  # noqa: F811
+async def test_batch_status_assign_priority_skip_what_is_already_so(call, fake, writable):
     ids = ["t-hero-mod", "t-sh010-anim", "t-sh020-anim"]
     plan = await call("batch_tasks", action="status", task_ids=ids, status="wip", dry_run=True)
     already = [t for t in ids if status(fake, t) == "wip"]
@@ -74,7 +74,7 @@ async def test_batch_status_assign_priority_skip_what_is_already_so(call, fake, 
         await call("batch_tasks", action="priority", task_ids=ids, priority=7)
 
 
-async def test_batch_delete_sends_a_bare_array_and_needs_confirm(call, fake, writable):  # noqa: F811
+async def test_batch_delete_sends_a_bare_array_and_needs_confirm(call, fake, writable):
     with pytest.raises(ToolError, match="confirm=True"):
         await call("batch_tasks", action="delete", task_ids=["t-sh020-anim"])
     plan = await call("batch_tasks", action="delete", task_ids=["t-sh020-anim"], confirm=True, dry_run=True)
@@ -85,7 +85,7 @@ async def test_batch_delete_sends_a_bare_array_and_needs_confirm(call, fake, wri
         await call("batch_tasks", action="status", task_ids=[f"t-{i}" for i in range(101)], status="wip")
 
 
-async def test_comment_edit_and_delete_takes_its_previews(call, fake, writable, tmp_path):  # noqa: F811
+async def test_comment_edit_and_delete_takes_its_previews(call, fake, writable, tmp_path):
     still = tmp_path / "f.png"
     still.write_bytes(b"png")
     published = await call("publish_preview", task_id="t-sh020-anim", file_path=str(still))
@@ -102,7 +102,7 @@ async def test_comment_edit_and_delete_takes_its_previews(call, fake, writable, 
         await call("manage_comment", action="edit", task_id="t-hero-mod", comment_id=comment["id"], text="x")
 
 
-async def test_publish_is_hidden_on_the_hosted_server(writable):  # noqa: F811
+async def test_publish_is_hidden_on_the_hosted_server(writable):
     from kitsu_mcp.server import mcp
 
     tool = await mcp.get_tool("publish_preview")
