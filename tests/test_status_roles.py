@@ -126,7 +126,7 @@ async def test_person_tools_follow_roles_like_workload(call, fake, cbb_done):
     assert workload["Bob Leroy"] == len(bob_open)
     alice_done = [t["id"] for t in (await call("get_person_tasks", person="Alice Martin", done=True))["tasks"]]
     assert alice_done == ["t-sh010-anim"]  # the omitted task is not a completion
-    assert [t["id"] for t in await call("my_tasks")] == []  # Alice's only open task was omitted
+    assert (await call("get_person_tasks"))["tasks"] == []  # Alice's only open task was omitted
 
 
 def test_unmatched_ignores_default_spellings_and_spacing(lookups):

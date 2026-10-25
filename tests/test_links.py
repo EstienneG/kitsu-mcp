@@ -11,7 +11,7 @@ async def test_detail_tools_link_to_kitsu(call):
     assert shot["url"] == "http://kitsu.test/productions/p-1/shots/s-1"
     task = await call("get_task", task_id="t-sh010-anim")
     assert task["url"] == "http://kitsu.test/productions/p-1/shots/tasks/t-sh010-anim"
-    previews = {p["id"]: p for p in await call("list_task_previews", task_id="t-sh010-anim")}
+    previews = {p["id"]: p for p in (await call("get_task", task_id="t-sh010-anim", include_previews=True))["previews"]}
     assert previews["pf-sh010"]["url"] == "http://kitsu.test/productions/p-1/shots/tasks/t-sh010-anim/previews/pf-sh010"
     assert (
         previews["pf-sh010"]["download_url"] == "http://kitsu.test/api/movies/originals/preview-files/pf-sh010/download"

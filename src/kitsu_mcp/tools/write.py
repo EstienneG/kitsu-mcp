@@ -91,16 +91,26 @@ def _plan_comment(tool_name: str, task_id: str, text: str, status: str | None) -
 
 @tool(annotations=ADDITIVE, tags=WRITE)
 def add_comment(
-    task_id: str, text: str, status: str | None = None, dry_run: bool = False
+    task_id: str,
+    text: str,
+    status: str | None = None,
+    reply_to: str | None = None,
+    dry_run: bool = False,
 ) -> WriteResult | DryRunResult:
     """Post a comment on a task as the logged-in user, optionally changing its status (short name).
 
+    reply_to: a comment ID (from get_task or my_notifications) to reply to it instead; a reply never
+    changes the status, so it does not take one.
     dry_run=True: check everything with reads only and return the plan instead of posting: `would`, the
     exact `requests`, `before`/`after` and `warnings`; verdict "would_fail" gives the `reason` the real call
     would be refused (e.g. an archived status). Show it to the user before writing.
     """
     if not text.strip():
         raise ToolError("Comment text is empty; use set_task_status to change the status without a comment")
+    if reply_to is not None:
+        if status is not None:
+            raise ToolError("A reply cannot change the status: leave status out, or post a comment instead")
+        return _reply(task_id, reply_to, text, dry_run)
     plan, task, previous, new = _plan_comment("add_comment", task_id, text, status)
     changed = new != previous
     plan.would = f"Comment on {_label(task)}" + (f" and change its status from {previous} to {new}" if changed else "")
@@ -259,22 +269,13 @@ def _excerpt(text: str | None) -> str:
     return f'"{text[:60]}{"..." if len(text) > 60 else ""}"' if text else "(no text)"
 
 
-@tool(annotations=ADDITIVE, tags=WRITE)
-def reply_to_comment(task_id: str, comment_id: str, text: str, dry_run: bool = False) -> WriteResult | DryRunResult:
-    """Reply to a comment on a task, as the logged-in user (comment IDs come from get_task or my_notifications).
-    A reply does not change the task's status; use add_comment for that.
-
-    dry_run=True: check everything with reads only and return the plan instead of posting: `would`, the exact
-    `requests` and `warnings`. Show it to the user before writing.
-    """
-    if not text.strip():
-        raise ToolError("Reply text is empty")
+def _reply(task_id: str, comment_id: str, text: str, dry_run: bool) -> WriteResult | DryRunResult:
     task_id = object_id(task_id, "task", "search_tasks")
     task = _task(task_id)
     record = _comment(task_id, comment_id)
     author = (record.get("person") or {}).get("full_name") or "someone"
     plan = Plan(
-        "reply_to_comment",
+        "add_comment",
         would=f"Reply on {_label(task)} to {author}'s comment {_excerpt(record.get('text'))}",
         message="Reply posted.",
     )

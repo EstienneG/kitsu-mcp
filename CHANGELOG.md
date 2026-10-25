@@ -3,6 +3,13 @@
 All notable changes. Versions follow [semantic versioning](https://semver.org); before 1.0, a minor version may
 change behaviour (called out under **Changed**).
 
+## Unreleased
+
+### Changed
+- Fewer tools for the same features (48 to 44), so agents see a shorter list: `my_tasks` is
+  `get_person_tasks` without a person; `task_history` and `list_task_previews` are `get_task` with
+  `include_history` / `include_previews`; `reply_to_comment` is `add_comment` with `reply_to`.
+
 ## 0.3.2 — 2026-10-24
 
 ### Added

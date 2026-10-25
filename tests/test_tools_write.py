@@ -8,7 +8,6 @@ from tests.fakes import ALICE, BOB, ST_DONE, ST_WFA, TT_ANIM
 
 WRITE_TOOLS = {
     "add_comment",
-    "reply_to_comment",
     "acknowledge_comment",
     "set_task_status",
     "assign_task",
@@ -430,8 +429,8 @@ DRY_RUNS = [
         {"task_total": 690, "person_day": 90},
     ),
     (
-        "reply_to_comment",
-        {"task_id": "t-hero-mod", "comment_id": "c-2", "text": "Looks good"},
+        "add_comment",
+        {"task_id": "t-hero-mod", "reply_to": "c-2", "text": "Looks good"},
         {"replies": 0},
         {"replies": 1},
     ),
@@ -610,7 +609,7 @@ def test_plan_with_failed_check_sends_nothing(fake):
 
 
 async def test_reply_to_comment(call, fake, writable):
-    result = await call("reply_to_comment", task_id="t-hero-mod", comment_id="c-2", text="Looks good")
+    result = await call("add_comment", task_id="t-hero-mod", reply_to="c-2", text="Looks good")
     assert result["ok"] and result["message"] == "Reply posted."
     assert writes(fake) == [("POST", "data/tasks/t-hero-mod/comments/c-2/reply", {"text": "Looks good"})]
     task = await call("get_task", task_id="t-hero-mod", comment_limit=1)
@@ -620,9 +619,11 @@ async def test_reply_to_comment(call, fake, writable):
 
 async def test_reply_checks_the_comment_belongs_to_the_task(call, fake, writable):
     with pytest.raises(ToolError, match="not on task"):
-        await call("reply_to_comment", task_id="t-sh010-anim", comment_id="c-2", text="Hi")
+        await call("add_comment", task_id="t-sh010-anim", reply_to="c-2", text="Hi")
     with pytest.raises(ToolError, match="empty"):
-        await call("reply_to_comment", task_id="t-hero-mod", comment_id="c-2", text=" ")
+        await call("add_comment", task_id="t-hero-mod", reply_to="c-2", text=" ")
+    with pytest.raises(ToolError, match="cannot change the status"):
+        await call("add_comment", task_id="t-hero-mod", reply_to="c-2", text="Hi", status="done")
     assert writes(fake) == []
 
 
