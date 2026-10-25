@@ -75,5 +75,8 @@ PyPI uses trusted publishing, so no token is stored: the `kitsu-mcp` project on 
 as its publisher (workflow `release.yml`, environment `pypi`).
 
 The release workflow can publish, so its actions are pinned to commit SHAs (with a `# vX.Y.Z` comment) rather
-than tags that could be moved; CI uses major tags. Dependabot (`.github/dependabot.yml`) proposes updates for
-both weekly, in one grouped PR. Keep new actions in `release.yml` pinned the same way.
+than tags, which most projects can move; CI uses major tags. Keep new actions in `release.yml` pinned the same
+way. Dependabot (`.github/dependabot.yml`) proposes updates weekly, once a release is a week old: minor and
+patch bumps in one PR, each major bump in its own. When reviewing one, check that each new SHA is the commit its
+`# vX.Y.Z` tag points at, and for a major bump read its breaking changes: CI never runs `release.yml`, so its
+PyPI and Docker login/metadata steps are first exercised at the next release.
