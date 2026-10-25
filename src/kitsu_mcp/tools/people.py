@@ -52,14 +52,15 @@ def list_people(
 
 @tool(annotations=READ_ONLY, tags={"people", "tasks"})
 def get_person_tasks(
-    person: str,
+    person: str | None = None,
     done: bool = False,
     project: str | None = None,
     detail: Detail = "compact",
     limit: Limit = 50,
     offset: Offset = 0,
 ) -> PersonTaskList:
-    """List the tasks assigned to a person (name, email or ID): open ones, or done ones with done=True.
+    """List the tasks assigned to a person (name, email or ID; default: the logged-in user, i.e. "my tasks"):
+    open ones, or done ones with done=True.
 
     Open and done follow the status roles (list_task_statuses), like workload and project_overview:
     omitted tasks are in neither list. Open tasks are sorted by due date; done tasks most
@@ -67,7 +68,8 @@ def get_person_tasks(
     leaves out sequence, estimate, time logged and last comment date; detail="full" includes them.
     """
     lookups = get_lookups()
-    person_id = lookups.person(person)["id"]
+    client = get_client()
+    person_id = lookups.person(person)["id"] if person else client.user_id()
     project_id = lookups.project(project)["id"] if project else None
     tasks = [
         PersonTask(
@@ -83,7 +85,7 @@ def get_person_tasks(
             duration=t.get("duration"),
             last_comment_date=t.get("last_comment_date"),
         )
-        for t in assigned_tasks(get_client(), lookups, person_id, done)
+        for t in assigned_tasks(client, lookups, person_id, done)
         if project_id is None or t.get("project_id") == project_id
     ]
     if done:

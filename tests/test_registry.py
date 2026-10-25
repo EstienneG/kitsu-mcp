@@ -58,7 +58,7 @@ def test_tool_functions_are_callable_directly(fake):
 
 
 # What clients put in the model's context before any call: every tool's name, description and input schema.
-# 37.1k characters (about 9k tokens) with write tools on, as of 48 tools. Raise this deliberately, with the
+# 36.4k characters (about 9k tokens) with write tools on, as of 44 tools. Raise this deliberately, with the
 # README's "Context cost" paragraph, when a new tool earns its place.
 TOOL_LIST_BUDGET_CHARS = 41_000
 

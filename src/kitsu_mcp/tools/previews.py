@@ -91,7 +91,7 @@ def get_preview(
     show=True (default) returns the image; show=False its metadata (revision, format, status,
     validation, is_video). size: "thumbnail" (small, cheap) or "preview" (full resolution, large).
     For a video the image is its poster frame, and the result says which video tools show more.
-    Preview file IDs appear in comments (get_task), task previews (list_task_previews) and playlists.
+    Preview file IDs appear in comments (get_task), a task's previews (get_task with include_previews) and playlists.
     """
     if bool(entity_id) == bool(preview_file_id):
         raise ToolError("Pass exactly one of entity_id or preview_file_id")
@@ -101,7 +101,7 @@ def get_preview(
         preview_file_id = client.get(f"data/entities/{entity_id}").get("preview_file_id")
         if not preview_file_id:
             return "This entity has no preview."
-    preview_file_id = object_id(preview_file_id or "", "preview file", "list_task_previews")
+    preview_file_id = object_id(preview_file_id or "", "preview file", "get_task(include_previews=True)")
     try:
         record = client.get(f"data/preview-files/{preview_file_id}")
     except ToolError:
@@ -117,14 +117,11 @@ def get_preview(
     return [image, VIDEO_HINT] if video.is_video(record) else image
 
 
-@tool(annotations=READ_ONLY, tags={"previews", "tasks"})
-def list_task_previews(task_id: str) -> list[PreviewFile]:
-    """All preview files uploaded on a task, newest revision first. A revision can hold several files;
-    `position` 1 is its main one."""
-    task_id = object_id(task_id, "task", "search_tasks")
+def task_previews(task_id: str, task: dict | None = None) -> list[PreviewFile]:
+    """All preview files uploaded on a task, newest revision first (get_task(include_previews=True))."""
     raw = get_client().get(f"data/tasks/{task_id}/previews")
     raw.sort(key=lambda p: (-(p.get("revision") or 0), p.get("position") or 1, p.get("created_at") or ""))
-    task = _task_full(task_id) if raw else None
+    task = (task or _task_full(task_id)) if raw else None
     return [_preview_file(p, task) for p in raw]
 
 

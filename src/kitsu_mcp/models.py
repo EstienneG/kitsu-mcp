@@ -96,6 +96,35 @@ class Comment(BaseModel):
     acknowledged_by: list[str] = Field(default_factory=list, description="People who acknowledged the comment")
 
 
+class PreviewFile(BaseModel):
+    id: str
+    revision: int | None
+    position: int | None = Field(None, description="Order within the revision; 1 is the main file")
+    extension: str | None
+    is_movie: bool | None
+    original_name: str | None
+    status: str | None
+    validation_status: str | None
+    width: int | None
+    height: int | None
+    created_at: str | None
+    is_video: bool = Field(
+        default=False, description="A movie, detected from the extension (is_movie is unreliable); see the video tools"
+    )
+    duration: float | None = Field(default=None, description="Seconds, for movies")
+    note: str | None = None
+    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
+    download_url: str | None = Field(None, description="Original upload; opens in a browser signed in to Kitsu")
+
+
+class StatusChange(BaseModel):
+    date: str | None
+    author: str | None
+    status: str | None
+    previous_status: str | None
+    text: str | None
+
+
 class TaskDetail(BaseModel):
     id: str
     project: str | None
@@ -113,6 +142,8 @@ class TaskDetail(BaseModel):
     last_comment_date: str | None = None
     last_preview_file_id: str | None = Field(None, description="Latest upload; video tools accept it")
     comments: list[Comment] | None = None
+    history: list[StatusChange] | None = Field(default=None, description="include_history: status changes, oldest first")
+    previews: list[PreviewFile] | None = Field(default=None, description="include_previews: newest revision first")
     url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
 
@@ -155,35 +186,6 @@ class TaskList(BaseModel):
     by_assignee: list[AssigneeGroup] | None = Field(
         default=None, description="Set with group_by='assignee', instead of tasks"
     )
-
-
-class StatusChange(BaseModel):
-    date: str | None
-    author: str | None
-    status: str | None
-    previous_status: str | None
-    text: str | None
-
-
-class TaskHistory(BaseModel):
-    id: str
-    entity: str | None
-    task_type: str | None
-    current_status: str | None
-    time_logged: float | None = Field(description="Minutes")
-    estimation: float | None = Field(description="Minutes")
-    retake_count: int | None
-    changes: list[StatusChange] = Field(description="Status changes, oldest first")
-
-
-class MyTask(BaseModel):
-    id: str
-    project: str | None
-    entity: str | None
-    entity_type: str | None
-    task_type: str | None
-    status: str | None
-    due_date: str | None
 
 
 class AssetSummary(BaseModel):
@@ -361,27 +363,6 @@ class ProjectOverview(BaseModel):
     estimation: float = Field(description="Minutes estimated over all tasks")
     logged: float = Field(description="Minutes logged over all tasks")
     by_task_type: list[TaskTypeProgress]
-
-
-class PreviewFile(BaseModel):
-    id: str
-    revision: int | None
-    position: int | None = Field(None, description="Order within the revision; 1 is the main file")
-    extension: str | None
-    is_movie: bool | None
-    original_name: str | None
-    status: str | None
-    validation_status: str | None
-    width: int | None
-    height: int | None
-    created_at: str | None
-    is_video: bool = Field(
-        default=False, description="A movie, detected from the extension (is_movie is unreliable); see the video tools"
-    )
-    duration: float | None = Field(default=None, description="Seconds, for movies")
-    note: str | None = None
-    url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
-    download_url: str | None = Field(None, description="Original upload; opens in a browser signed in to Kitsu")
 
 
 class RecentPreview(BaseModel):

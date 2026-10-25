@@ -90,8 +90,8 @@ async def test_tasks_and_people(call):
     anim = next(t for t in tasks if t["task_type"] == "Animation")
     task = await call("get_task", task_id=anim["id"])
     assert "splines" in str(task["comments"])
-    assert await call("task_history", task_id=anim["id"])
-    assert len(await call("my_tasks")) == 2
+    assert (await call("get_task", task_id=anim["id"], include_history=True))["history"]
+    assert (await call("get_person_tasks"))["total"] == 2
     assert (await call("get_person_tasks", person="admin@example.com"))["total"] == 2
     assert await call("workload", project=PROJECT)
 

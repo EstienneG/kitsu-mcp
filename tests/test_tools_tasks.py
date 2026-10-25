@@ -33,11 +33,13 @@ async def test_search_pagination_and_sort(call):
     assert [t["entity"] for t in result["tasks"]] == ["Hero", "SH010"]
 
 
-async def test_task_history(call):
-    history = await call("task_history", task_id="t-hero-mod")
-    assert history["current_status"] == "wfa"
-    assert history["time_logged"] == 600
-    assert [(c["previous_status"], c["status"]) for c in history["changes"]] == [(None, "wip"), ("wip", "wfa")]
+async def test_get_task_history_and_previews(call):
+    task = await call("get_task", task_id="t-hero-mod", include_comments=False, include_history=True)
+    assert task["status"] == "wfa" and task["duration"] == 600
+    assert task["comments"] is None and task["previews"] is None
+    assert [(c["previous_status"], c["status"]) for c in task["history"]] == [(None, "wip"), ("wip", "wfa")]
+    task = await call("get_task", task_id="t-hero-mod", include_previews=True)
+    assert [p["id"] for p in task["previews"]] == ["pf-hero"] and task["history"] is None
 
 
 async def test_search_rejects_malformed_dates(call):
