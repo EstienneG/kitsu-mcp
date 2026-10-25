@@ -4,42 +4,46 @@ An [MCP](https://modelcontextprotocol.io) server for [Kitsu](https://www.cg-wire
 tracker. Plug it into an AI agent (Mistral Vibe, Le Chat, Claude, Codex, ...) and ask about your production in plain
 language: where a project stands, what is waiting for review, who is overloaded, what a preview movie shows, how
 the schedule and budget look. With writes enabled, the agent can also comment, change statuses, assign, schedule,
-log time and build review playlists, always showing you its plan first.
+log time and build review playlists; it is told to show you its plan and ask before writing.
 
-It talks to Kitsu's API (Zou) with each person's own login, so everyone sees exactly what Kitsu lets them see. It
-runs on your machine for desktop and command-line agents, or once for the whole studio for web agents.
+It talks to Kitsu's API (Zou) with each person's own login, so everyone sees exactly what Kitsu lets them see.
+
+**Which setup?** With a desktop or command-line agent (Vibe CLI, Claude Code, Codex), it runs on your machine:
+see [Client setup](#client-setup). With Vibe Work, AI Studio or Le Chat, it runs once for the whole studio: ask
+your pipeline or IT team to run the [hosted server](#hosted-server), then add it as a connector.
 
 ## What you can do
 
 | You are | Ask things like | What the agent uses |
 |---|---|---|
-| **Producer / production manager** | "Where does the short stand, and which departments are behind schedule?" · "How many shots did each animator deliver per week this month?" · "What does the budget plan for the modeling department?" · "What changed on the project since Monday?" | progress per task type, overdue work, the production schedule and milestones, quotas, the budget, the activity feed |
-| **Supervisor / lead** | "What is waiting for my review, oldest first?" · "Review the latest animation of SQ010 / SH020 against the last retake notes." · "Who on my team has the most open or overdue work?" · "Put today's wfa shots in a dailies playlist." | the review queue, comments and their history, frame-level movie review and revision comparison, workload per person, playlists |
+| **Producer / production manager** | "Where does the short stand, and which task types are behind schedule?" · "How many shots did each animator deliver per week this month?" · "What does the budget plan for the modeling department?" · "What changed on the project since Monday?" | progress per task type, overdue work, the production schedule and milestones, quotas, the budget, the activity feed |
+| **Supervisor / lead** | "What is waiting for review in animation, oldest first?" · "Review the latest animation of SQ010 / SH020 against the last retake notes." · "Who on my team has the most open or overdue work?" · "Put today's wfa shots in a dailies playlist." | the review queue, comments and their history, the movie frames the comments point at, revision comparison, workload per person, playlists |
 | **Artist** | "What should I work on today?" · "What did the supervisor say on my last upload?" · "Log 3 hours on Hero modeling for yesterday." · "Reply to Bob's note that it's fixed." | your tasks and notifications, the task's comments and previews, time logs, replies |
-| **Pipeline / TD** | "Which shots in SQ020 are approved in layout but not started in animation?" · "List the assets cast in SH010 with their modeling status." · anything else, through a raw read of the API | asset, shot and casting lists with status and custom-field filters, `kitsu_get` for any read route |
+| **Pipeline / TD** | "Which shots in SQ020 are approved in layout but not started in animation?" · "List the assets cast in SH010 with their modeling status." · most other reads, straight from the API | asset, shot and casting lists with status and custom-field filters, `kitsu_get` for any `data/` read route |
 
-Ready-made prompts cover the common ones: a project status report, a supervisor's review queue, an artist's day,
-a person summary and a shot review.
+In clients that show MCP prompts, ready-made ones cover the common requests: a project status report, a
+supervisor's review queue, an artist's day, a person summary and a shot review.
 
 ## What it covers in Kitsu
 
 | Kitsu | The agent can |
 |---|---|
-| Production tracking (assets, shots, sequences, episodes, tasks) | Search and filter tasks by type, status, department, assignee and due date; read any asset, shot or task with its comments, history and previews |
+| Production tracking (assets, shots, sequences, episodes, tasks) | Search and filter tasks by type, status, department, assignee and due date; (with writes) comment, change statuses, assign and unassign; read any asset or shot, and any task with its comments, status history and previews |
 | Production overview, statistics | Summarize progress per task type, overdue work, retakes, work waiting for review, unassigned work, time logged vs. estimated |
-| Review and playlists | Show preview images, review movies frame by frame against the comments, compare two revisions; list, read, create and fill playlists |
+| Review and playlists | Show preview images, look at the frames of a movie that the comments point at, compare two revisions; list and read playlists, and (with writes) create and fill them |
 | Breakdown / casting | Read which assets are in a shot, and which shots use an asset |
-| Schedule, estimates | Read each task type's planned dates against its tasks' due dates, and the milestones; change a task's dates and estimate |
+| Schedule, estimates | Read each task type's planned dates against its tasks' due dates, and the milestones; (with writes) change a task's dates and estimate |
 | Quotas | Shots and frames per artist per day, week or month, in each of Kitsu's counting modes |
-| Budget | Planned salary costs per person and department, computed as the Budget page does |
-| Timesheets, days off | Time a person logged per day and task, with their days off; log time |
-| News feed, notifications | What changed on a project since a date; the user's notifications |
+| Budget | Planned salary costs per person and department, computed as the Budget page does (producers and admins, as in Kitsu) |
+| Timesheets, days off | Time a person logged per day and task, with their days off when Kitsu shows them to you; (with writes) log time |
+| News feed, notifications | What changed on a project since a date; your notifications |
 | Team, workload | People, departments, and open work per person |
 | Custom fields (metadata columns) | Read them and filter assets and shots on them |
 | Concepts, edits | Find them by name (no dedicated tools yet) |
 
-Not covered: creating projects, assets, shots or tasks, editing the breakdown, uploading previews, and studio
-settings (task types, statuses, automations, permissions). Use Kitsu for those.
+Not covered: creating or deleting projects, assets, shots or tasks; editing asset and shot data (descriptions,
+frame ranges, custom field values) or the breakdown; uploading previews; removing playlist entries; editing
+budgets; and studio settings (task types, statuses, automations, permissions). Use Kitsu for those.
 
 ## Safe by default
 
@@ -49,35 +53,30 @@ settings (task types, statuses, automations, permissions). Use Kitsu for those.
   agent is told to show you that plan and ask before writing.
 - **Your permissions, not more.** Every call runs as you, with your Kitsu permissions. On a shared server, each
   person signs in with their own Kitsu login.
+- **Where your password goes.** Locally it is stored in your agent's config file, in plain text, as for any
+  local MCP server. On a hosted server it is sent with each request (HTTPS only) and kept in memory, never logged.
 
-Limits: the agent sees sampled still frames of a movie, not motion or sound; accounts with two-factor
-authentication cannot use the shared (hosted) server.
-
-## Quick start
-
-You need [uv](https://docs.astral.sh/uv/getting-started/installation/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-and a Kitsu account. Any MCP client that runs local servers can start it with:
-
-    command: uvx kitsu-mcp
-    env:     KITSU_HOST=https://your-studio.cg-wire.com/api
-             KITSU_USER=you@example.com
-             KITSU_PASSWORD=your-password
-
-Use `uvx --from 'kitsu-mcp[video]' kitsu-mcp` as the command for the [video tools](#video). Web agents need the
-[hosted server](#hosted-server) instead.
+Limits: the agent sees still frames sampled from a movie, not motion or sound; Kitsu accounts with two-factor
+authentication cannot log in yet.
 
 ## Client setup
 
+Desktop and command-line agents start the server on your machine. You need a Kitsu account and
+[uv](https://docs.astral.sh/uv/getting-started/installation/), a small Python tool runner (macOS and Linux:
+`curl -LsSf https://astral.sh/uv/install.sh | sh`). Replace the Kitsu address, email and password below with
+yours; the address is your Kitsu URL followed by `/api`.
+
 ### Mistral Vibe CLI
 
-    vibe mcp add kitsu --transport stdio --command uvx --arg kitsu-mcp \
+    vibe mcp add kitsu --transport stdio --command uvx --arg=--from --arg='kitsu-mcp[video]' --arg kitsu-mcp \
       --env KITSU_HOST=https://your-studio.cg-wire.com/api \
       --env KITSU_USER=you@example.com \
       --env KITSU_PASSWORD='your-password'
 
 ### Mistral Vibe Work, AI Studio and Le Chat
 
-These run in the cloud, so they connect to a [hosted server](#hosted-server) through a custom MCP connector:
+These run in the cloud, so they connect to your studio's [hosted server](#hosted-server) through a custom MCP
+connector:
 
 - **Vibe Work:** Connectors → + Add Connector → Custom MCP Connector. **AI Studio:** Connectors → Add.
   **Le Chat:** Connectors → Custom MCP connector.
@@ -92,7 +91,7 @@ These run in the cloud, so they connect to a [hosted server](#hosted-server) thr
       -e KITSU_HOST=https://your-studio.cg-wire.com/api \
       -e KITSU_USER=you@example.com \
       -e KITSU_PASSWORD='your-password' \
-      -- uvx kitsu-mcp
+      -- uvx --from 'kitsu-mcp[video]' kitsu-mcp
 
 ### Codex
 
@@ -100,12 +99,26 @@ These run in the cloud, so they connect to a [hosted server](#hosted-server) thr
       --env KITSU_HOST=https://your-studio.cg-wire.com/api \
       --env KITSU_USER=you@example.com \
       --env KITSU_PASSWORD='your-password' \
-      -- uvx kitsu-mcp
+      -- uvx --from 'kitsu-mcp[video]' kitsu-mcp
 
-Local clients store the password in plain text in their config file (e.g. `~/.vibe/config.toml`). Add
-`KITSU_ALLOW_WRITE=true` to expose the write tools; every write tool also has a [dry run](#dry-run). If your
-client does not refresh its tool list during a conversation, also add `KITSU_TOOL_GROUPS=all` (see
-[tool groups](#tool-groups)).
+### Other MCP clients
+
+Any client that runs local MCP servers can start it with:
+
+    command: uvx --from 'kitsu-mcp[video]' kitsu-mcp
+    env:     KITSU_HOST=https://your-studio.cg-wire.com/api
+             KITSU_USER=you@example.com
+             KITSU_PASSWORD=your-password
+
+### Options
+
+- The `[video]` extra (about 30 MB, downloaded once) lets the agent look inside preview movies. Use plain
+  `uvx kitsu-mcp` to leave it out.
+- Add `KITSU_ALLOW_WRITE=true` to the environment to let the agent change Kitsu (comments, statuses,
+  assignments, ...); every write tool also has a [dry run](#dry-run).
+- If your client does not refresh its tool list during a conversation, also add `KITSU_TOOL_GROUPS=all` (see
+  [tool groups](#tool-groups)).
+- All settings are in [Configuration](#configuration).
 
 ## Hosted server
 
@@ -144,7 +157,7 @@ Differences from stdio: `download_previews` and `download_video` are hidden (the
 disk, not the user's); give people the `url` (Kitsu page) or `download_url` (original upload) instead, which
 open in their own Kitsu browser session. The video tools cache movies per user, and `KITSU_VIDEO_CACHE_MB` caps
 all users' movies together. Write tools follow `KITSU_ALLOW_WRITE` as over stdio. Kitsu accounts with
-two-factor authentication cannot log in this way.
+two-factor authentication cannot log in (the same holds locally).
 
 ## Configuration
 
@@ -238,15 +251,10 @@ unknown names) are errors either way. Agents are told to dry-run first and show 
 
 ## Video
 
-The video tools look inside movie previews. They need the optional `video` extra (PyAV, which
-bundles ffmpeg, and Pillow), so no system ffmpeg is required:
-
-    uvx --from 'kitsu-mcp[video]' kitsu-mcp      # or: pip install 'kitsu-mcp[video]'
-
-Use that as the command when registering the server (e.g. `-- uvx --from 'kitsu-mcp[video]' kitsu-mcp`
-for Claude Code). Without the extra the tools are still listed but answer with an error saying how
-to install it (`download_video` works either way). `get_preview` says when a
-preview is a video.
+The video tools look inside movie previews. They need the `video` extra (PyAV, which bundles ffmpeg, and
+Pillow), so no system ffmpeg is required. The setup commands above and the Docker image include it; with pip,
+install `kitsu-mcp[video]`. Without the extra the tools are still listed but answer with an error saying how to
+install it (`download_video` works either way). `get_preview` says when a preview is a video.
 
 - Movies are fetched at Kitsu's low-resolution playback quality by default (`quality="original"` for
   the uploaded file) and cached per preview file and quality (see the `KITSU_VIDEO_*` settings).

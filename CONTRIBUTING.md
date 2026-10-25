@@ -67,9 +67,9 @@ deliberately when a tool earns its place, and prefer putting new tools in a grou
 
 ## Release
 
-Bump `version` in `pyproject.toml` and add a `CHANGELOG.md` entry, merge, then tag it
-(`git tag v0.4.0 && git push origin v0.4.0`).
+Bump `version` in `pyproject.toml` (and `uv lock`), give the CHANGELOG's Unreleased section the version and
+date, merge, then tag the merge commit `vX.Y.Z` (`git tag vX.Y.Z && git push origin vX.Y.Z`).
 The Release workflow checks the tag matches the version, runs the checks, then publishes the package to
-PyPI and the Docker image to `ghcr.io/estienneg/kitsu-mcp` (tags `0.4.0`, `0.4` and `latest`).
+PyPI and the Docker image to `ghcr.io/estienneg/kitsu-mcp` (tags `X.Y.Z`, `X.Y` and `latest`).
 PyPI uses trusted publishing, so no token is stored: the `kitsu-mcp` project on PyPI has this repository
 as its publisher (workflow `release.yml`, environment `pypi`).
