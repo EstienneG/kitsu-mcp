@@ -1,7 +1,7 @@
 # kitsu-mcp
 
 An [MCP](https://modelcontextprotocol.io) server for [Kitsu](https://www.cg-wire.com/kitsu), CGWire's production
-tracker. Plug it into an AI agent (Mistral Vibe, Le Chat, Claude, Codex, ...) and ask about your production in plain
+tracker. Plug it into an AI agent (Mistral Vibe, Claude, Codex, ...) and ask about your production in plain
 language: where a project stands, what is waiting for review, who is overloaded, what a preview movie shows, how
 the schedule and budget look. With writes enabled, the agent can also comment, change statuses, assign, schedule,
 log time and build review playlists; it is told to show you its plan and ask before writing.
@@ -9,7 +9,7 @@ log time and build review playlists; it is told to show you its plan and ask bef
 It talks to Kitsu's API (Zou) with each person's own login, so everyone sees exactly what Kitsu lets them see.
 
 **Which setup?** With a desktop or command-line agent (Vibe CLI, Claude Code, Codex), it runs on your machine:
-see [Client setup](#client-setup). With Vibe Work, AI Studio or Le Chat, it runs once for the whole studio: ask
+see [Client setup](#client-setup). With Vibe Work or AI Studio, it runs once for the whole studio: ask
 your pipeline or IT team to run the [hosted server](#hosted-server), then add it as a connector.
 
 ## What you can do
@@ -73,13 +73,12 @@ yours; the address is your Kitsu URL followed by `/api`.
       --env KITSU_USER=you@example.com \
       --env KITSU_PASSWORD='your-password'
 
-### Mistral Vibe Work, AI Studio and Le Chat
+### Mistral Vibe Work and AI Studio
 
 These run in the cloud, so they connect to your studio's [hosted server](#hosted-server) through a custom MCP
 connector:
 
 - **Vibe Work:** Connectors → + Add Connector → Custom MCP Connector. **AI Studio:** Connectors → Add.
-  **Le Chat:** Connectors → Custom MCP connector.
 - Each person adds their own connector. Name: `kitsu`. Server URL: `https://<your-server>/mcp`. Visibility:
   **Private**, so the connector carries only their login.
 - Authentication: **Basic** with the person's Kitsu email and password. Where only a bearer token can be
@@ -122,10 +121,10 @@ Any client that runs local MCP servers can start it with:
 
 ## Hosted server
 
-Web agents (Vibe Work, AI Studio, Le Chat, ...) need the server at a public HTTPS URL. One server serves the
+Web agents (Vibe Work, AI Studio, ...) need the server at a public HTTPS URL. One server serves the
 whole studio: each person connects with their own Kitsu login, and every call runs as them, with their Kitsu
 permissions. Once it runs, people add it as a connector: see
-[Mistral Vibe Work, AI Studio and Le Chat](#mistral-vibe-work-ai-studio-and-le-chat).
+[Mistral Vibe Work and AI Studio](#mistral-vibe-work-and-ai-studio).
 
 **Run it.** Only `KITSU_HOST` is needed (no shared login). Deploy the image on a host that terminates HTTPS
 (Fly.io, Render, a reverse proxy) and confirm it with `KITSU_BEHIND_TLS=true`:
