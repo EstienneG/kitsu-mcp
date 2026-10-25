@@ -1,6 +1,6 @@
 """Prompt templates for common production-tracking questions."""
 
-from kitsu_mcp.app import mcp
+from kitsu_mcp.server.app import mcp
 
 
 @mcp.prompt(tags={"reporting"})

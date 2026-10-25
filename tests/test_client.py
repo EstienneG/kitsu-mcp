@@ -10,9 +10,9 @@ from gazu.exception import (
 )
 from pydantic import ValidationError
 
-from kitsu_mcp import client as client_module
-from kitsu_mcp.client import KitsuClient
 from kitsu_mcp.config import Settings
+from kitsu_mcp.kitsu import client as client_module
+from kitsu_mcp.kitsu.client import KitsuClient
 
 
 @pytest.fixture

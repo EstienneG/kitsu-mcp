@@ -39,3 +39,11 @@ def object_id(value: str, kind: str, finder: str) -> str:
             f"{value!r} is not {article} {kind} ID (Kitsu IDs look like 'a1b2c3d4-...'); use {finder} to find it"
         )
     return value.strip()
+
+
+def to_number(value) -> float | None:
+    """A number Zou may send as text (fps "23.976", a budget month "1200"); None when empty or not a number."""
+    try:
+        return float(value) if value not in (None, "") else None
+    except (TypeError, ValueError):
+        return None

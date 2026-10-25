@@ -8,9 +8,9 @@ from typing import Any, Literal
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.auth import TTLCache, request_credentials
-from kitsu_mcp.client import KitsuClient, get_client
 from kitsu_mcp.config import get_settings
+from kitsu_mcp.kitsu.auth import TTLCache, request_credentials
+from kitsu_mcp.kitsu.client import KitsuClient, get_client
 
 Record = dict[str, Any]
 

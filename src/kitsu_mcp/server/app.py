@@ -4,6 +4,18 @@ import inspect
 
 from fastmcp import FastMCP
 
+GROUPS: dict[str, str] = {
+    "browse": "list assets, shots, sequences, episodes, people, types; custom fields; casting",
+    "activity": "what changed lately on a project; the user's notifications",
+    "planning": "workload, timesheets with days off, quotas, schedule and milestones, budget",
+    "review": "preview images, playlists, frame-level review of movies",
+    "write": "comments, status changes, assignments, schedules, time logs, playlists (if the server allows)",
+}
+"""Tool groups load_tools adds, and what each holds: the one description the server instructions, load_tools
+and the README follow (a test checks the README). A tool's group is its tag (see kitsu_mcp.server.groups)."""
+
+GROUP_SUMMARY = "; ".join(f"{name}: {holds}" for name, holds in GROUPS.items())
+
 mcp = FastMCP(
     "kitsu",
     instructions=(
@@ -13,10 +25,9 @@ mcp = FastMCP(
         "(done, omitted, on hold, waiting review, ...), which every count and filter follows. Durations "
         'and estimates are in minutes. List tools return compact rows by default (detail="full" for '
         "more). Use kitsu_get for any read the other tools don't cover. Only the core tools are listed at "
-        "first: call load_tools to add a group (browse: list assets, shots, people, types, casting; activity: "
-        "recent changes, notifications; planning: workload, timesheets, quotas, schedule, budget; "
-        "review: previews, playlists, movie review; write: comments, statuses, assignments, schedules, time "
-        "logs, playlists). Write tools only exist when the server runs with KITSU_ALLOW_WRITE=true. For write "
+        "first: call load_tools to add a group ("
+        + GROUP_SUMMARY
+        + "). Write tools only exist when the server runs with KITSU_ALLOW_WRITE=true. For write "
         "tools, call with dry_run=True first and show the user the plan before writing; then confirm with the "
         "user before calling them for real."
     ),

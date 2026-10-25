@@ -1,7 +1,7 @@
 """Links to the Kitsu web app and direct downloads, built from Kitsu's own routes."""
 
-from kitsu_mcp import links
-from kitsu_mcp import lookups as lookups_module
+from kitsu_mcp.kitsu import links
+from kitsu_mcp.kitsu import lookups as lookups_module
 
 
 async def test_detail_tools_link_to_kitsu(call):
@@ -51,7 +51,7 @@ def test_links_never_carry_a_login_embedded_in_the_host(fake):
 
 def test_task_on_an_episode_links_to_that_episode(fake):
     """Zou's full task has no `episode` when the entity is an Episode; Kitsu then uses the entity ID."""
-    from kitsu_mcp.formatters import task_detail
+    from kitsu_mcp.kitsu.formatters import task_detail
 
     fake.data["projects"][0]["production_type"] = "tvshow"
     lookups_module.get_lookups().clear()

@@ -12,8 +12,8 @@ from typing import Any, Literal
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.client import get_client
-from kitsu_mcp.models import DryRunResult, PlannedRequest
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.models import DryRunResult, PlannedRequest
 
 # Kitsu roles. Kitsu usually lets artists ("user") and vendors set only statuses flagged is_artist_allowed, clients
 # only those flagged is_client_allowed, and keeps assigning, scheduling and logging time for others to leads.

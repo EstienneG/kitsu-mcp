@@ -7,8 +7,8 @@ from typing import Any
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.client import NotFoundError, size_guard
 from kitsu_mcp.config import Settings
+from kitsu_mcp.kitsu.client import NotFoundError, size_guard
 
 PROJECT = "p-1"
 TT_MODEL, TT_ANIM, TT_COMP = "tt-model", "tt-anim", "tt-comp"

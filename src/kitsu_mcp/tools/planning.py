@@ -7,11 +7,11 @@ from typing import Literal
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import day
-from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import (
+from kitsu_mcp.kitsu import production
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import day
+from kitsu_mcp.kitsu.lookups import get_lookups
+from kitsu_mcp.kitsu.models import (
     Budget,
     BudgetLine,
     Milestone,
@@ -20,14 +20,17 @@ from kitsu_mcp.models import (
     Schedule,
     ScheduleSpan,
 )
-from kitsu_mcp.production import project_tasks, today
-from kitsu_mcp.validation import iso_date
+from kitsu_mcp.kitsu.production import project_tasks
+from kitsu_mcp.kitsu.validation import iso_date, to_number
+from kitsu_mcp.server.app import READ_ONLY, tool
 
 PLANNING = {"planning"}
 Period = Literal["day", "week", "month"]
 # Zou's modes (Kitsu's Quotas page): a shot counts on the day it was first sent for review ("feedback") or
 # approved ("done"); the weighted modes spread it over the days time was logged on it instead.
 CountMode = Literal["feedback", "done", "weighted", "weighteddone"]
+DAYS_PER_MONTH = 20
+"""Kitsu's budget page counts a month as 20 days at the daily rate."""
 
 
 @tool(annotations=READ_ONLY, tags=PLANNING)
@@ -131,7 +134,7 @@ def production_schedule(project: str, task_types: list[str] | None = None) -> Sc
             open_by_type[type_id] += 1
         if due := day(record.raw.get("due_date")):
             dues[type_id].append(due)
-    now = today().isoformat()
+    now = production.today().isoformat()
     spans = []
     for item in items:
         type_id = item.get("task_type_id")
@@ -179,11 +182,11 @@ def production_schedule(project: str, task_types: list[str] | None = None) -> Sc
 
 
 @tool(annotations=READ_ONLY, tags=PLANNING)
-def budget(project: str, budget: str | None = None) -> Budget:
+def budget(project: str, version: str | None = None) -> Budget:
     """A production's planned salary budget, as Kitsu's Budget page: one line per person (department,
     position, seniority, months planned, daily rate, cost), with totals per department and overall.
 
-    budget: name or ID when the project has several versions (default: the latest revision). Costs follow
+    version: the budget's name or ID when the project has several (default: the latest revision). Costs follow
     Kitsu: a month costs 20 days at the daily rate, unless the budget sets that month's cost apart. Amounts
     are in the budget's currency. Kitsu shows budgets to producers and admins; other roles get its error.
     """
@@ -193,11 +196,11 @@ def budget(project: str, budget: str | None = None) -> Budget:
     budgets = client.get(f"data/projects/{info['id']}/budgets")
     if not budgets:
         raise ToolError(f"{info['name']} has no budget in Kitsu")
-    if budget:
-        match = [b for b in budgets if budget == b["id"] or (b.get("name") or "").lower() == budget.lower()]
+    if version:
+        match = [b for b in budgets if version == b["id"] or (b.get("name") or "").lower() == version.lower()]
         if not match:
             names = ", ".join(f"{b.get('name')} (revision {b.get('revision')})" for b in budgets)
-            raise ToolError(f"No budget '{budget}' in {info['name']}; it has: {names}")
+            raise ToolError(f"No budget '{version}' in {info['name']}; it has: {names}")
         chosen = match[0]
     else:
         chosen = max(budgets, key=lambda b: b.get("revision") or 0)
@@ -234,10 +237,6 @@ def budget(project: str, budget: str | None = None) -> Budget:
     )
 
 
-DAYS_PER_MONTH = 20
-"""Kitsu's budget page counts a month as 20 days at the daily rate."""
-
-
 def _month_costs(entry: dict) -> dict[str, float]:
     """Cost per month (YYYY-MM) over the months an entry covers, as Kitsu's budget page computes it: a
     month's exception (its whole cost, set by hand) wins over the daily rate times 20."""
@@ -248,12 +247,5 @@ def _month_costs(entry: dict) -> dict[str, float]:
     for i in range(entry.get("months_duration") or 0):
         year, month = divmod(start.month - 1 + i, 12)
         key = f"{start.year + year}-{month + 1:02d}"
-        costs[key] = _number(exceptions.get(key)) or monthly
+        costs[key] = to_number(exceptions.get(key)) or monthly
     return costs
-
-
-def _number(value) -> float | None:
-    try:
-        return float(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None

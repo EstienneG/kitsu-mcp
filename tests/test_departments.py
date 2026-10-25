@@ -3,7 +3,7 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.lookups import Lookups
+from kitsu_mcp.kitsu.lookups import Lookups
 from tests.fakes import TT_ANIM, TT_COMP, FakeClient
 
 

@@ -17,9 +17,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    from kitsu_mcp import groups
     from kitsu_mcp.config import get_settings, require_login
-    from kitsu_mcp.server import mcp
+    from kitsu_mcp.server import groups, mcp
 
     settings = get_settings()
     if not args.http:
@@ -28,7 +27,7 @@ def main() -> None:
         mcp.enable(tags={"write"})
     groups.set_default_groups(settings.tool_groups)
     if args.http:
-        from kitsu_mcp import http
+        from kitsu_mcp.server import http
 
         http.run(args.host, args.port, args.behind_tls)
     else:
