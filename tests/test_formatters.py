@@ -1,5 +1,5 @@
-from kitsu_mcp.formatters import comment, task_summary
-from kitsu_mcp.lookups import Lookups
+from kitsu_mcp.kitsu.formatters import comment, task_summary
+from kitsu_mcp.kitsu.lookups import Lookups
 from tests.fakes import ALICE, ST_WFA, TT_MODEL, FakeClient
 
 

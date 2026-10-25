@@ -1,14 +1,14 @@
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp import custom_fields as cf
-from kitsu_mcp import links
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import task_summary
-from kitsu_mcp.lookups import check_names, get_lookups
-from kitsu_mcp.models import CastAsset, CastIn, Named, Sequence, ShotDetail, ShotList, ShotSummary
+from kitsu_mcp.kitsu import custom_fields as cf
+from kitsu_mcp.kitsu import links
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import task_summary
+from kitsu_mcp.kitsu.lookups import check_names, get_lookups
+from kitsu_mcp.kitsu.models import CastAsset, CastIn, Named, Sequence, ShotDetail, ShotList, ShotSummary
+from kitsu_mcp.kitsu.validation import Detail, Limit, Offset, object_id, to_number
+from kitsu_mcp.server.app import READ_ONLY, tool
 from kitsu_mcp.tools.assets import check_status_filters, matches_status_filters, statuses
-from kitsu_mcp.validation import Detail, Limit, Offset, object_id
 
 
 def _frames(shot: dict, field: str) -> int | None:
@@ -30,14 +30,6 @@ def _frames(shot: dict, field: str) -> int | None:
 
 _SHOWN = frozenset({"frame_in", "frame_out", "nb_frames"})
 """Shot data keys already shown as top-level fields."""
-
-
-def _fps(value) -> float | None:
-    """Zou stores fps as text ("24", "23.976")."""
-    try:
-        return float(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
 
 
 def _text(value) -> str | None:
@@ -156,7 +148,7 @@ def get_shot(shot_id: str) -> ShotDetail:
         nb_frames=_frames(shot, "nb_frames"),
         project_id=shot.get("project_id"),
         description=shot.get("description"),
-        fps=_fps(shot.get("fps")),
+        fps=to_number(shot.get("fps")),
         **cf.detail_fields(lookups, shot, "Shot", _SHOWN),
         tasks=[task_summary(t, lookups) for t in tasks],
         url=links.entity_url(shot.get("project_id"), "shot", shot["id"], shot.get("episode_id")),

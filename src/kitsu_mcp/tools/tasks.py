@@ -2,11 +2,10 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import comment, task_detail
-from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import (
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import comment, task_detail
+from kitsu_mcp.kitsu.lookups import get_lookups
+from kitsu_mcp.kitsu.models import (
     AssigneeGroup,
     StatusChange,
     TaskBrief,
@@ -14,9 +13,10 @@ from kitsu_mcp.models import (
     TaskList,
     TaskRow,
 )
-from kitsu_mcp.production import EntityKind, TaskRecord, day, project_tasks
-from kitsu_mcp.tools.previews import task_previews
-from kitsu_mcp.validation import MAX_LIMIT, Detail, Limit, Offset, iso_date, object_id
+from kitsu_mcp.kitsu.production import EntityKind, TaskRecord, day, project_tasks
+from kitsu_mcp.kitsu.validation import MAX_LIMIT, Detail, Limit, Offset, iso_date, object_id
+from kitsu_mcp.server.app import READ_ONLY, tool
+from kitsu_mcp.tools.review.previews import task_previews
 
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
 

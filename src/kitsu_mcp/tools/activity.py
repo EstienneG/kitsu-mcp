@@ -5,12 +5,11 @@ from datetime import date, timedelta
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp import production
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import day
-from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import (
+from kitsu_mcp.kitsu import production
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import day
+from kitsu_mcp.kitsu.lookups import get_lookups
+from kitsu_mcp.kitsu.models import (
     Activity,
     ActivityItem,
     DayOff,
@@ -22,7 +21,8 @@ from kitsu_mcp.models import (
     TimesheetDay,
     TimesheetTask,
 )
-from kitsu_mcp.validation import Limit, iso_date
+from kitsu_mcp.kitsu.validation import Limit, iso_date
+from kitsu_mcp.server.app import READ_ONLY, tool
 
 _MAX_FEED_PAGES = 5
 

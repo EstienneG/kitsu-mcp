@@ -6,7 +6,7 @@ change behaviour (called out under **Changed**).
 ## Unreleased
 
 ### Added
-- Tool groups. A conversation starts with 11 core tools (about 2,500 tokens instead of 9,000); `load_tools`
+- Tool groups. A conversation starts with 12 core tools (about 2,500 tokens instead of 9,000); `load_tools`
   adds the `browse`, `activity`, `planning`, `review` or `write` group when a task needs it, and the server
   tells the client its tool list changed. `KITSU_TOOL_GROUPS` lists groups from the start (default `write`;
   `all` for clients that do not refresh their tool list). Groups only change what is listed: the server
@@ -20,12 +20,16 @@ change behaviour (called out under **Changed**).
 - `assign_task(remove=True)` unassigns someone, and reports it when Kitsu refuses (it skips tasks silently).
 
 ### Changed
-- **Only the 11 core tools are listed at first.** Agents add the rest with `load_tools`. If your client does
+- **Only the 12 core tools are listed at first.** Agents add the rest with `load_tools`. If your client does
   not refresh its tool list when told to (or only lets the model call listed tools), set
   `KITSU_TOOL_GROUPS=all` to list every tool from the start, as before.
 - Fewer tools for the same features (48 to 44), so agents see a shorter list: `my_tasks` is
   `get_person_tasks` without a person; `task_history` and `list_task_previews` are `get_task` with
   `include_history` / `include_previews`; `reply_to_comment` is `add_comment` with `reply_to`.
+- Source reorganised into packages: `kitsu/` (Kitsu client, lookups, production views, models), `server/`
+  (the FastMCP app, tool groups, HTTP mode, prompts, resources) and `tools/` by area, with `review/` and
+  `write/` split per subject. `kitsu_mcp.server:mcp` is unchanged; other module paths moved (for example
+  `kitsu_mcp.client` is now `kitsu_mcp.kitsu.client`).
 
 ## 0.3.2 — 2026-10-24
 

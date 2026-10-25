@@ -7,13 +7,13 @@ from pathlib import Path
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
-from kitsu_mcp import links, video
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import comment as format_comment
-from kitsu_mcp.models import SavedVideo, VideoInfo
-from kitsu_mcp.tools.previews import _safe_filename
-from kitsu_mcp.video import ImageFormat, Probe, Quality
+from kitsu_mcp.kitsu import links, video
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import comment as format_comment
+from kitsu_mcp.kitsu.models import SavedVideo, VideoInfo
+from kitsu_mcp.kitsu.video import ImageFormat, Probe, Quality
+from kitsu_mcp.server.app import READ_ONLY, tool
+from kitsu_mcp.tools.review.previews import safe_filename
 
 Moment = int | float | str
 
@@ -332,8 +332,8 @@ def download_video(
     preview = video.resolve_preview(preview_file_id, entity_id)
     dest = Path(dest_dir).expanduser()
     dest.mkdir(parents=True, exist_ok=True)
-    stem = _safe_filename(preview.get("original_name") or "movie")
-    target = dest / f"{stem}_{_safe_filename(preview['id'])}.{video.file_extension(preview, quality)}"
+    stem = safe_filename(preview.get("original_name") or "movie")
+    target = dest / f"{stem}_{safe_filename(preview['id'])}.{video.file_extension(preview, quality)}"
     if target.exists() and not overwrite:
         return SavedVideo(
             preview_file_id=preview["id"], path=str(target), quality=quality, bytes=target.stat().st_size, skipped=True

@@ -21,8 +21,8 @@ from gazu.exception import (
     ValidationException,
 )
 
-from kitsu_mcp.auth import Credentials, LoginThrottle, TTLCache, request_credentials
 from kitsu_mcp.config import Settings, get_settings
+from kitsu_mcp.kitsu.auth import Credentials, LoginThrottle, TTLCache, request_credentials
 
 # requests.JSONDecodeError: a proxy answered 503/504 with an HTML page (gazu only raises on 500/502).
 _TRANSIENT = (ServerErrorException, requests.ConnectionError, requests.Timeout, requests.JSONDecodeError)

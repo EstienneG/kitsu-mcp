@@ -1,4 +1,8 @@
-"""Tool modules. Importing this package registers every tool on `kitsu_mcp.app.mcp`."""
+"""Tool modules, one per area. Importing this package registers every tool on `kitsu_mcp.server.app.mcp`.
+
+Which tools an agent sees first is not decided here but by each tool's group tag (core, browse, activity,
+planning, review, write; see kitsu_mcp.server.groups).
+"""
 
 from kitsu_mcp.tools import (
     activity,
@@ -7,11 +11,10 @@ from kitsu_mcp.tools import (
     meta,
     people,
     planning,
-    previews,
     projects,
+    review,
     shots,
     tasks,
-    video,
     write,
 )
 
@@ -22,10 +25,9 @@ __all__ = [
     "meta",
     "people",
     "planning",
-    "previews",
     "projects",
+    "review",
     "shots",
     "tasks",
-    "video",
     "write",
 ]

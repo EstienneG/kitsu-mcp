@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
-from kitsu_mcp.client import KitsuClient
-from kitsu_mcp.lookups import DUE_ROLES, OPEN_ROLES, Lookups, Role
-from kitsu_mcp.models import TaskRow
+from kitsu_mcp.kitsu.client import KitsuClient
+from kitsu_mcp.kitsu.lookups import DUE_ROLES, OPEN_ROLES, Lookups, Role
+from kitsu_mcp.kitsu.models import TaskRow
 
 EntityKind = Literal["asset", "shot", "any"]
 

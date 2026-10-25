@@ -9,8 +9,8 @@ from typing import Any
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.lookups import Lookups, Record, unknown_message
-from kitsu_mcp.validation import iso_date
+from kitsu_mcp.kitsu.lookups import Lookups, Record, unknown_message
+from kitsu_mcp.kitsu.validation import iso_date
 
 FilterValue = str | int | float | bool | None
 CustomFieldFilters = dict[str, list[FilterValue]]

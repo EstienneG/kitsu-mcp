@@ -170,12 +170,20 @@ Integration tests run the read tools against a real Zou, seeded with a tiny prod
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md) and [SECURITY.md](SECURITY.md).
 
-Layout (`src/kitsu_mcp/`): `config.py` settings, `client.py` HTTP client (login, re-login, retries,
-error mapping), `lookups.py` cached reference data and name resolution, `models.py` output schemas,
-`formatters.py` payload → model conversion, `production.py` project-wide task views, `plans.py` write plans
-(dry run), `custom_fields.py` custom field values and filters, `tools/` one module per domain,
-`resources.py`, `prompts.py`, `auth.py` per-caller credentials, `http.py` HTTP mode (hidden local tools,
-`/health`, TLS guard), `links.py` Kitsu web links.
+Layout (`src/kitsu_mcp/`):
+
+- `__init__.py` the `kitsu-mcp` entry point; `config.py` settings.
+- `kitsu/` talking to Kitsu, independent of the MCP server and tools: `client.py` HTTP client (login, re-login, retries, error
+  mapping), `auth.py` per-caller credentials, `lookups.py` cached reference data and name resolution,
+  `production.py` project-wide task views, `plans.py` write plans (dry run), `custom_fields.py`, `links.py`
+  Kitsu web links, `validation.py`, `video.py` movie decoding, `models.py` output schemas, `formatters.py`
+  payload → model conversion.
+- `server/` what MCP clients reach besides tools: `app.py` the FastMCP app and `@tool`, `groups.py` tool
+  groups and `load_tools`, `http.py` HTTP mode (hidden local tools, `/health`, TLS guard), `prompts.py`,
+  `resources.py`. `kitsu_mcp.server:mcp` is the app with everything registered.
+- `tools/` one module per area: `meta`, `projects`, `tasks`, `people`, `assets`, `shots`, `custom_fields`,
+  `activity`, `planning`; `review/` (`previews`, `playlists`, `video`); `write/` (`comments`, `assignments`,
+  `schedule`, `time`, `playlists`, and `common` helpers). A tool's group is its tag, not its folder.
 
 Release: bump `version` in `pyproject.toml` and add a `CHANGELOG.md` entry, merge, then tag it
 (`git tag v0.3.1 && git push origin v0.3.1`).
@@ -201,15 +209,15 @@ gets the defaults (core and write tools listed, write tools disabled).
 
 | Group | Tools |
 |---|---|
-| Core (always listed) | `whoami`, `search` (assets, shots, sequences, episodes, edits, concepts and people by name), `list_projects`, `project_overview`, `search_tasks` (type, department, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task` (with comments, replies and acknowledgements; optionally its status history and uploaded previews), `get_person_tasks` (anyone's, or the user's own), `get_asset`, `get_shot`, `kitsu_get` (raw read of any Zou `data/` route), `load_tools` |
-| `browse` | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `list_shots`, `list_sequences`, `list_episodes`, `list_asset_types`, `list_task_types`, `list_task_statuses`, `list_custom_fields` (a project's custom columns: type, choices, departments; values show up by display name in `get_asset` / `get_shot`, and `list_assets` / `list_shots` filter on them with `custom_field_filters`), `get_casting` (either way), `list_people`, `refresh_cache` |
+| Core (always listed) | `whoami`, `search` (assets, shots, sequences, episodes, edits, concepts and people by name), `list_projects`, `project_overview`, `search_tasks` (type, department, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task` (with comments, replies and acknowledgements; optionally its status history and uploaded previews), `get_person_tasks` (anyone's, or the user's own), `get_asset`, `get_shot`, `kitsu_get` (raw read of any Zou `data/` route), `refresh_cache`, `load_tools` |
+| `browse` | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `list_shots`, `list_sequences`, `list_episodes`, `list_asset_types`, `list_task_types`, `list_task_statuses`, `list_custom_fields` (a project's custom columns: type, choices, departments; values show up by display name in `get_asset` / `get_shot`, and `list_assets` / `list_shots` filter on them with `custom_field_filters`), `get_casting` (either way), `list_people` |
 | `activity` | `project_activity` (comments, status changes and uploads since a date, by person or task type), `my_notifications` (the user's Kitsu inbox) |
 | `planning` | `workload`, `timesheet` (time logged per day and task over a period, with days off when Kitsu shows them), `quotas` (shots and frames per artist per day, week or month, in the count modes of Kitsu's Quotas page), `production_schedule` (each task type's planned dates vs. its tasks' due dates, late and unscheduled task types, milestones), `budget` (planned salary costs per person and department, as Kitsu's Budget page) |
 | `review` | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `download_previews`, `list_playlists`, `get_playlist`; with the `[video]` extra: `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | `write` (opt-in) | `add_comment` (or a reply to a comment), `acknowledge_comment`, `set_task_status`, `assign_task` (or unassign), `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview) |
 
 **Context cost.** Clients send every listed tool's name, description and arguments to the model at the start
-of a conversation. The 11 core tools are about 2,500 tokens, plus about 300 for the server instructions;
+of a conversation. The 12 core tools are about 2,500 tokens, plus about 300 for the server instructions;
 with every group listed (48 tools, writes enabled) about 10,000. Results come on top, and list tools return compact
 rows to keep them small. Tests keep the core list and the full list under fixed budgets.
 

@@ -1,8 +1,8 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp import validation
-from kitsu_mcp.lookups import Lookups, unknown_message
+from kitsu_mcp.kitsu import validation
+from kitsu_mcp.kitsu.lookups import Lookups, unknown_message
 from tests.fakes import FakeClient
 
 
