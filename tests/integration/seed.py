@@ -9,6 +9,9 @@ import sys
 import gazu
 
 ADMIN = ("admin@example.com", "mysecretpassword")  # the image's default admin
+# A manager on the project, not an admin. Zou checks the domain accepts mail, so not example.com; the
+# account only exists in the throwaway test Zou.
+PRODUCER = ("kitsu.mcp.test.producer@gmail.com", "producer-secret-42")
 PROJECT = "MCP Test"
 
 
@@ -41,6 +44,8 @@ def main(host: str) -> None:
     anim = gazu.task.get_task_by_entity(shot, animation) or gazu.task.new_task(shot, animation, assignees=[admin])
     if not gazu.task.all_comments_for_task(anim):
         gazu.task.add_comment(anim, status("wip"), "Blocking done, starting splines")
+    producer = gazu.person.new_person("Pat", "Producer", PRODUCER[0], role="manager", password=PRODUCER[1])
+    gazu.project.add_person_to_team(project, producer)
     print(f"Seeded {PROJECT} ({project['id']})")
 
 

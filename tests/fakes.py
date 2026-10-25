@@ -873,7 +873,9 @@ class FakeClient:
                 raise ToolError(f"Permission denied for GET {path}")
             return [o for o in d.get("day_offs", []) if o["person_id"] == m[1]]
         if path == "data/schedule-items/":
-            return [i for i in d.get("schedule_items", []) if params.get("project_id") == PROJECT]
+            raise ToolError(f"Permission denied for GET {path}")  # Zou: admins only; tools must not need it
+        if m := re.fullmatch(r"data/projects/([^/]+)/schedule-items", path):
+            return d.get("schedule_items", []) if m[1] == PROJECT else []
         if re.fullmatch(r"data/projects/([^/]+)/schedule-items/task-types", path):
             raise AssertionError("schedule-items/task-types creates missing items in Zou: never read it")
         if m := re.fullmatch(r"data/projects/([^/]+)/milestones", path):
