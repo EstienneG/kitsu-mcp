@@ -8,7 +8,6 @@ from tests.fakes import ALICE, BOB, ST_DONE, ST_WFA, TT_ANIM
 
 WRITE_TOOLS = {
     "add_comment",
-    "reply_to_comment",
     "acknowledge_comment",
     "set_task_status",
     "assign_task",
@@ -34,7 +33,7 @@ async def test_write_tools_hidden_by_default():
     assert not WRITE_TOOLS & {t.name for t in await mcp.list_tools()}
 
 
-async def test_write_tools_are_annotated(writable):
+async def test_write_tools_are_annotated(writable, all_groups):
     tools = {t.name: t for t in await mcp.list_tools()}
     assert set(tools) >= WRITE_TOOLS
     for name in WRITE_TOOLS:
@@ -103,6 +102,33 @@ async def test_assign_task(call, fake, writable):
     result = await call("assign_task", task_id="t-sh020-anim", person="bob")
     assert writes(fake) == [("PUT", f"actions/persons/{BOB}/assign", {"task_ids": ["t-sh020-anim"]})]
     assert result["task"]["assignees"] == ["Bob Leroy"]
+
+
+async def test_unassign_task(call, fake, writable):
+    plan = await call("assign_task", task_id="t-hero-mod", person="Alice Martin", remove=True, dry_run=True)
+    assert (plan["before"], plan["after"]) == ({"assignees": ["Alice Martin"]}, {"assignees": []})
+    assert writes(fake) == []
+    result = await call("assign_task", task_id="t-hero-mod", person="Alice Martin", remove=True)
+    assert writes(fake) == [
+        ("PUT", "actions/tasks/clear-assignation", {"task_ids": ["t-hero-mod"], "person_id": ALICE})
+    ]
+    assert result["task"]["assignees"] == [] and result["message"] == "Unassigned Alice Martin."
+    again = await call("assign_task", task_id="t-hero-mod", person="Alice Martin", remove=True)
+    assert again["message"] == "Alice Martin was not assigned; nothing changed."
+    assert len(writes(fake)) == 1  # nothing sent the second time
+
+
+async def test_assign_task_is_marked_destructive(writable):
+    """It can take people off a task: clients must not run it without asking."""
+    tool = await mcp.get_tool("assign_task")
+    assert tool.annotations.destructive_hint is True
+
+
+async def test_unassign_reports_what_kitsu_skipped(call, fake, writable):
+    """Zou silently skips tasks the caller may not unassign; the tool must not claim success."""
+    fake.data["unassign_denied"] = {"t-hero-mod"}
+    with pytest.raises(ToolError, match="did not unassign"):
+        await call("assign_task", task_id="t-hero-mod", person="Alice Martin", remove=True)
 
 
 async def test_update_task_schedule(call, fake, writable):
@@ -430,8 +456,8 @@ DRY_RUNS = [
         {"task_total": 690, "person_day": 90},
     ),
     (
-        "reply_to_comment",
-        {"task_id": "t-hero-mod", "comment_id": "c-2", "text": "Looks good"},
+        "add_comment",
+        {"task_id": "t-hero-mod", "reply_to": "c-2", "text": "Looks good"},
         {"replies": 0},
         {"replies": 1},
     ),
@@ -552,7 +578,7 @@ async def test_dry_run_log_appends_jsonl(call, fake, writable, tmp_path, monkeyp
     assert len(log.read_text().splitlines()) == 2, "real calls are not logged"
 
 
-async def test_every_write_tool_has_dry_run(writable):
+async def test_every_write_tool_has_dry_run(writable, all_groups):
     """Any tool tagged write (not just the ones listed here) must offer dry_run, documented."""
     tagged = {t.name: t for t in await mcp.list_tools() if "write" in (t.tags or set())}
     assert set(tagged) == WRITE_TOOLS, "WRITE_TOOLS is out of date"
@@ -610,7 +636,7 @@ def test_plan_with_failed_check_sends_nothing(fake):
 
 
 async def test_reply_to_comment(call, fake, writable):
-    result = await call("reply_to_comment", task_id="t-hero-mod", comment_id="c-2", text="Looks good")
+    result = await call("add_comment", task_id="t-hero-mod", reply_to="c-2", text="Looks good")
     assert result["ok"] and result["message"] == "Reply posted."
     assert writes(fake) == [("POST", "data/tasks/t-hero-mod/comments/c-2/reply", {"text": "Looks good"})]
     task = await call("get_task", task_id="t-hero-mod", comment_limit=1)
@@ -620,9 +646,11 @@ async def test_reply_to_comment(call, fake, writable):
 
 async def test_reply_checks_the_comment_belongs_to_the_task(call, fake, writable):
     with pytest.raises(ToolError, match="not on task"):
-        await call("reply_to_comment", task_id="t-sh010-anim", comment_id="c-2", text="Hi")
+        await call("add_comment", task_id="t-sh010-anim", reply_to="c-2", text="Hi")
     with pytest.raises(ToolError, match="empty"):
-        await call("reply_to_comment", task_id="t-hero-mod", comment_id="c-2", text=" ")
+        await call("add_comment", task_id="t-hero-mod", reply_to="c-2", text=" ")
+    with pytest.raises(ToolError, match="cannot change the status"):
+        await call("add_comment", task_id="t-hero-mod", reply_to="c-2", text="Hi", status="done")
     assert writes(fake) == []
 
 

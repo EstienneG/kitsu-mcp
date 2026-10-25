@@ -38,10 +38,6 @@ async def test_get_preview_detects_video_by_extension(call, fake):
     assert (await call("get_preview", preview_file_id="pf-sh010", show=False))["is_video"]
 
 
-async def test_list_task_previews(call):
-    assert [p["id"] for p in await call("list_task_previews", task_id="t-hero-mod")] == ["pf-hero"]
-
-
 async def test_download_previews(call, fake, tmp_path):
     fake.data["assets"][0]["name"] = "Hero/../evil"
     result = await call("download_previews", project="Demo Short", dest_dir=str(tmp_path), size="thumbnail")
@@ -57,7 +53,7 @@ async def test_playlists(call):
     assert detail["items"] == [{"entity_id": "s-1", "entity": "SH010", "preview_file_id": "pf-sh010"}]
 
 
-@pytest.mark.parametrize("name", ["get_preview", "get_casting", "list_task_previews", "list_playlists"])
+@pytest.mark.parametrize("name", ["get_preview", "get_casting", "list_playlists"])
 async def test_preview_tools_are_read_only(name):
     tool = await mcp.get_tool(name)
     assert tool.annotations.read_only_hint

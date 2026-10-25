@@ -27,7 +27,7 @@ async def test_tools_reject_names_as_ids_before_calling_kitsu(call, fake, strict
         ("get_task", {"task_id": "not-an-id"}),
         ("get_asset", {"asset_id": "Hero"}),
         ("get_shot", {"shot_id": "SH010"}),
-        ("task_history", {"task_id": "x"}),
+        ("get_preview", {"preview_file_id": "x", "show": False}),
         ("get_playlist", {"playlist_id": "Dailies"}),
     ]:
         with pytest.raises(ToolError, match="is not a"):

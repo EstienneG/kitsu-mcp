@@ -3,6 +3,30 @@
 All notable changes. Versions follow [semantic versioning](https://semver.org); before 1.0, a minor version may
 change behaviour (called out under **Changed**).
 
+## Unreleased
+
+### Added
+- Tool groups. A conversation starts with 11 core tools (about 2,500 tokens instead of 9,000); `load_tools`
+  adds the `browse`, `activity`, `planning`, `review` or `write` group when a task needs it, and the server
+  tells the client its tool list changed. `KITSU_TOOL_GROUPS` lists groups from the start (default `write`;
+  `all` for clients that do not refresh their tool list). Groups only change what is listed: the server
+  accepts calls to any of its tools, and write tools still need `KITSU_ALLOW_WRITE`.
+
+- `planning` tools: `quotas` (output per artist per day, week or month, as Kitsu's Quotas page, in its four
+  count modes),
+  `production_schedule` (task types' planned dates against their tasks' due dates, late task types,
+  milestones) and `budget` (planned salary costs per person and department, computed as Kitsu does).
+- `timesheet` lists the person's days off in the period (when Kitsu lets the caller see them).
+- `assign_task(remove=True)` unassigns someone, and reports it when Kitsu refuses (it skips tasks silently).
+
+### Changed
+- **Only the 11 core tools are listed at first.** Agents add the rest with `load_tools`. If your client does
+  not refresh its tool list when told to (or only lets the model call listed tools), set
+  `KITSU_TOOL_GROUPS=all` to list every tool from the start, as before.
+- Fewer tools for the same features (48 to 44), so agents see a shorter list: `my_tasks` is
+  `get_person_tasks` without a person; `task_history` and `list_task_previews` are `get_task` with
+  `include_history` / `include_previews`; `reply_to_comment` is `add_comment` with `reply_to`.
+
 ## 0.3.2 — 2026-10-24
 
 ### Added

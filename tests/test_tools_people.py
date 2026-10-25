@@ -7,7 +7,8 @@ async def test_list_people(call, fake):
 
 
 async def test_my_tasks_only_open(call):
-    assert {t["id"] for t in await call("my_tasks")} == {"t-hero-mod"}
+    """No person: the logged-in user's tasks."""
+    assert {t["id"] for t in (await call("get_person_tasks"))["tasks"]} == {"t-hero-mod"}
 
 
 async def test_get_person_tasks(call):

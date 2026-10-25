@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     password: SecretStr | None = None
     allow_write: bool = False
     """Register tools that modify Kitsu (comments, status changes, assignments, ...)."""
+    tool_groups: str = "write"
+    """Tool groups listed from the start besides the core tools: comma-separated names among browse,
+    activity, planning, review and write, or "all" (for clients that do not refresh their tool list). The
+    others are listed once an agent calls load_tools. Write tools also need KITSU_ALLOW_WRITE."""
     cache_ttl: float = Field(300, ge=0)
     """Seconds to keep reference data (task types, statuses, people, ...) before refetching."""
     timeout: float = Field(30, gt=0)

@@ -4,7 +4,7 @@ from kitsu_mcp.lookups import check_names, get_lookups
 from kitsu_mcp.models import CustomField
 
 
-@tool(annotations=READ_ONLY, tags={"projects", "assets", "shots"})
+@tool(annotations=READ_ONLY, tags={"browse"})
 def list_custom_fields(project: str, entity_type: str | None = None) -> list[CustomField]:
     """List a project's custom fields (Kitsu "metadata descriptors"), in Kitsu's column order.
 

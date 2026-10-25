@@ -13,6 +13,7 @@ from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import (
     Activity,
     ActivityItem,
+    DayOff,
     Notification,
     Notifications,
     SearchHit,
@@ -124,7 +125,7 @@ _SEARCH_KINDS = ("asset", "shot", "sequence", "episode", "edit", "concept", "per
 _PROJECT_ROUTES = (("sequence", "sequences"), ("episode", "episodes"), ("edit", "edits"), ("concept", "concepts"))
 
 
-@tool(annotations=READ_ONLY, tags={"activity"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def search(query: str, project: str | None = None, kinds: list[str] | None = None, limit: Limit = 30) -> SearchResults:
     """Find anything by name: assets, shots, sequences, episodes, edits, concepts and people.
 
@@ -185,9 +186,9 @@ def search(query: str, project: str | None = None, kinds: list[str] | None = Non
     return SearchResults(total=len(hits), hits=hits[:limit])
 
 
-@tool(annotations=READ_ONLY, tags={"people"})
+@tool(annotations=READ_ONLY, tags={"planning"})
 def timesheet(person: str | None = None, start: str | None = None, end: str | None = None) -> Timesheet:
-    """Time a person logged over a period, in minutes: per day and per task.
+    """Time a person logged over a period, in minutes: per day and per task, with their days off.
 
     person: name, email or ID (default: the logged-in user). start / end: YYYY-MM-DD (default: the last 7
     days, today included). For time logged on a single task, see get_task (duration).
@@ -218,6 +219,9 @@ def timesheet(person: str | None = None, start: str | None = None, end: str | No
                 minutes=minutes,
             )
         )
+    days_off, note = _days_off(client, person_id, start_day, end_day), None
+    if days_off is None:
+        note = "Kitsu does not let you see this person's days off (your role or department)."
     return Timesheet(
         person=lookups.person_name(person_id),
         start=start_day,
@@ -225,4 +229,21 @@ def timesheet(person: str | None = None, start: str | None = None, end: str | No
         total_minutes=sum(by_day.values()),
         by_day=[TimesheetDay(date=d, minutes=m) for d, m in sorted(by_day.items())],
         by_task=tasks,
+        days_off=days_off,
+        note=note,
     )
+
+
+def _days_off(client, person_id: str, start: str, end: str) -> list[DayOff] | None:
+    """Days off overlapping start..end. Kitsu checks them apart from time logs (supervisors only see their
+    department's, older Zou only your own), so a refusal must not cost the timesheet."""
+    try:
+        raw = client.get(f"data/persons/{person_id}/day-offs")
+    except ToolError:
+        return None
+    found = [
+        DayOff(start=day(d.get("date")), end=day(d.get("end_date")), description=d.get("description") or None)
+        for d in raw
+        if (day(d.get("date")) or "") <= end and (day(d.get("end_date") or d.get("date")) or "") >= start
+    ]
+    return sorted(found, key=lambda d: d.start or "")

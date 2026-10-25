@@ -19,7 +19,7 @@ def _person(p: dict, departments: dict[str, str], with_email: bool) -> Person:
     )
 
 
-@tool(annotations=READ_ONLY, tags={"people"})
+@tool(annotations=READ_ONLY, tags={"browse"})
 def list_people(
     project: str | None = None,
     include_inactive: bool = False,
@@ -50,16 +50,17 @@ def list_people(
     return PeopleList(total=len(found), people=found[offset : offset + limit])
 
 
-@tool(annotations=READ_ONLY, tags={"people", "tasks"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def get_person_tasks(
-    person: str,
+    person: str | None = None,
     done: bool = False,
     project: str | None = None,
     detail: Detail = "compact",
     limit: Limit = 50,
     offset: Offset = 0,
 ) -> PersonTaskList:
-    """List the tasks assigned to a person (name, email or ID): open ones, or done ones with done=True.
+    """List the tasks assigned to a person (name, email or ID; default: the logged-in user, i.e. "my tasks"):
+    open ones, or done ones with done=True.
 
     Open and done follow the status roles (list_task_statuses), like workload and project_overview:
     omitted tasks are in neither list. Open tasks are sorted by due date; done tasks most
@@ -67,7 +68,8 @@ def get_person_tasks(
     leaves out sequence, estimate, time logged and last comment date; detail="full" includes them.
     """
     lookups = get_lookups()
-    person_id = lookups.person(person)["id"]
+    client = get_client()
+    person_id = lookups.person(person)["id"] if person else client.user_id()
     project_id = lookups.project(project)["id"] if project else None
     tasks = [
         PersonTask(
@@ -83,7 +85,7 @@ def get_person_tasks(
             duration=t.get("duration"),
             last_comment_date=t.get("last_comment_date"),
         )
-        for t in assigned_tasks(get_client(), lookups, person_id, done)
+        for t in assigned_tasks(client, lookups, person_id, done)
         if project_id is None or t.get("project_id") == project_id
     ]
     if done:
@@ -99,7 +101,7 @@ def get_person_tasks(
     return PersonTaskList(total=len(tasks), tasks=rows)
 
 
-@tool(annotations=READ_ONLY, tags={"people", "tasks", "reporting"})
+@tool(annotations=READ_ONLY, tags={"planning"})
 def workload(project: str, task_types: list[str] | None = None, departments: list[str] | None = None) -> list[Workload]:
     """Open tasks per person on a project: counts, overdue, waiting for review, retakes, on hold,
     estimate vs. logged.

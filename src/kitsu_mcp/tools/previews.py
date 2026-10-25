@@ -79,7 +79,7 @@ def _video_note() -> str:
     return note if video.available() else f"{note} {video.INSTALL_HINT}"
 
 
-@tool(annotations=READ_ONLY, tags={"previews"})
+@tool(annotations=READ_ONLY, tags={"review"})
 def get_preview(
     entity_id: str | None = None,
     preview_file_id: str | None = None,
@@ -91,7 +91,7 @@ def get_preview(
     show=True (default) returns the image; show=False its metadata (revision, format, status,
     validation, is_video). size: "thumbnail" (small, cheap) or "preview" (full resolution, large).
     For a video the image is its poster frame, and the result says which video tools show more.
-    Preview file IDs appear in comments (get_task), task previews (list_task_previews) and playlists.
+    Preview file IDs appear in comments (get_task), a task's previews (get_task with include_previews) and playlists.
     """
     if bool(entity_id) == bool(preview_file_id):
         raise ToolError("Pass exactly one of entity_id or preview_file_id")
@@ -101,7 +101,7 @@ def get_preview(
         preview_file_id = client.get(f"data/entities/{entity_id}").get("preview_file_id")
         if not preview_file_id:
             return "This entity has no preview."
-    preview_file_id = object_id(preview_file_id or "", "preview file", "list_task_previews")
+    preview_file_id = object_id(preview_file_id or "", "preview file", "get_task(include_previews=True)")
     try:
         record = client.get(f"data/preview-files/{preview_file_id}")
     except ToolError:
@@ -117,18 +117,15 @@ def get_preview(
     return [image, VIDEO_HINT] if video.is_video(record) else image
 
 
-@tool(annotations=READ_ONLY, tags={"previews", "tasks"})
-def list_task_previews(task_id: str) -> list[PreviewFile]:
-    """All preview files uploaded on a task, newest revision first. A revision can hold several files;
-    `position` 1 is its main one."""
-    task_id = object_id(task_id, "task", "search_tasks")
+def task_previews(task_id: str, task: dict | None = None) -> list[PreviewFile]:
+    """All preview files uploaded on a task, newest revision first (get_task(include_previews=True))."""
     raw = get_client().get(f"data/tasks/{task_id}/previews")
     raw.sort(key=lambda p: (-(p.get("revision") or 0), p.get("position") or 1, p.get("created_at") or ""))
-    task = _task_full(task_id) if raw else None
+    task = (task or _task_full(task_id)) if raw else None
     return [_preview_file(p, task) for p in raw]
 
 
-@tool(annotations=READ_ONLY, tags={"previews", "video"})
+@tool(annotations=READ_ONLY, tags={"review"})
 def recent_previews(
     project: str,
     task_type: str | None = None,
@@ -191,7 +188,7 @@ def recent_previews(
 _MAX_FEED_PAGES = 5
 
 
-@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"previews", "local"})
+@tool(annotations={"readOnlyHint": False, "destructiveHint": False, "openWorldHint": True}, tags={"review", "local"})
 def download_previews(
     project: str,
     dest_dir: str,
@@ -266,7 +263,7 @@ def project_playlists(project_id: str) -> list[dict]:
     return list(playlists.values())
 
 
-@tool(annotations=READ_ONLY, tags={"previews", "playlists"})
+@tool(annotations=READ_ONLY, tags={"review"})
 def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> PlaylistList:
     """List a project's review playlists, most recently updated first. `total` counts them all."""
     project_id = get_lookups().project(project)["id"]
@@ -275,7 +272,7 @@ def list_playlists(project: str, limit: Limit = 50, offset: Offset = 0) -> Playl
     return PlaylistList(total=len(playlists), playlists=playlists[offset : offset + limit])
 
 
-@tool(annotations=READ_ONLY, tags={"previews", "playlists"})
+@tool(annotations=READ_ONLY, tags={"review"})
 def get_playlist(playlist_id: str) -> PlaylistDetail:
     """A playlist with its entities and the preview file shown for each."""
     playlist_id = object_id(playlist_id, "playlist", "list_playlists")

@@ -8,36 +8,63 @@ from kitsu_mcp.formatters import comment, task_detail
 from kitsu_mcp.lookups import get_lookups
 from kitsu_mcp.models import (
     AssigneeGroup,
-    MyTask,
     StatusChange,
     TaskBrief,
     TaskDetail,
-    TaskHistory,
     TaskList,
     TaskRow,
 )
-from kitsu_mcp.production import EntityKind, TaskRecord, assigned_tasks, day, project_tasks
+from kitsu_mcp.production import EntityKind, TaskRecord, day, project_tasks
+from kitsu_mcp.tools.previews import task_previews
 from kitsu_mcp.validation import MAX_LIMIT, Detail, Limit, Offset, iso_date, object_id
 
 SortKey = Literal["due_date", "entity", "task_type", "status", "last_comment_date"]
 
 
-@tool(annotations=READ_ONLY, tags={"tasks"})
+@tool(annotations=READ_ONLY, tags={"core"})
 def get_task(
-    task_id: str, include_comments: bool = True, comment_limit: Annotated[int, Field(ge=1, le=200)] = 20
+    task_id: str,
+    include_comments: bool = True,
+    comment_limit: Annotated[int, Field(ge=1, le=200)] = 20,
+    include_history: bool = False,
+    include_previews: bool = False,
 ) -> TaskDetail:
-    """Get a task with its entity, status, assignees and latest comments (newest first), with their
-    replies and who acknowledged them. Comment IDs are for reply_to_comment and acknowledge_comment."""
+    """Get a task with its entity, status, assignees, estimate vs. time logged and latest comments (newest
+    first), with their replies and who acknowledged them. Comment IDs are for add_comment(reply_to=...) and
+    acknowledge_comment.
+
+    include_history: `history`, every status change (oldest first, with who made it and their comment).
+    include_previews: `previews`, every file uploaded on the task, newest revision first (a revision can
+    hold several files; `position` 1 is its main one).
+    """
     task_id = object_id(task_id, "task", "search_tasks")
     client = get_client()
-    result = task_detail(client.get(f"data/tasks/{task_id}/full"))
+    raw = client.get(f"data/tasks/{task_id}/full")
+    result = task_detail(raw)
+    raw_comments = client.get(f"data/tasks/{task_id}/comments") if include_comments or include_history else []
     if include_comments:
         lookups = get_lookups()
-        result.comments = [comment(c, lookups) for c in client.get(f"data/tasks/{task_id}/comments")[:comment_limit]]
+        result.comments = [comment(c, lookups) for c in raw_comments[:comment_limit]]
+    if include_history:
+        result.history = _status_changes(raw_comments)
+    if include_previews:
+        result.previews = task_previews(task_id, raw)
     return result
 
 
-@tool(annotations=READ_ONLY, tags={"tasks"})
+def _status_changes(raw_comments: list[dict]) -> list[StatusChange]:
+    """Status changes from a task's comments (Kitsu records each one as a comment), oldest first."""
+    changes, previous = [], None
+    for c in map(comment, reversed(raw_comments)):
+        if c.status != previous:
+            changes.append(
+                StatusChange(date=c.date, author=c.author, status=c.status, previous_status=previous, text=c.text)
+            )
+            previous = c.status
+    return changes
+
+
+@tool(annotations=READ_ONLY, tags={"core"})
 def search_tasks(
     project: str,
     task_types: list[str] | None = None,
@@ -147,47 +174,3 @@ def _by_assignee(pairs: list[tuple[TaskRow, bool]], per_group: int) -> list[Assi
         ),
         key=lambda g: (-g.count, g.assignee),
     )
-
-
-@tool(annotations=READ_ONLY, tags={"tasks"})
-def task_history(task_id: str) -> TaskHistory:
-    """Status changes of a task over time (from its comments), plus time logged vs. estimate."""
-    task_id = object_id(task_id, "task", "search_tasks")
-    client = get_client()
-    task = task_detail(client.get(f"data/tasks/{task_id}/full"))
-    comments = [comment(c) for c in reversed(client.get(f"data/tasks/{task_id}/comments"))]
-    changes, previous = [], None
-    for c in comments:
-        if c.status != previous:
-            changes.append(
-                StatusChange(date=c.date, author=c.author, status=c.status, previous_status=previous, text=c.text)
-            )
-            previous = c.status
-    return TaskHistory(
-        id=task.id,
-        entity=task.entity,
-        task_type=task.task_type,
-        current_status=task.status,
-        time_logged=task.duration,
-        estimation=task.estimation,
-        retake_count=task.retake_count,
-        changes=changes,
-    )
-
-
-@tool(annotations=READ_ONLY, tags={"tasks"})
-def my_tasks() -> list[MyTask]:
-    """List open tasks assigned to the logged-in user (open per the status roles, like workload)."""
-    client = get_client()
-    return [
-        MyTask(
-            id=t["id"],
-            project=t.get("project_name"),
-            entity=t.get("entity_name"),
-            entity_type=t.get("entity_type_name"),
-            task_type=t.get("task_type_name"),
-            status=t.get("task_status_short_name"),
-            due_date=day(t.get("due_date")),
-        )
-        for t in assigned_tasks(client, get_lookups(), client.user_id(), done=False)
-    ]
