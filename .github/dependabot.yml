@@ -7,8 +7,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # A release must be a week old before it is proposed: time for a compromised one to be caught and pulled.
+    cooldown:
+      default-days: 7
+    # Minor and patch bumps together; each major bump gets its own PR, to read its breaking changes.
     groups:
       actions:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
     commit-message:
       prefix: CI
