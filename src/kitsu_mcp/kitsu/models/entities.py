@@ -75,6 +75,28 @@ class ShotDetail(ShotSummary):
     url: str | None = Field(None, description="Kitsu web page; open it to watch movies and read comments")
 
 
+class EntitySummary(BaseModel):
+    """A concept, edit, scene, sequence or episode in a list (list_entities)."""
+
+    id: str
+    name: str
+    kind: str
+    description: str | None = None
+    statuses: dict[str, str | None] = Field(default_factory=dict, description="task type -> status")
+
+
+class EntityDetail(BaseModel):
+    """A concept, edit, scene, sequence or episode (get_entity)."""
+
+    id: str
+    name: str
+    kind: str
+    project_id: str | None
+    description: str | None = None
+    custom_fields: dict[str, Any] = Field(default_factory=dict, description="Values Kitsu keeps in the entity's data")
+    tasks: list[TaskSummary] = Field(default_factory=list)
+
+
 class CastAsset(BaseModel):
     asset_id: str
     name: str | None
@@ -89,6 +111,14 @@ class CastIn(BaseModel):
     sequence: str | None
     episode: str | None
     occurrences: int | None
+
+
+class ShotCasting(BaseModel):
+    """One shot of a sequence and the assets cast in it (get_casting with sequence_id)."""
+
+    shot_id: str
+    shot: str | None
+    assets: list[CastAsset]
 
 
 class CustomField(BaseModel):

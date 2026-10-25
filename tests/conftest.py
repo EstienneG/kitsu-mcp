@@ -108,3 +108,18 @@ async def server(monkeypatch):
     client_module._user_clients.clear()
     lookups_module._user_lookups.clear()
     config.get_settings.cache_clear()
+
+
+@pytest.fixture
+def writable():
+    """Write tools registered, as with KITSU_ALLOW_WRITE=true."""
+    from kitsu_mcp.server import mcp
+
+    mcp.enable(tags={"write"})
+    yield
+    mcp.disable(tags={"write"})
+
+
+def writes(fake):
+    """The requests a test sent that are not reads."""
+    return [(method, path, data) for method, path, data in fake.calls if method != "GET"]

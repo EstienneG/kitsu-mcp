@@ -14,6 +14,16 @@ class WriteResult(BaseModel):
     task: TaskDetail | None = None
 
 
+class EntityWriteResult(BaseModel):
+    """What a structure, breakdown, publish or admin write did."""
+
+    ok: bool
+    message: str
+    id: str | None = Field(default=None, description="ID of the record created or changed (None after a delete)")
+    entity: dict[str, Any] | None = Field(default=None, description="The record as Kitsu now has it (key fields)")
+    url: str | None = Field(default=None, description="Kitsu web page, when there is one")
+
+
 class PlaylistEntry(BaseModel):
     entity_id: str
     entity: str | None
@@ -37,9 +47,12 @@ class PlaylistWriteResult(BaseModel):
 
 
 class PlannedRequest(BaseModel):
-    method: str = Field(description="POST or PUT")
+    method: str = Field(
+        description="POST, PUT, DELETE, UPLOAD (a local file sent as multipart), or GET for a Zou action "
+        "with a side effect (an invitation email)"
+    )
     path: str = Field(description="Zou API route")
-    payload: dict[str, Any]
+    payload: dict[str, Any] | list[Any] = Field(description="JSON body; a bare array for Zou's bulk routes")
 
 
 class DryRunResult(BaseModel):

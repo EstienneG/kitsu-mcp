@@ -14,6 +14,7 @@ from kitsu_mcp.server.app import tool
 from kitsu_mcp.tools.write.common import (
     ADDITIVE,
     WRITE,
+    assignees_of,
     fetch_task_full,
     send_or_preview,
     task_label,
@@ -60,6 +61,10 @@ def log_time(
     plan.after = {"task_total": total + minutes, "person_day": that_day + minutes}
     if person_id != user["id"]:
         warn_unless_lead(plan, "log time for someone else", user)
+    if person_id not in assignees_of(task):  # Zou refuses this for every role, admins included
+        plan.fail(
+            f"Kitsu only takes time logged by someone assigned to the task, and {name} is not (assign_task first)."
+        )
     if that_day + minutes > 24 * 60:
         plan.fail(f"{name} would have {that_day + minutes:g} min logged on this task on {when}, over 24 h.")
     if when > date.today().isoformat():

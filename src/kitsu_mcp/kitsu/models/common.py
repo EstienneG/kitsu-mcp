@@ -103,4 +103,5 @@ class ProjectOverview(BaseModel):
     unassigned_open: int
     estimation: float = Field(description="Minutes estimated over all tasks")
     logged: float = Field(description="Minutes logged over all tasks")
-    by_task_type: list[TaskTypeProgress]
+    by_task_type: list[TaskTypeProgress] = Field(description="Progress per group (see grouped_by)")
+    grouped_by: str = Field(default="task_type", description="task_type, sequence, episode or asset_type")

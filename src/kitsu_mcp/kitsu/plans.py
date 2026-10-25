@@ -3,9 +3,15 @@
 Every write tool builds a `Plan` first (resolve names, read the current state, run the checks). With
 dry_run=True the tool returns `plan.preview()` and nothing is sent; otherwise it calls `plan.send()`, which
 sends exactly the planned requests. One code path builds both, so a preview never differs from the real call.
+
+A request's path can use what an earlier one returned: `{0.id}` is the `id` of the first answer (`{1.id}` of the
+second, ...). Publishing needs it: the preview is attached to the comment created first. The dry run shows the
+placeholders as they are; `send` fills them in. Only paths are filled, never payloads, so text a user wrote
+(a comment that happens to contain "{0.id}") is sent exactly as the dry run showed it.
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
@@ -45,8 +51,16 @@ class Plan:
     failure: str | None = None
     """A failed check: the dry run reports would_fail, the real call refuses with this reason."""
 
-    def request(self, method: Literal["POST", "PUT"], path: str, payload: dict[str, Any]) -> None:
-        self.requests.append(PlannedRequest(method=method, path=path, payload=payload))
+    def request(
+        self,
+        method: Literal["POST", "PUT", "DELETE", "UPLOAD", "GET"],
+        path: str,
+        payload: dict[str, Any] | list[Any] | None = None,
+    ) -> None:
+        """UPLOAD sends payload["file"] (a local path) as a multipart file, with the rest as form data. GET is
+        only for the few Zou actions that are GETs with a side effect (inviting someone sends an email)."""
+        # `payload or {}` would turn an empty list (uncast everything) into {}: only None means "no body".
+        self.requests.append(PlannedRequest(method=method, path=path, payload={} if payload is None else payload))
 
     def fail(self, reason: str) -> None:
         """Record a failed check; the first one is the reason given."""
@@ -74,14 +88,45 @@ class Plan:
         client = get_client()
         answers = []
         for done, req in enumerate(self.requests):
-            send = client.post if req.method == "POST" else client.put
             try:
-                answers.append(send(req.path, req.payload))
+                filled = PlannedRequest(method=req.method, path=_fill(req.path, answers), payload=req.payload)
+                answers.append(_send(client, filled))
             except Exception as error:
                 if not done:
                     raise
                 raise PartialSendError(done, len(self.requests), error) from error
         return answers
+
+
+_PLACEHOLDER = re.compile(r"\{(\d+)\.(\w+)\}")
+
+
+def _fill(path: str, answers: list[Any]) -> str:
+    """Replace `{n.field}` in a request path with that field of the n-th answer."""
+
+    def sub(m: re.Match) -> str:
+        index, key = int(m[1]), m[2]
+        if index >= len(answers) or not isinstance(answers[index], dict) or key not in answers[index]:
+            raise ToolError(f"Kitsu's answer to request {index + 1} has no '{key}' to continue with")
+        return str(answers[index][key])
+
+    return _PLACEHOLDER.sub(sub, path)
+
+
+def _send(client, req: PlannedRequest) -> Any:
+    if req.method == "POST":
+        return client.post(req.path, req.payload)
+    if req.method == "PUT":
+        return client.put(req.path, req.payload)
+    if req.method == "GET":
+        return client.get(req.path)
+    if req.method == "DELETE":
+        params = req.payload if isinstance(req.payload, dict) else None  # DELETE takes query params, a dict
+        return client.delete(req.path, params or None)
+    if not isinstance(req.payload, dict):
+        raise ToolError("An upload needs a dict payload with the file path under 'file'")
+    data = {k: v for k, v in req.payload.items() if k != "file"}
+    return client.upload(req.path, req.payload["file"], data or None)
 
 
 def current_user() -> dict:

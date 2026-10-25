@@ -4,6 +4,7 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.server import mcp
+from tests.conftest import writes
 from tests.fake_data import ALICE, BOB, ST_DONE, ST_WFA, TT_ANIM
 
 WRITE_TOOLS = {
@@ -15,18 +16,31 @@ WRITE_TOOLS = {
     "log_time",
     "create_playlist",
     "add_to_playlist",
+    "manage_project",
+    "manage_episode",
+    "manage_sequence",
+    "manage_shot",
+    "manage_asset",
+    "manage_concept",
+    "manage_edit",
+    "manage_task",
+    "task_action",
+    "publish_preview",
+    "batch_tasks",
+    "manage_comment",
+    "set_casting",
+    "manage_scene",
+    "manage_project_team",
+    "manage_project_settings",
+    "manage_custom_field",
+    "manage_schedule",
+    "manage_budget",
+    "manage_person",
+    "manage_day_off",
+    "manage_playlist",
+    "manage_my_notifications",
+    "manage_time",
 }
-
-
-@pytest.fixture
-def writable():
-    mcp.enable(tags={"write"})
-    yield
-    mcp.disable(tags={"write"})
-
-
-def writes(fake):
-    return [(method, path, data) for method, path, data in fake.calls if method != "GET"]
 
 
 async def test_write_tools_hidden_by_default():
@@ -153,6 +167,16 @@ async def test_log_time_defaults_to_me(call, fake, writable):
     assert writes(fake) == [
         ("POST", f"actions/tasks/t-hero-mod/time-spents/2026-10-14/persons/{ALICE}/add", {"duration": 90})
     ]
+
+
+async def test_log_time_refuses_someone_not_assigned(call, fake, writable):
+    """Zou refuses time logged by someone not assigned to the task, whatever their role (checked on Zou 1.0.97):
+    the dry run says so instead of the call failing with a bare permission error."""
+    plan = await call("log_time", task_id="t-sh020-anim", minutes=60, day="2026-10-14", dry_run=True)
+    assert plan["verdict"] == "would_fail" and "assigned" in plan["reason"]
+    with pytest.raises(ToolError, match="assign_task first"):
+        await call("log_time", task_id="t-sh020-anim", minutes=60, day="2026-10-14")
+    assert writes(fake) == []
 
 
 async def test_log_time_bounds(call, fake, writable):
@@ -585,6 +609,10 @@ async def test_every_write_tool_has_dry_run(writable, all_groups):
     for name, t in tagged.items():
         assert t.parameters["properties"]["dry_run"]["default"] is False, name
         assert "dry_run=True" in (t.description or ""), name
+        actions = t.parameters["properties"].get("action", {}).get("enum", [])
+        if "delete" in actions:  # deleting needs an explicit confirmation, documented
+            assert t.parameters["properties"]["confirm"]["default"] is False, name
+            assert "confirm=True" in (t.description or ""), name
 
 
 async def test_create_playlist_dry_run_writes_nothing_and_plans_the_real_call(call, fake, writable):

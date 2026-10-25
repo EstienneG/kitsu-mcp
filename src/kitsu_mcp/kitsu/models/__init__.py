@@ -33,7 +33,10 @@ from kitsu_mcp.kitsu.models.entities import (
     CastAsset,
     CastIn,
     CustomField,
+    EntityDetail,
+    EntitySummary,
     Sequence,
+    ShotCasting,
     ShotDetail,
     ShotList,
     ShotSummary,
@@ -67,6 +70,7 @@ from kitsu_mcp.kitsu.models.tasks import (
 )
 from kitsu_mcp.kitsu.models.write import (
     DryRunResult,
+    EntityWriteResult,
     PlannedRequest,
     PlaylistEntry,
     PlaylistWriteResult,
@@ -75,6 +79,7 @@ from kitsu_mcp.kitsu.models.write import (
 )
 
 __all__ = [
+    "EntityWriteResult",
     "Activity",
     "ActivityItem",
     "AssetDetail",
@@ -87,6 +92,8 @@ __all__ = [
     "CastIn",
     "Comment",
     "CustomField",
+    "EntityDetail",
+    "EntitySummary",
     "DayOff",
     "DownloadResult",
     "DryRunResult",
@@ -122,6 +129,7 @@ __all__ = [
     "SearchHit",
     "SearchResults",
     "Sequence",
+    "ShotCasting",
     "ServerInfo",
     "ShotDetail",
     "ShotList",
