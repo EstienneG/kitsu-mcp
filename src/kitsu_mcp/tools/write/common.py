@@ -4,10 +4,15 @@ Each tool builds a `Plan` (kitsu/plans.py) with reads only: the exact requests, 
 checks. dry_run=True returns it; otherwise the plan is sent, so a dry run always shows the real call.
 """
 
+from collections.abc import Callable
+from typing import Any
+
+from fastmcp.exceptions import ToolError
+
 from kitsu_mcp.kitsu.client import get_client
 from kitsu_mcp.kitsu.formatters import task_detail
 from kitsu_mcp.kitsu.lookups import get_lookups
-from kitsu_mcp.kitsu.models import DryRunResult, WriteResult
+from kitsu_mcp.kitsu.models import DryRunResult, EntityWriteResult, WriteResult
 from kitsu_mcp.kitsu.plans import ARTIST_ROLES, LEAD_ROLES, Plan, current_user
 from kitsu_mcp.kitsu.validation import object_id
 
@@ -18,10 +23,76 @@ ADDITIVE = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": F
 ADDITIVE_IDEMPOTENT = {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True}
 # Replaces existing values.
 OVERWRITE = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
+# Creates, changes or deletes records depending on `action`: clients should always ask first.
+MANAGE = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": False, "openWorldHint": True}
+
+# Fields worth echoing back after a write: enough to recognise the record and chain the next call.
+_KEY_FIELDS = (
+    "id",
+    "name",
+    "short_name",
+    "type",
+    "project_id",
+    "parent_id",
+    "entity_type_id",
+    "task_type_id",
+    "task_status_id",
+    "description",
+    "nb_frames",
+    "data",
+    "assignees",
+    "for_entity",
+    "archived",
+)
+
+
+def key_fields(record: dict | None) -> dict[str, Any] | None:
+    if not isinstance(record, dict):
+        return None
+    return {k: record[k] for k in _KEY_FIELDS if record.get(k) not in (None, "", [], {})}
+
+
+def require_confirm(action: str, confirm: bool, dry_run: bool, what: str) -> None:
+    """Deletes need confirm=True, so an agent cannot delete by picking the wrong action; a dry run never does."""
+    if action == "delete" and not confirm and not dry_run:
+        raise ToolError(
+            f"Deleting {what} cannot be undone from here: call again with dry_run=True to see what it removes, "
+            "then with confirm=True once the user agreed"
+        )
+
+
+def send_entity_write(
+    plan: Plan,
+    dry_run: bool,
+    reload: Callable[[list[Any]], dict | None] | None = None,
+    url: Callable[[dict], str | None] | None = None,
+) -> EntityWriteResult | DryRunResult:
+    """Preview the plan, or send it and report the record. `reload(answers)` returns the record as it is now
+    (default: the last answer); a failing reload must not make the write look failed."""
+    if dry_run:
+        return plan.preview()
+    answers = plan.send()
+    try:
+        record = reload(answers) if reload else (answers[-1] if answers else None)
+    except Exception as error:  # noqa: BLE001 - the write succeeded; only the read-back failed
+        return EntityWriteResult(ok=True, message=f"{plan.message} (Could not read it back: {error})")
+    fields = key_fields(record)
+    link = None
+    if record and url:
+        try:
+            link = url(record)
+        except Exception:  # noqa: BLE001 - a link is a bonus
+            link = None
+    return EntityWriteResult(ok=True, message=plan.message, id=(fields or {}).get("id"), entity=fields, url=link)
 
 
 def fetch_task_full(task_id: str) -> dict:
     return get_client().get(f"data/tasks/{task_id}/full")
+
+
+def assignees_of(task: dict) -> list[str]:
+    """IDs of a task's assignees, from a `data/tasks/<id>/full` record (its `persons`)."""
+    return [p["id"] for p in task.get("persons") or []] or list(task.get("assignees") or [])
 
 
 def task_label(task: dict) -> str:

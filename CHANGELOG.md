@@ -5,6 +5,34 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
+### Added
+- `structure` tools (writes): `manage_project`, `manage_episode`, `manage_sequence`, `manage_shot`,
+  `manage_asset`, `manage_concept`, `manage_edit` and `manage_task`, one tool per kind of record with an
+  `action` (create, update, delete; restore for shots; close and reopen for projects). Each has a dry run;
+  deletes also need `confirm=True`, and the dry run says whether Kitsu will cancel or delete.
+- `production` tools (writes): `task_action` (start, submit for review), `publish_preview` (a file as the next
+  revision, with a status; stdio only), `batch_tasks` (status, assign, unassign, priority or delete up to 100
+  tasks) and `manage_comment` (edit, delete, delete a reply).
+- Breakdown: `set_casting` (add, remove or replace the assets cast in a shot or episode; keeps labels, refuses
+  when it would drop canceled assets, and lists the shots an episode change uncasts) and `manage_scene`
+  (create, rename, link shots, instance assets); `get_casting` also answers for an episode or a whole sequence.
+- `admin` tools (writes): `manage_project_team`, `manage_project_settings` (task types, statuses, asset types
+  and status automations a production uses), `manage_custom_field`, `manage_schedule` (task type dates,
+  milestones) and `manage_budget` (budget versions and salary lines).
+- People and studio tools (writes): `manage_person` (accounts, departments, invitations), `manage_day_off`,
+  `manage_playlist` (rename, remove an entry, change an entry's preview, delete), `manage_my_notifications`
+  (mark read, subscribe to a task) and `manage_time` (set or delete a day's time).
+- Reads: `list_entities` / `get_entity` for concepts, edits, scenes, sequences and episodes;
+  `project_overview(group_by=...)` breaks progress down per sequence, episode or asset type.
+- Write tools are tested for real against throwaway Zou 1.0.43 and 1.0.97 containers in CI
+  (`KITSU_TEST_WRITES=1`, local hosts only).
+
+### Fixed
+- `list_people` showed every person's departments empty on a real Kitsu: Zou's people listing leaves them out
+  unless asked for relations.
+- `log_time` failed with a bare permission error for someone not assigned to the task (Zou refuses that for
+  every role); the dry run now says why, and suggests assigning first.
+
 ## 0.4.0 — 2026-10-25
 
 ### Added

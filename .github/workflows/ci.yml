@@ -44,6 +44,8 @@ jobs:
       - run: uv run pytest tests/integration -v
         env:
           KITSU_TEST_HOST: http://127.0.0.1:8090/api
+          # The container is thrown away after the job: the write tools are tested on it for real.
+          KITSU_TEST_WRITES: "1"
 
   docker:
     runs-on: ubuntu-latest

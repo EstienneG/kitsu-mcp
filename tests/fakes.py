@@ -29,6 +29,7 @@ class FakeClient:
 
     def _entity(self, entity_id: str) -> dict:
         entity = {**self._by_id("assets"), **self._by_id("shots"), **self._by_id("sequences")}.get(entity_id)
+        entity = entity or self._entity_any(entity_id)
         if entity is None:
             raise ToolError(f"Not found: data/entities/{entity_id}")
         return entity
@@ -140,10 +141,275 @@ class FakeClient:
             return playlist
         if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)/add", path):
             task = self._task_or_404(m[1], path)
+            if m[3] not in task["assignees"]:  # Zou: only time logged by an assignee, whatever the role
+                raise ToolError(f"Permission denied for POST {path}")
             task["duration"] = (task["duration"] or 0) + data["duration"]
             entry = {"task_id": task["id"], "person_id": m[3], "date": m[2], "duration": data["duration"]}
             self.data.setdefault("time_spents", []).append(entry)
             return entry
+        if created := self._create(path, data):
+            return created
+        raise ToolError(f"Not found: {path} (no fake route)")
+
+    # --- structure writes, as the dev Zou does them (checked on Zou 1.0.97) -----------------------------
+    def _new_id(self, prefix: str) -> str:
+        return f"{prefix}-new-{len(self.calls)}"
+
+    def _create(self, path: str, data: dict) -> dict | None:
+        d = self.data
+        if path == "data/projects":
+            project = {**data, "id": self._new_id("p"), "project_status_id": "ps-open"}
+            d["projects"].append(project)
+            if data.get("production_type") == "tvshow":  # Zou adds a first episode to every TV show
+                d["episodes"].append({"id": self._new_id("ep"), "name": "E01", "project_id": project["id"]})
+            return project
+        if m := re.fullmatch(r"data/projects/([^/]+)/(episodes|sequences|shots|concepts|edits)", path):
+            kind = m[2]
+            record = {"id": self._new_id(kind[:2]), "project_id": m[1], "canceled": False, "data": {}, **data}
+            if kind in ("sequences", "edits"):  # Zou reads episode_id; a parent_id sent is ignored
+                record["parent_id"] = data.get("episode_id")
+            if kind == "shots":
+                record["parent_id"] = data["sequence_id"]
+            d.setdefault(kind, []).append(record)
+            return record
+        if m := re.fullmatch(r"data/projects/([^/]+)/asset-types/([^/]+)/assets/new", path):
+            asset = {"id": self._new_id("a"), "project_id": m[1], "entity_type_id": m[2], "canceled": False, **data}
+            d["assets"].append(asset)
+            return asset
+        if path == "data/tasks":
+            task = {"id": self._new_id("t"), "duration": 0, "estimation": None, "due_date": None, **data}
+            d["tasks"].append(task)
+            return task
+        if m := re.fullmatch(r"actions/tasks/([^/]+)/comments/([^/]+)/add-preview", path):
+            task = self._task_or_404(m[1], path)
+            revision = (
+                max((p.get("revision") or 0 for p in d["preview_files"].values() if p["task_id"] == m[1]), default=0)
+                + 1
+            )
+            preview = {
+                "id": self._new_id("pf"),
+                "task_id": task["id"],
+                "revision": revision,
+                "status": "processing",
+                "extension": None,
+                "comment_id": m[2],
+            }
+            d["preview_files"][preview["id"]] = preview
+            comment = next(c for c in d["comments"].get(m[1], []) if c["id"] == m[2])
+            comment.setdefault("previews", []).append(preview)
+            return preview
+        if path == "data/persons":
+            person = {"id": self._new_id("person"), "full_name": f"{data['first_name']} {data['last_name']}", **data}
+            d["people"].append(person)
+            return person
+        if m := re.fullmatch(r"actions/persons/([^/]+)/departments/add", path):
+            person = self._by_id("people")[m[1]]
+            person.setdefault("departments", []).append(data["department_id"])
+            return person
+        if re.fullmatch(r"actions/persons/([^/]+)/invite", path):
+            raise ToolError(f"Kitsu error on POST {path}: MethodNotAllowedException")  # Zou routes it as a GET
+        if path == "data/day-offs":
+            day_off = {"id": self._new_id("do"), **data}
+            d.setdefault("day_offs", []).append(day_off)
+            return day_off
+        if path == "actions/user/notifications/mark-all-as-read":
+            for n in d.get("notifications", []):
+                n["read"] = True
+            return {"success": True}
+        if m := re.fullmatch(r"actions/user/tasks/([^/]+)/subscribe", path):
+            d.setdefault("subscriptions", set()).add(m[1])
+            return {"task_id": m[1]}
+        if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)", path):
+            task = self._task_or_404(m[1], path)
+            if m[3] not in task["assignees"]:  # Zou: only time logged by an assignee, whatever the role
+                raise ToolError(f"Permission denied for POST {path}")
+            entries = d.setdefault("time_spents", [])
+            entries[:] = [
+                e for e in entries if not (e["task_id"] == m[1] and e["person_id"] == m[3] and e["date"] == m[2])
+            ]
+            entries.append({"task_id": m[1], "person_id": m[3], "date": m[2], "duration": data["duration"]})
+            task["duration"] = sum(e["duration"] for e in entries if e["task_id"] == m[1])
+            return entries[-1]
+        if m := re.fullmatch(r"data/projects/([^/]+)/team", path):
+            project = self._by_id("projects")[m[1]]
+            project.setdefault("team", []).append(data["person_id"])
+            return project
+        if m := re.fullmatch(
+            r"data/projects/([^/]+)/settings/(task-types|task-status|asset-types|status-automations)", path
+        ):
+            field = {
+                "task-types": "task_types",
+                "task-status": "task_statuses",
+                "asset-types": "asset_types",
+                "status-automations": "status_automations",
+            }[m[2]]
+            project = self._by_id("projects")[m[1]]
+            project.setdefault(field, []).append(next(iter(v for k, v in data.items() if k.endswith("_id"))))
+            return project
+        if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors", path):
+            field = {"id": self._new_id("md"), "project_id": m[1], "field_name": data["name"].lower(), **data}
+            d["custom_fields"].append(field)
+            return field
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets", path):
+            budget = {"id": self._new_id("b"), "project_id": m[1], "revision": 1, **data}
+            d.setdefault("budgets", []).append(budget)
+            return budget
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)/entries", path):
+            if not data.get("department_id"):  # Zou's entry is a salary line: gazu's name/amount are refused
+                raise ToolError(f"Kitsu rejected POST {path}: Validation error. (department_id: Field required)")
+            entry = {"id": self._new_id("be"), "budget_id": m[2], "person_id": None, "exceptions": {}, **data}
+            d.setdefault("budget_entries", {}).setdefault(m[2], []).append(entry)
+            return entry
+        if path == "data/schedule-items":
+            item = {"id": self._new_id("si"), "object_id": None, "man_days": None, **data}
+            d.setdefault("schedule_items", []).append(item)
+            return item
+        if path == "data/milestones":
+            milestone = {"id": self._new_id("ms"), "task_type_id": None, **data}
+            d.setdefault("milestones", []).append(milestone)
+            return milestone
+        if m := re.fullmatch(r"data/projects/([^/]+)/scenes", path):
+            scene = {
+                "id": self._new_id("sc"),
+                "project_id": m[1],
+                "name": data["name"],
+                "parent_id": data["sequence_id"],
+            }
+            d.setdefault("scenes", []).append(scene)
+            return scene
+        if m := re.fullmatch(r"data/scenes/([^/]+)/shots", path):
+            d.setdefault("scene_shots", {}).setdefault(m[1], []).append(data["shot_id"])
+            return {"id": m[1]}
+        if m := re.fullmatch(r"data/scenes/([^/]+)/asset-instances", path):
+            inst = {"id": self._new_id("ai"), "scene_id": m[1], "asset_id": data["asset_id"]}
+            d.setdefault("asset_instances", []).append(inst)
+            return inst
+        if m := re.fullmatch(r"actions/projects/([^/]+)/delete-tasks", path):
+            assert isinstance(data, list), "Zou wants a bare JSON array of task IDs"
+            ids = [t for t in data if any(x["id"] == t and x["project_id"] == m[1] for x in d["tasks"])]
+            d["tasks"] = [t for t in d["tasks"] if t["id"] not in ids]
+            return ids
+        return None
+
+    def upload(self, path: str, file_path: str, data: dict | None = None) -> Any:
+        self.calls.append(("UPLOAD", path, {"file": file_path, **(data or {})}))
+        if m := re.fullmatch(r"pictures/preview-files/([^/]+)", path):
+            preview = self.data["preview_files"][m[1]]
+            preview.update(
+                status="ready", extension=Path(file_path).suffix.lstrip(".").lower(), original_name=Path(file_path).stem
+            )
+            return preview
+        raise ToolError(f"Not found: {path} (no fake route)")
+
+    def _entity_any(self, entity_id: str) -> dict | None:
+        for kind in ("projects", "assets", "shots", "sequences", "episodes", "concepts", "edits", "scenes"):
+            for record in self.data.get(kind, []):
+                if record["id"] == entity_id:
+                    return record
+        return None
+
+    def delete(self, path: str, params: dict | None = None) -> Any:
+        self.calls.append(("DELETE", path, params or {}))
+        force = bool((params or {}).get("force"))
+        d = self.data
+        if m := re.fullmatch(r"data/tasks/([^/]+)", path):
+            self._task_or_404(m[1], path)
+            d["tasks"] = [t for t in d["tasks"] if t["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"actions/persons/([^/]+)/departments/([^/]+)", path):
+            person = self._by_id("people")[m[1]]
+            person["departments"] = [x for x in person.get("departments") or [] if x != m[2]]
+            return ""
+        if m := re.fullmatch(r"data/day-offs/([^/]+)", path):
+            d["day_offs"] = [x for x in d.get("day_offs", []) if x["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/playlists/([^/]+)", path):
+            d["playlists"] = [x for x in d["playlists"] if x["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"actions/user/tasks/([^/]+)/unsubscribe", path):
+            d.setdefault("subscriptions", set()).discard(m[1])
+            return ""
+        if m := re.fullmatch(r"actions/tasks/([^/]+)/time-spents/([^/]+)/persons/([^/]+)", path):
+            entries = d.get("time_spents", [])
+            entries[:] = [
+                e for e in entries if not (e["task_id"] == m[1] and e["person_id"] == m[3] and e["date"] == m[2])
+            ]
+            task = self._task_or_404(m[1], path)
+            task["duration"] = sum(e["duration"] for e in entries if e["task_id"] == m[1])
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)/team/([^/]+)", path):
+            project = self._by_id("projects")[m[1]]
+            project["team"] = [p for p in project.get("team", []) if p != m[2]]
+            return ""
+        if m := re.fullmatch(
+            r"data/projects/([^/]+)/settings/(task-types|task-status|asset-types|status-automations)"
+            r"/([^/]+)",
+            path,
+        ):
+            field = {
+                "task-types": "task_types",
+                "task-status": "task_statuses",
+                "asset-types": "asset_types",
+                "status-automations": "status_automations",
+            }[m[2]]
+            project = self._by_id("projects")[m[1]]
+            project[field] = [x for x in project.get(field, []) if x != m[3]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors/([^/]+)", path):
+            d["custom_fields"] = [f for f in d["custom_fields"] if f["id"] != m[2]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)/entries/([^/]+)", path):
+            d["budget_entries"][m[2]] = [e for e in d["budget_entries"][m[2]] if e["id"] != m[3]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)", path):
+            d["budgets"] = [b for b in d["budgets"] if b["id"] != m[2]]
+            return ""
+        if m := re.fullmatch(r"data/milestones/([^/]+)", path):
+            d["milestones"] = [ms for ms in d["milestones"] if ms["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/scenes/([^/]+)/shots/([^/]+)", path):
+            d.setdefault("scene_shots", {})[m[1]] = [s for s in d["scene_shots"].get(m[1], []) if s != m[2]]
+            return ""
+        if m := re.fullmatch(r"data/asset-instances/([^/]+)", path):
+            d["asset_instances"] = [i for i in d.get("asset_instances", []) if i["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/comments/([^/]+)", path):
+            for task_id, comments in d["comments"].items():
+                if any(c["id"] == m[1] for c in comments):
+                    d["comments"][task_id] = [c for c in comments if c["id"] != m[1]]
+                    # Zou deletes the comment's previews with it
+                    d["preview_files"] = {k: v for k, v in d["preview_files"].items() if v.get("comment_id") != m[1]}
+                    return ""
+            raise NotFoundError(f"Not found: {path}")
+        if m := re.fullmatch(r"data/tasks/([^/]+)/comments/([^/]+)/reply/([^/]+)", path):
+            comment = next((c for c in d["comments"].get(m[1], []) if c["id"] == m[2]), None)
+            if comment is None:
+                raise NotFoundError(f"Not found: {path}")
+            comment["replies"] = [r for r in comment.get("replies") or [] if r.get("id") != m[3]]
+            return ""
+        if m := re.fullmatch(r"data/projects/([^/]+)", path):
+            project = self._by_id("projects").get(m[1])
+            if project is None:
+                raise NotFoundError(f"Not found: {path}")
+            if project["project_status_id"] != "ps-closed":
+                raise ToolError(f"Kitsu rejected DELETE {path}: Only closed projects can be deleted")
+            scenes = {sc["id"] for sc in d.get("scenes", []) if sc["project_id"] == m[1]}
+            if any(i["scene_id"] in scenes for i in d.get("asset_instances", [])):  # Zou's force delete bug
+                raise ToolError(f"Kitsu error on DELETE {path}: ServerErrorException")
+            d["projects"] = [p for p in d["projects"] if p["id"] != m[1]]
+            return ""
+        if m := re.fullmatch(r"data/(assets|shots|concepts|edits|sequences|episodes)/([^/]+)", path):
+            kind, record_id = m[1], m[2]
+            if not any(r["id"] == record_id for r in d.get(kind, [])):
+                raise NotFoundError(f"Not found: {path}")
+            if kind in ("assets", "shots", "concepts", "edits"):
+                has_tasks = any(t["entity_id"] == record_id for t in d["tasks"])
+                if has_tasks and not force:  # Zou cancels instead of deleting
+                    next(r for r in d[kind] if r["id"] == record_id)["canceled"] = True
+                    return ""
+                d["tasks"] = [t for t in d["tasks"] if t["entity_id"] != record_id]
+            d[kind] = [r for r in d[kind] if r["id"] != record_id]
+            return ""
         raise ToolError(f"Not found: {path} (no fake route)")
 
     def put(self, path: str, data: dict) -> Any:
@@ -158,6 +424,88 @@ class FakeClient:
             task = self._task_or_404(m[1], path)
             task.update(data)
             return task
+        if m := re.fullmatch(r"data/persons/([^/]+)", path):
+            person = self._by_id("people")[m[1]]
+            person.update(data)  # person updates keep what they leave out
+            return person
+        if m := re.fullmatch(r"data/day-offs/([^/]+)", path):
+            day_off = next(x for x in self.data["day_offs"] if x["id"] == m[1])
+            day_off.update(data)
+            return day_off
+        if m := re.fullmatch(r"data/playlists/([^/]+)", path):
+            playlist = self._by_id("playlists")[m[1]]
+            playlist.update(data)  # `shots` replaces the whole entry list
+            return playlist
+        if m := re.fullmatch(r"data/projects/([^/]+)/metadata-descriptors/([^/]+)", path):
+            field = next(f for f in self.data["custom_fields"] if f["id"] == m[2])
+            # Zou resets what an update leaves out: no data_type -> "string", no choices -> []
+            field.update(
+                name=data.get("name", field["name"]),
+                data_type=data.get("data_type", "string"),
+                choices=data.get("choices", []),
+                for_client=data.get("for_client", False),
+                departments=data.get("departments", []),
+            )
+            return field
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)/entries/([^/]+)", path):
+            entry = next(e for e in self.data["budget_entries"][m[2]] if e["id"] == m[3])
+            required = ("department_id", "start_date", "months_duration", "daily_salary")
+            if any(data.get(k) is None for k in required):  # Zou writes None into what is left out, then refuses
+                raise ToolError(f"Kitsu error on PUT {path}: ServerErrorException")
+            entry.update({**data, "exceptions": data.get("exceptions") or {}})
+            return entry
+        if m := re.fullmatch(r"data/projects/([^/]+)/budgets/([^/]+)", path):
+            budget = next(b for b in self.data["budgets"] if b["id"] == m[2])
+            budget.update(data)
+            return budget
+        if m := re.fullmatch(r"data/schedule-items/([^/]+)", path):
+            item = next(i for i in self.data["schedule_items"] if i["id"] == m[1])
+            item.update(data)
+            return item
+        if m := re.fullmatch(r"data/projects/([^/]+)/entities/([^/]+)/casting", path):
+            assert isinstance(data, list), "Zou takes the whole casting as a list"
+            names = {a["id"]: a for a in self.data["assets"]}
+            previous = {c["asset_id"] for c in self.data["casting"].get(m[2], [])}
+            if any(e["id"] == m[2] for e in self.data.get("episodes", [])):
+                # Zou uncasts what leaves an episode's casting from the episode's shots too
+                gone = previous - {c["asset_id"] for c in data}
+                sequences = {q["id"] for q in self.data["sequences"] if q.get("parent_id") == m[2]}
+                for shot in self.data["shots"]:
+                    if shot.get("parent_id") in sequences and shot["id"] in self.data["casting"]:
+                        self.data["casting"][shot["id"]] = [
+                            c for c in self.data["casting"][shot["id"]] if c["asset_id"] not in gone
+                        ]
+            self.data["casting"][m[2]] = [  # Zou rebuilds the whole casting: links not sent are gone
+                {
+                    "asset_id": c["asset_id"],
+                    "asset_name": names.get(c["asset_id"], {}).get("name"),
+                    "asset_type_name": "Character",
+                    "nb_occurences": c["nb_occurences"],
+                    "label": c.get("label", ""),  # Zou: a label not sent comes back empty
+                }
+                for c in data
+            ]
+            return self.data["casting"][m[2]]
+        if m := re.fullmatch(r"data/comments/([^/]+)", path):
+            for comments in self.data["comments"].values():
+                for comment in comments:
+                    if comment["id"] == m[1]:
+                        comment.update(data)
+                        return comment
+            raise NotFoundError(f"Not found: {path}")
+        if m := re.fullmatch(r"actions/preview-files/([^/]+)/set-main-preview", path):
+            preview = self.data["preview_files"][m[1]]
+            task = self._task_or_404(preview["task_id"], path)
+            self._entity(task["entity_id"])["preview_file_id"] = preview["id"]
+            return preview
+        if m := re.fullmatch(r"data/(entities|projects|shots)/([^/]+)", path):
+            record = self._entity_any(m[2])
+            if record is None:
+                raise NotFoundError(f"Not found: {path}")
+            if "data" in data:  # Zou merges custom fields
+                record["data"] = {**(record.get("data") or {}), **data["data"]}
+            record.update({k: v for k, v in data.items() if k != "data"})
+            return record
         if path == "actions/tasks/clear-assignation":
             # Zou answers with the tasks it changed, silently skipping those the caller may not unassign.
             changed = []
@@ -254,7 +602,10 @@ class FakeClient:
         simple = {
             "data/task-types": d["task_types"],
             "data/task-status": d["statuses"],
-            "data/persons": d["people"],
+            # Zou leaves departments out of the people listing unless asked for relations
+            "data/persons": d["people"]
+            if params.get("relations") == "true"
+            else [{k: v for k, v in p.items() if k != "departments"} for p in d["people"]],
             "data/projects": d["projects"],
             "data/projects/open": [p for p in d["projects"] if p["project_status_id"] == "ps-open"],
             "data/project-status": [{"id": "ps-open", "name": "Open"}, {"id": "ps-closed", "name": "Closed"}],
@@ -263,6 +614,9 @@ class FakeClient:
         }
         if path in simple:
             return simple[path]
+        if m := re.fullmatch(r"actions/persons/([^/]+)/invite", path):  # a GET that sends an email
+            d.setdefault("invited", []).append(m[1])
+            return {"success": True}
         if path == "auth/authenticated":
             return {"user": self._by_id("people")[d["me"]]}
         if path == "data/assets/with-tasks":
@@ -310,6 +664,20 @@ class FakeClient:
             return d["people"]
         if m := re.fullmatch(r"data/projects/([^/]+)/entities/([^/]+)/casting", path):
             return d["casting"].get(m[2], [])
+        if m := re.fullmatch(r"data/projects/([^/]+)/sequences/([^/]+)/casting", path):
+            shots = [s["id"] for s in d["shots"] if s.get("parent_id") == m[2]]
+            return {sid: d["casting"][sid] for sid in shots if d["casting"].get(sid)}
+        if m := re.fullmatch(r"data/projects/([^/]+)/scenes", path):
+            return [sc for sc in d.get("scenes", []) if sc["project_id"] == m[1]]
+        if m := re.fullmatch(r"data/scenes/([^/]+)/shots", path):
+            ids = d.get("scene_shots", {}).get(m[1], [])
+            return [s for s in d["shots"] if s["id"] in ids]
+        if m := re.fullmatch(r"data/scenes/([^/]+)/asset-instances", path):
+            by_asset: dict = {}  # Zou answers {asset id: [instances]}
+            for inst in d.get("asset_instances", []):
+                if inst["scene_id"] == m[1]:
+                    by_asset.setdefault(inst["asset_id"], []).append(inst)
+            return by_asset
         if m := re.fullmatch(r"data/assets/([^/]+)/cast-in", path):
             return [
                 {
@@ -325,6 +693,12 @@ class FakeClient:
             ]
         if m := re.fullmatch(r"data/(assets|shots|entities)/([^/]+)", path):
             return self._entity(m[2])
+        if m := re.fullmatch(r"data/(sequences|episodes|concepts|edits)/([^/]+)", path):
+            if (record := self._entity_any(m[2])) is None:
+                raise NotFoundError(f"Not found: {path}")
+            return record
+        if m := re.fullmatch(r"data/(concepts|edits)/([^/]+)/tasks", path):
+            return self._tasks_for(m[2])
         if m := re.fullmatch(r"data/(assets|shots|entities)/([^/]+)/tasks", path):
             return self._tasks_for(m[2])
         if m := re.fullmatch(r"data/tasks/([^/]+)/full", path):
@@ -351,11 +725,11 @@ class FakeClient:
         if path == "data/schedule-items/":
             raise ToolError(f"Permission denied for GET {path}")  # Zou: admins only; tools must not need it
         if m := re.fullmatch(r"data/projects/([^/]+)/schedule-items", path):
-            return d.get("schedule_items", []) if m[1] == PROJECT else []
+            return [i for i in d.get("schedule_items", []) if i.get("project_id", PROJECT) == m[1]]
         if re.fullmatch(r"data/projects/([^/]+)/schedule-items/task-types", path):
             raise AssertionError("schedule-items/task-types creates missing items in Zou: never read it")
         if m := re.fullmatch(r"data/projects/([^/]+)/milestones", path):
-            return d.get("milestones", []) if m[1] == PROJECT else []
+            return [ms for ms in d.get("milestones", []) if ms.get("project_id", PROJECT) == m[1]]
         if m := re.fullmatch(r"data/projects/([^/]+)/quotas/([^/]+)", path):
             if params.get("count_mode") not in ("weighted", "weighteddone", "feedback", "done"):
                 raise ToolError("count_mode must be equal to weighted, weigtheddone, feedback, or done")

@@ -10,6 +10,12 @@ GROUPS: dict[str, str] = {
     "activity": "what changed lately on a project; the user's notifications",
     "planning": "workload, timesheets with days off, quotas, schedule and milestones, budget",
     "review": "preview images, playlists, frame-level review of movies",
+    "structure": "create, update, delete projects, episodes, sequences, shots, assets, concepts, edits, tasks "
+    "(if the server allows writes)",
+    "production": "start tasks, submit for review, publish previews, act on many tasks at once, edit or delete "
+    "comments (if the server allows writes)",
+    "admin": "production settings: team, task types and statuses used, custom fields, schedule and milestones, "
+    "budgets (if the server allows writes)",
     "write": "comments, status changes, assignments, schedules, time logs, playlists (if the server allows)",
 }
 """Tool groups load_tools adds, and what each holds: the one description the server instructions, load_tools

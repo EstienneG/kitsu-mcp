@@ -146,6 +146,13 @@ class KitsuClient:
     def put(self, path: str, data: dict) -> Any:
         return self._call("PUT", path, raw.put, path, data, retry=False)
 
+    def delete(self, path: str, params: dict | None = None) -> Any:
+        return self._call("DELETE", path, raw.delete, path, params, retry=False)
+
+    def upload(self, path: str, file_path: str, data: dict | None = None) -> Any:
+        """Send a local file (multipart), e.g. a preview; never retried, as the upload may have landed."""
+        return self._call("UPLOAD", path, raw.upload, path, file_path, data=data, retry=False)
+
     def user_id(self) -> str:
         return self.get("auth/authenticated")["user"]["id"]
 

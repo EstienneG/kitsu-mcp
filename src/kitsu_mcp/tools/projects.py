@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+from typing import Literal
 
 from fastmcp.exceptions import ToolError
 
@@ -110,6 +111,7 @@ def project_overview(
     task_types: list[str] | None = None,
     exclude_task_types: list[str] | None = None,
     departments: list[str] | None = None,
+    group_by: Literal["task_type", "sequence", "episode", "asset_type"] = "task_type",
 ) -> ProjectOverview:
     """Where a production stands: entity and task counts, completion per task type, overdue tasks,
     tasks waiting for review, retakes, on hold, unassigned work and time logged vs. estimated.
@@ -121,7 +123,9 @@ def project_overview(
     task_types / exclude_task_types (names or short names) limit the task counts and ratios, e.g.
     exclude_task_types=["Animatic"] to leave admin or pre-production work out of progress. departments
     (names or IDs) keeps tasks whose task type belongs to one of them, as in search_tasks and workload.
-    Entity counts (assets, shots) are unaffected by these filters."""
+    Entity counts (assets, shots) are unaffected by these filters. group_by: break progress down per task type
+    (default), sequence, episode (shot tasks) or asset type (asset tasks) instead; `grouped_by` says which,
+    and the groups are in `by_task_type`."""
     client = get_client()
     lookups = get_lookups()
     info = client.get(f"data/projects/{lookups.project(project)['id']}")
@@ -150,9 +154,23 @@ def project_overview(
     # Done by role but not by Kitsu's own flag: finished, could still be improved (e.g. a "could be better").
     kitsu_done = {i for i, s in lookups.index("task_statuses").items() if s.get("is_done")}
     improvable = [r for r in done_records if status_of(r) not in kitsu_done]
+
+    def key(r: TaskRecord) -> str | None:
+        if group_by == "task_type":
+            return lookups.name("task_types", r.raw.get("task_type_id")) or "?"
+        if group_by == "asset_type":
+            return r.group if r.entity_kind == "asset" else None
+        if r.entity_kind != "shot":
+            return None
+        parts = (r.group or "").split("/")  # "episode/sequence", or "sequence" outside TV shows
+        if group_by == "sequence":
+            return parts[-1] or "?"
+        return parts[0] if len(parts) == 2 else "(no episode)"
+
     by_type: dict[str, list[TaskRecord]] = defaultdict(list)
     for r in records:
-        by_type[lookups.name("task_types", r.raw.get("task_type_id")) or "?"].append(r)
+        if (name := key(r)) is not None:
+            by_type[name].append(r)
 
     progress = []
     for task_type, group in sorted(by_type.items()):
@@ -193,4 +211,5 @@ def project_overview(
         estimation=sum(r.raw.get("estimation") or 0 for r in records),
         logged=sum(r.raw.get("duration") or 0 for r in records),
         by_task_type=progress,
+        grouped_by=group_by,
     )

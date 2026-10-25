@@ -39,6 +39,9 @@ _SOURCES = {
     "departments": "data/departments",
 }
 
+# Zou's people listing leaves departments out unless asked for their relations (checked on 1.0.43 and 1.0.97).
+_PARAMS = {"people": {"relations": "true"}}
+
 _LABELS = {
     "projects": "project",
     "project_statuses": "project status",
@@ -70,7 +73,7 @@ class Lookups:
 
     def index(self, kind: str) -> dict[str, Record]:
         """All records of a kind, keyed by ID."""
-        return self.cached(kind, lambda: {r["id"]: r for r in self.client.get(_SOURCES[kind])})
+        return self.cached(kind, lambda: {r["id"]: r for r in self.client.get(_SOURCES[kind], _PARAMS.get(kind))})
 
     def custom_fields(self, project_id: str) -> list[Record]:
         """A project's custom field definitions (Kitsu "metadata descriptors"), all entity types."""
@@ -153,6 +156,24 @@ class Lookups:
 
     def task_type(self, ref: str) -> Record:
         return self.resolve("task_types", ref, ("name", "short_name"))
+
+    def task_type_for(self, ref: str, for_entity: str) -> Record:
+        """A task type by name, short name or ID, for a kind of entity (Asset, Shot, Concept, Edit, ...). Names
+        repeat across kinds (Kitsu ships a "Concept" for assets and one for concepts): the kind decides."""
+        try:
+            return self.task_type(ref)
+        except ToolError:
+            wanted = ref.strip().lower()
+            matches = [
+                t
+                for t in self.index("task_types").values()
+                if wanted in (str(t.get("name")).lower(), str(t.get("short_name")).lower())
+                and str(t.get("for_entity")).lower() == for_entity.lower()
+                and not t.get("archived")
+            ]
+            if len(matches) == 1:
+                return matches[0]
+            raise
 
     def task_status(self, ref: str) -> Record:
         return self.resolve("task_statuses", ref, ("short_name", "name"))

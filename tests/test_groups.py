@@ -136,7 +136,7 @@ def test_http_callers_are_keyed_by_session_then_full_login(monkeypatch):
 
 # The core list is what every conversation pays for before any call. Raise this deliberately, with the
 # README's "Context cost" paragraph, when a tool earns a place in core rather than in a group.
-CORE_BUDGET_CHARS = 11_000  # 10.2k as of 12 core tools
+CORE_BUDGET_CHARS = 11_500  # 10.9k as of 12 core tools (load_tools lists 8 groups)
 SEP = (",", ":")
 
 
