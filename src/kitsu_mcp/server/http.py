@@ -1,6 +1,6 @@
 """HTTP transport: the server hosted for web agents (custom MCP connectors).
 
-Every caller logs in to Kitsu with their own credentials (see kitsu_mcp.auth). Tools that only make sense on
+Every caller logs in to Kitsu with their own credentials (see kitsu_mcp.kitsu.auth). Tools that only make sense on
 the caller's machine (writing files to a folder) are hidden over HTTP. That is enforced per request, so it
 also holds when a platform imports `kitsu_mcp.server:mcp` directly instead of running `kitsu-mcp --http`.
 Write tools follow KITSU_ALLOW_WRITE in both modes.

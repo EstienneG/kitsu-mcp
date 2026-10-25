@@ -34,7 +34,7 @@ def _preview_bytes(preview_file_id: str, size: Size) -> bytes:
     return get_client().get_bytes(f"pictures/{kind}/preview-files/{preview_file_id}.png")
 
 
-def _safe_filename(name: str) -> str:
+def safe_filename(name: str) -> str:
     return re.sub(r"[^\w.-]+", "_", name).strip("_") or "unnamed"
 
 
@@ -218,7 +218,7 @@ def download_previews(
         if not preview_file_id:
             skips["no_preview"] += 1
             continue
-        path = dest / f"{_safe_filename(entity['name'])}_{_safe_filename(entity['id'])}.png"
+        path = dest / f"{safe_filename(entity['name'])}_{safe_filename(entity['id'])}.png"
         if path.exists() and not overwrite:
             skips["already_downloaded"] += 1
             continue
