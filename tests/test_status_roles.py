@@ -2,7 +2,7 @@
 
 import pytest
 
-from kitsu_mcp.lookups import Lookups
+from kitsu_mcp.kitsu.lookups import Lookups
 from tests.fakes import FakeClient
 
 STATUSES = [

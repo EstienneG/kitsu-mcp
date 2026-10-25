@@ -2,14 +2,14 @@ import re
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp import custom_fields as cf
-from kitsu_mcp import links
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import task_summary
-from kitsu_mcp.lookups import Lookups, check_names, get_lookups
-from kitsu_mcp.models import AssetDetail, AssetList, AssetSummary
-from kitsu_mcp.validation import Detail, Limit, Offset, object_id
+from kitsu_mcp.kitsu import custom_fields as cf
+from kitsu_mcp.kitsu import links
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import task_summary
+from kitsu_mcp.kitsu.lookups import Lookups, check_names, get_lookups
+from kitsu_mcp.kitsu.models import AssetDetail, AssetList, AssetSummary
+from kitsu_mcp.kitsu.validation import Detail, Limit, Offset, object_id
+from kitsu_mcp.server.app import READ_ONLY, tool
 
 
 def statuses(tasks: list) -> dict[str, str | None]:

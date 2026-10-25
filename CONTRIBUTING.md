@@ -23,13 +23,16 @@ locally with Docker). Add to them when a change depends on what Zou returns.
 
 ## Guidelines
 
-- **Read-only by default.** New write tools go in `tools/write.py`, are only registered with
+- **Read-only by default.** New write tools go in `tools/write/`, are only registered with
   `KITSU_ALLOW_WRITE=true`, and take `dry_run=True` that returns the plan without writing.
-- **Names, not just IDs.** Tool arguments accept names (case-insensitive) or IDs; resolve them with `lookups.py`.
+- **Names, not just IDs.** Tool arguments accept names (case-insensitive) or IDs; resolve them with `kitsu/lookups.py`.
 - **Small outputs.** Agents pay for every token: list tools return compact rows by default (`detail="full"` for
   more) with `total`, `limit` and `offset`.
 - **Status roles.** Counts and filters use each status's role (`lookups.role`), never Kitsu's raw flags.
 - **No studio-specific defaults.** Anything that fits only one studio goes behind a setting.
 - **Tests with every change**, against the fake in `tests/fakes.py`. Never test against a production Kitsu
   you do not own; writes to a real Kitsu need its owner's agreement.
+- **Where code goes.** Kitsu access and production logic in `kitsu/`, which never imports `server/` or
+  `tools/` (a test checks it); MCP plumbing in `server/`; tools in `tools/` by area. Tag each tool with its
+  group (see `server/groups.py`).
 - Add a line under **Unreleased** in `CHANGELOG.md`.

@@ -1,14 +1,14 @@
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp import custom_fields as cf
-from kitsu_mcp import links
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import task_summary
-from kitsu_mcp.lookups import check_names, get_lookups
-from kitsu_mcp.models import CastAsset, CastIn, Named, Sequence, ShotDetail, ShotList, ShotSummary
+from kitsu_mcp.kitsu import custom_fields as cf
+from kitsu_mcp.kitsu import links
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import task_summary
+from kitsu_mcp.kitsu.lookups import check_names, get_lookups
+from kitsu_mcp.kitsu.models import CastAsset, CastIn, Named, Sequence, ShotDetail, ShotList, ShotSummary
+from kitsu_mcp.kitsu.validation import Detail, Limit, Offset, object_id
+from kitsu_mcp.server.app import READ_ONLY, tool
 from kitsu_mcp.tools.assets import check_status_filters, matches_status_filters, statuses
-from kitsu_mcp.validation import Detail, Limit, Offset, object_id
 
 
 def _frames(shot: dict, field: str) -> int | None:

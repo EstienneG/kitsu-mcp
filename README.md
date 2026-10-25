@@ -170,12 +170,20 @@ Integration tests run the read tools against a real Zou, seeded with a tiny prod
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md) and [SECURITY.md](SECURITY.md).
 
-Layout (`src/kitsu_mcp/`): `config.py` settings, `client.py` HTTP client (login, re-login, retries,
-error mapping), `lookups.py` cached reference data and name resolution, `models.py` output schemas,
-`formatters.py` payload → model conversion, `production.py` project-wide task views, `plans.py` write plans
-(dry run), `custom_fields.py` custom field values and filters, `tools/` one module per domain,
-`resources.py`, `prompts.py`, `auth.py` per-caller credentials, `http.py` HTTP mode (hidden local tools,
-`/health`, TLS guard), `links.py` Kitsu web links.
+Layout (`src/kitsu_mcp/`):
+
+- `__init__.py` the `kitsu-mcp` entry point; `config.py` settings.
+- `kitsu/` talking to Kitsu, independent of the MCP server and tools: `client.py` HTTP client (login, re-login, retries, error
+  mapping), `auth.py` per-caller credentials, `lookups.py` cached reference data and name resolution,
+  `production.py` project-wide task views, `plans.py` write plans (dry run), `custom_fields.py`, `links.py`
+  Kitsu web links, `validation.py`, `video.py` movie decoding, `models.py` output schemas, `formatters.py`
+  payload → model conversion.
+- `server/` what MCP clients reach besides tools: `app.py` the FastMCP app and `@tool`, `groups.py` tool
+  groups and `load_tools`, `http.py` HTTP mode (hidden local tools, `/health`, TLS guard), `prompts.py`,
+  `resources.py`. `kitsu_mcp.server:mcp` is the app with everything registered.
+- `tools/` one module per area: `meta`, `projects`, `tasks`, `people`, `assets`, `shots`, `custom_fields`,
+  `activity`, `planning`; `review/` (`previews`, `playlists`, `video`); `write/` (`comments`, `assignments`,
+  `schedule`, `time`, `playlists`, and `common` helpers). A tool's group is its tag, not its folder.
 
 Release: bump `version` in `pyproject.toml` and add a `CHANGELOG.md` entry, merge, then tag it
 (`git tag v0.3.1 && git push origin v0.3.1`).

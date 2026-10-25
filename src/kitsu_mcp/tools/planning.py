@@ -7,11 +7,10 @@ from typing import Literal
 
 from fastmcp.exceptions import ToolError
 
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.client import get_client
-from kitsu_mcp.formatters import day
-from kitsu_mcp.lookups import get_lookups
-from kitsu_mcp.models import (
+from kitsu_mcp.kitsu.client import get_client
+from kitsu_mcp.kitsu.formatters import day
+from kitsu_mcp.kitsu.lookups import get_lookups
+from kitsu_mcp.kitsu.models import (
     Budget,
     BudgetLine,
     Milestone,
@@ -20,8 +19,9 @@ from kitsu_mcp.models import (
     Schedule,
     ScheduleSpan,
 )
-from kitsu_mcp.production import project_tasks, today
-from kitsu_mcp.validation import iso_date
+from kitsu_mcp.kitsu.production import project_tasks, today
+from kitsu_mcp.kitsu.validation import iso_date
+from kitsu_mcp.server.app import READ_ONLY, tool
 
 PLANNING = {"planning"}
 Period = Literal["day", "week", "month"]

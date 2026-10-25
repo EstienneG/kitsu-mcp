@@ -15,7 +15,7 @@ from fastmcp.server.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from kitsu_mcp.app import mcp
+from kitsu_mcp.server.app import mcp
 
 LOCAL_TAG = "local"
 """Tools that write files on the machine running the server: useless (and unsafe) when it is hosted."""

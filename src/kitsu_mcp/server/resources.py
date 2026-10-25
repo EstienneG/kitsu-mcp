@@ -1,6 +1,6 @@
 """MCP resources: read-only views clients can attach as context."""
 
-from kitsu_mcp.app import mcp
+from kitsu_mcp.server.app import mcp
 from kitsu_mcp.tools.projects import list_projects, list_task_statuses, list_task_types, project_overview
 from kitsu_mcp.tools.tasks import get_task
 

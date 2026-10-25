@@ -26,8 +26,8 @@ from typing import TYPE_CHECKING, Literal
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 
-from kitsu_mcp import validation
-from kitsu_mcp.client import NotFoundError, get_client
+from kitsu_mcp.kitsu import validation
+from kitsu_mcp.kitsu.client import NotFoundError, get_client
 
 if TYPE_CHECKING:
     from PIL.Image import Image as PILImage

@@ -81,3 +81,13 @@ async def test_tool_list_stays_within_its_context_budget():
         for t in tools
     )
     assert size <= TOOL_LIST_BUDGET_CHARS, f"tool list is {size} characters, over the {TOOL_LIST_BUDGET_CHARS} budget"
+
+
+def test_kitsu_package_does_not_depend_on_server_or_tools():
+    """kitsu/ is the Kitsu side; the server and tools build on it, never the other way round."""
+    import ast
+
+    for path in (Path(__file__).parents[1] / "src" / "kitsu_mcp" / "kitsu").glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                assert not node.module.startswith(("kitsu_mcp.server", "kitsu_mcp.tools")), (path.name, node.module)

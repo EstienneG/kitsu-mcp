@@ -1,7 +1,7 @@
-from kitsu_mcp.app import READ_ONLY, tool
-from kitsu_mcp.custom_fields import order
-from kitsu_mcp.lookups import check_names, get_lookups
-from kitsu_mcp.models import CustomField
+from kitsu_mcp.kitsu.custom_fields import order
+from kitsu_mcp.kitsu.lookups import check_names, get_lookups
+from kitsu_mcp.kitsu.models import CustomField
+from kitsu_mcp.server.app import READ_ONLY, tool
 
 
 @tool(annotations=READ_ONLY, tags={"browse"})
