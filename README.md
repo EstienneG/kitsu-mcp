@@ -194,15 +194,17 @@ them).
 Tools come in groups. Only the **core** tools are listed when a conversation starts; an agent adds a
 group with `load_tools(groups=[...])` when the task needs it, and the server tells the client its tool list
 changed. `KITSU_TOOL_GROUPS` lists groups from the start (default `write`, which still needs
-`KITSU_ALLOW_WRITE`): set `all` for clients that do not refresh their tool list. Loading a group only
-changes what is listed; any tool can be called by name, so an agent that knows the tool never gets stuck.
+`KITSU_ALLOW_WRITE`): set `all` for clients that do not refresh their tool list, or that only let the model
+call listed tools. Loading a group only changes what is listed: the server accepts calls to any of its tools.
+Both settings are read by `kitsu-mcp` at startup; a platform that imports `kitsu_mcp.server:mcp` directly
+gets the defaults (core and write tools listed, write tools disabled).
 
 | Group | Tools |
 |---|---|
 | Core (always listed) | `whoami`, `search` (assets, shots, sequences, episodes, edits, concepts and people by name), `list_projects`, `project_overview`, `search_tasks` (type, department, status, assignee, due dates, overdue, waiting feedback, group by assignee, ...), `get_task` (with comments, replies and acknowledgements; optionally its status history and uploaded previews), `get_person_tasks` (anyone's, or the user's own), `get_asset`, `get_shot`, `kitsu_get` (raw read of any Zou `data/` route), `load_tools` |
 | `browse` | `list_assets` (type, name and per-task-type status filters; `detail="compact"` or `"full"`), `list_shots`, `list_sequences`, `list_episodes`, `list_asset_types`, `list_task_types`, `list_task_statuses`, `list_custom_fields` (a project's custom columns: type, choices, departments; values show up by display name in `get_asset` / `get_shot`, and `list_assets` / `list_shots` filter on them with `custom_field_filters`), `get_casting` (either way), `list_people`, `refresh_cache` |
 | `activity` | `project_activity` (comments, status changes and uploads since a date, by person or task type), `my_notifications` (the user's Kitsu inbox) |
-| `planning` | `workload`, `timesheet` (time logged per day and task over a period, with days off), `quotas` (shots and frames per artist per day, week or month, as Kitsu's Quotas page), `production_schedule` (each task type's planned dates vs. its tasks' due dates, late task types, milestones), `budget` (planned salary costs per person and department, as Kitsu's Budget page) |
+| `planning` | `workload`, `timesheet` (time logged per day and task over a period, with days off when Kitsu shows them), `quotas` (shots and frames per artist per day, week or month, in the count modes of Kitsu's Quotas page), `production_schedule` (each task type's planned dates vs. its tasks' due dates, late and unscheduled task types, milestones), `budget` (planned salary costs per person and department, as Kitsu's Budget page) |
 | `review` | `recent_previews` (latest uploads), `get_preview` (image or metadata, by entity or preview file), `download_previews`, `list_playlists`, `get_playlist`; with the `[video]` extra: `get_video_info`, `get_video_contact_sheet`, `get_video_frames`, `compare_revisions`, `review_video`, `download_video` |
 | `write` (opt-in) | `add_comment` (or a reply to a comment), `acknowledge_comment`, `set_task_status`, `assign_task` (or unassign), `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview) |
 

@@ -116,6 +116,24 @@ async def test_loaded_groups_are_per_http_caller(server):  # noqa: F811
         assert "project_activity" not in await listed(client)
 
 
+def test_http_callers_are_keyed_by_session_then_full_login(monkeypatch):
+    """A session ID wins; without one, the email *and* password, so knowing an email is not enough."""
+    from types import SimpleNamespace
+
+    from starlette.datastructures import Headers
+
+    def request(headers):
+        monkeypatch.setattr(groups, "get_http_request", lambda: SimpleNamespace(headers=Headers(headers)))
+        return groups._client_key()
+
+    auth = basic("alice@example.com", "right")
+    assert request({"mcp-session-id": "s-1", **auth}) == "session:s-1"
+    alice = request(auth)
+    assert alice.startswith("user:")
+    assert request(basic("alice@example.com", "guess")) != alice
+    assert request({}) is None
+
+
 # The core list is what every conversation pays for before any call. Raise this deliberately, with the
 # README's "Context cost" paragraph, when a tool earns a place in core rather than in a group.
 CORE_BUDGET_CHARS = 11_000  # 10.0k as of 11 core tools

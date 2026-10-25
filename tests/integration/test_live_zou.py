@@ -106,3 +106,19 @@ async def test_activity_search_and_timesheet(call):
     assert ("asset", "Hero") in {(h["kind"], h["name"]) for h in (await call("search", query="hero"))["hits"]}
     sheet = await call("timesheet", start="2020-01-01", end="2030-12-31")
     assert sheet["person"] == "Super Admin" and sheet["total_minutes"] >= 0
+
+
+async def test_planning_views(call, live_client):
+    """Shapes these Zou versions return for quotas, schedule, budgets and days off; and that reading the
+    schedule creates nothing (Kitsu's own schedule route adds missing items as it reads)."""
+    project_id = next(p["id"] for p in await call("list_projects") if p["name"] == PROJECT)
+    before = live_client.get("data/schedule-items/", params={"project_id": project_id})
+    schedule = await call("production_schedule", project=PROJECT)
+    assert live_client.get("data/schedule-items/", params={"project_id": project_id}) == before
+    assert schedule["project"] == PROJECT and isinstance(schedule["unscheduled"], list)
+    for mode in ("done", "feedback", "weighted", "weighteddone"):
+        quotas = await call("quotas", project=PROJECT, task_type="Animation", count_mode=mode)
+        assert "total" not in {p["person"] for p in quotas["people"]}
+    with pytest.raises(Exception, match="no budget"):
+        await call("budget", project=PROJECT)
+    assert (await call("timesheet", start="2020-01-01", end="2030-12-31"))["days_off"] == []

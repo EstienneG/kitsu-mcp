@@ -219,11 +219,9 @@ def timesheet(person: str | None = None, start: str | None = None, end: str | No
                 minutes=minutes,
             )
         )
-    days_off = [
-        DayOff(start=day(d.get("date")), end=day(d.get("end_date")), description=d.get("description") or None)
-        for d in client.get(f"data/persons/{person_id}/day-offs")
-        if (day(d.get("date")) or "") <= end_day and (day(d.get("end_date") or d.get("date")) or "") >= start_day
-    ]
+    days_off, note = _days_off(client, person_id, start_day, end_day), None
+    if days_off is None:
+        note = "Kitsu does not let you see this person's days off (your role or department)."
     return Timesheet(
         person=lookups.person_name(person_id),
         start=start_day,
@@ -231,5 +229,21 @@ def timesheet(person: str | None = None, start: str | None = None, end: str | No
         total_minutes=sum(by_day.values()),
         by_day=[TimesheetDay(date=d, minutes=m) for d, m in sorted(by_day.items())],
         by_task=tasks,
-        days_off=sorted(days_off, key=lambda d: d.start or ""),
+        days_off=days_off,
+        note=note,
     )
+
+
+def _days_off(client, person_id: str, start: str, end: str) -> list[DayOff] | None:
+    """Days off overlapping start..end. Kitsu checks them apart from time logs (supervisors only see their
+    department's, older Zou only your own), so a refusal must not cost the timesheet."""
+    try:
+        raw = client.get(f"data/persons/{person_id}/day-offs")
+    except ToolError:
+        return None
+    found = [
+        DayOff(start=day(d.get("date")), end=day(d.get("end_date")), description=d.get("description") or None)
+        for d in raw
+        if (day(d.get("date")) or "") <= end and (day(d.get("end_date") or d.get("date")) or "") >= start
+    ]
+    return sorted(found, key=lambda d: d.start or "")

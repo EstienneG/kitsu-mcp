@@ -118,6 +118,12 @@ async def test_unassign_task(call, fake, writable):
     assert len(writes(fake)) == 1  # nothing sent the second time
 
 
+async def test_assign_task_is_marked_destructive(writable):
+    """It can take people off a task: clients must not run it without asking."""
+    tool = await mcp.get_tool("assign_task")
+    assert tool.annotations.destructive_hint is True
+
+
 async def test_unassign_reports_what_kitsu_skipped(call, fake, writable):
     """Zou silently skips tasks the caller may not unassign; the tool must not claim success."""
     fake.data["unassign_denied"] = {"t-hero-mod"}

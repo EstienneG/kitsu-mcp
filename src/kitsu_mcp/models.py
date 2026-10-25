@@ -467,7 +467,10 @@ class Timesheet(BaseModel):
     total_minutes: float
     by_day: list[TimesheetDay]
     by_task: list[TimesheetTask]
-    days_off: list[DayOff] = Field(default_factory=list, description="Days off overlapping the period")
+    days_off: list[DayOff] | None = Field(
+        default=None, description="Days off overlapping the period; None when Kitsu does not let you see them"
+    )
+    note: str | None = None
 
 
 class PersonQuota(BaseModel):
@@ -511,6 +514,7 @@ class Schedule(BaseModel):
     end: str | None
     task_types: list[ScheduleSpan]
     late: list[str]
+    unscheduled: list[str] = Field(default_factory=list, description="Task types with tasks but no planned dates")
     milestones: list[Milestone]
 
 

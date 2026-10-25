@@ -22,9 +22,11 @@ async def test_quotas_since_and_month(call):
     assert (await call("quotas", project="Demo Short", task_type="Animation", person=BOB))["people"] == []
 
 
-async def test_quotas_reject_unknown_modes(call):
+async def test_quotas_modes(call, fake):
     with pytest.raises(ToolError):
         await call("quotas", project="Demo Short", task_type="Animation", count_mode="weigtheddone")
+    await call("quotas", project="Demo Short", task_type="Animation", count_mode="weighteddone")
+    assert ("GET", f"data/projects/{PROJECT}/quotas/{TT_ANIM}", {"count_mode": "weighteddone"}) in fake.calls
 
 
 async def test_production_schedule(call):
@@ -36,11 +38,19 @@ async def test_production_schedule(call):
     assert spans["Modeling"]["open_tasks"] >= 1
     assert not spans["Animation"]["late"]
     assert schedule["late"] == ["Modeling"]
+    assert schedule["unscheduled"] == ["Compositing"]  # has tasks, no planned dates (and none get created)
     assert [m["name"] for m in schedule["milestones"]] == ["Anim lock", "Delivery"]
     assert schedule["milestones"][0]["task_type"] == "Animation"
     only_anim = await call("production_schedule", project="Demo Short", task_types=["Modeling"])
     assert [s["task_type"] for s in only_anim["task_types"]] == ["Modeling"]
     assert [m["name"] for m in only_anim["milestones"]] == ["Delivery"]  # project-wide milestones stay
+
+
+async def test_production_schedule_keeps_the_task_types_the_project_declares(call, fake):
+    """A task type taken out of the project's settings keeps its schedule item in Zou; Kitsu hides it."""
+    fake.data["projects"][0]["task_types"] = [TT_ANIM]
+    schedule = await call("production_schedule", project="Demo Short")
+    assert [s["task_type"] for s in schedule["task_types"]] == ["Animation"]
 
 
 async def test_budget_follows_kitsus_month_costs(call):

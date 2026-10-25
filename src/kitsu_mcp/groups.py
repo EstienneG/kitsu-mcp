@@ -11,6 +11,7 @@ caller's Kitsu login when the protocol has no sessions (MCP 2026-07-28), so one 
 share what they loaded. That only lists more tools; it never grants anything.
 """
 
+import threading
 from typing import Annotated
 
 from fastmcp import Context
@@ -30,6 +31,7 @@ GROUPS = ("browse", "activity", "planning", "review", "write")
 """Groups `load_tools` adds (its docstring says what each holds). A tool's group is its tag."""
 
 _loaded: TTLCache[frozenset[str]] = TTLCache(ttl=24 * 3600, max_size=4096)
+_lock = threading.Lock()
 
 
 def group_of(tags: set[str]) -> str | None:
@@ -74,7 +76,8 @@ def _client_key() -> str | None:
     if session:
         return f"session:{session}"
     credentials = parse_authorization(request.headers.get("authorization", ""))
-    return f"user:{credentials.user_key}" if credentials else None
+    # The full login (email and password): someone who only knows an email cannot change that user's list.
+    return f"user:{credentials.key}" if credentials else None
 
 
 def loaded_groups() -> set[str]:
@@ -109,7 +112,7 @@ async def load_tools(
 
     browse: list assets, shots, sequences, episodes, people, types; custom fields; casting.
     activity: what changed lately on a project; the user's notifications.
-    planning: workload, timesheets, quotas, schedule and milestones, days off, budget, why a task is late.
+    planning: workload, timesheets with days off, quotas, schedule and milestones, budget.
     review: preview images, playlists, frame-level review of movies.
     write: comments, status changes, assignments, schedules, time logs, playlists (if the server allows).
     """
@@ -119,10 +122,11 @@ async def load_tools(
     unknown = wanted - set(GROUPS)
     if unknown:
         raise ToolError(f"Unknown groups {sorted(unknown)}; use some of {', '.join(GROUPS)}, or all")
-    before = loaded_groups()
     key = _client_key()
-    if key:
-        _loaded.put(key, frozenset(set(_loaded.get(key) or ()) | wanted))
+    with _lock:
+        before = loaded_groups()
+        if key:
+            _loaded.put(key, frozenset(set(_loaded.get(key) or ()) | wanted))
     added = sorted(wanted - before)
     if added:
         await ctx.send_notification(ToolListChangedNotification())
