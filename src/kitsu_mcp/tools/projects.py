@@ -15,6 +15,7 @@ from kitsu_mcp.kitsu.models import (
     TaskTypeProgress,
 )
 from kitsu_mcp.kitsu.production import TaskRecord, day, project_entities, project_tasks
+from kitsu_mcp.kitsu.validation import to_number
 from kitsu_mcp.server.app import READ_ONLY, tool
 
 
@@ -92,14 +93,6 @@ def list_asset_types(project: str) -> list[Named]:
     """List asset types used in a project (name or ID)."""
     project_id = get_lookups().project(project)["id"]
     return [Named(id=t["id"], name=t["name"]) for t in get_client().get(f"data/projects/{project_id}/asset-types")]
-
-
-def _number(value) -> float | None:
-    """Zou stores fps as text ("23", "23.976")."""
-    try:
-        return float(value) if value not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
 
 
 def _status_names(records: list[TaskRecord], lookups) -> list[str]:
@@ -182,7 +175,7 @@ def project_overview(
         production_type=info.get("production_type"),
         start_date=day(info.get("start_date")),
         end_date=day(info.get("end_date")),
-        fps=_number(info.get("fps")),
+        fps=to_number(info.get("fps")),
         resolution=info.get("resolution"),
         assets=sum(e.kind == "asset" for e in entities),
         shots=sum(e.kind == "shot" for e in entities),

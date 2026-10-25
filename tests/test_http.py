@@ -7,20 +7,13 @@ import pytest
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
-from fastmcp.utilities.tests import run_server_async
 
 from kitsu_mcp.kitsu import auth
 from kitsu_mcp.kitsu import client as client_module
-from kitsu_mcp.kitsu import lookups as lookups_module
 from kitsu_mcp.kitsu.auth import Credentials, TTLCache, parse_authorization
-from kitsu_mcp.kitsu.client import LoginRejected
 from kitsu_mcp.server import mcp
-from tests.fakes import ALICE, BOB, FakeClient
-
-
-def basic(user: str, password: str) -> dict[str, str]:
-    return {"Authorization": "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()}
-
+from tests.fakes import ALICE, BOB
+from tests.http_server import REQUESTS, PerUserFake, basic
 
 # --- header parsing ----------------------------------------------------------------------------------
 
@@ -85,63 +78,6 @@ def test_ttl_cache_expires_and_bounds():
 
 
 # --- over a real HTTP server ---------------------------------------------------------------------------
-
-
-REQUESTS: list[tuple[str, str]] = []
-"""(login the request was made with, path) of every request the fake Kitsu received."""
-
-
-class PerUserFake(FakeClient):
-    """A fake Kitsu client: logs in like the real one (wrong password rejected on connect) and records which
-    login each request was made with, the way a real Zou would see its bearer token."""
-
-    people = {"alice@example.com": ALICE, "bob@example.com": BOB}
-    logins: list[str] = []
-    kitsu_down = False
-
-    def __init__(self, settings, credentials=None):
-        super().__init__()
-        self.settings = settings
-        self.credentials = credentials
-        self.data["me"] = self.people.get(credentials.user) if credentials else None
-
-    def connect(self) -> None:
-        PerUserFake.logins.append(self.credentials.user)
-        if PerUserFake.kitsu_down:
-            raise ToolError("Could not reach Kitsu on POST auth/login: ConnectionError")
-        if self.credentials.user not in self.people or self.credentials.password != "right":
-            raise LoginRejected("Kitsu rejected the credentials; check the Kitsu email and password")
-
-    def get(self, path, params=None):
-        REQUESTS.append((self.credentials.user, path))
-        return super().get(path, params)
-
-
-@pytest.fixture
-async def server(monkeypatch):
-    """The real server over HTTP, with the per-user Kitsu clients faked."""
-    from kitsu_mcp import config
-
-    monkeypatch.setenv("KITSU_HOST", "http://kitsu.test/api")
-    for var in ("KITSU_USER", "KITSU_PASSWORD"):
-        monkeypatch.delenv(var, raising=False)
-    monkeypatch.chdir("/")  # no .env
-    config.get_settings.cache_clear()
-    monkeypatch.setattr(client_module, "KitsuClient", PerUserFake)
-    client_module.set_client(None)
-    lookups_module.set_lookups(None)
-    client_module._user_clients.clear()
-    lookups_module._user_lookups.clear()
-    monkeypatch.setattr(client_module, "_server_client", None)
-    monkeypatch.setattr(client_module, "_logins", auth.LoginThrottle())
-    REQUESTS.clear()
-    PerUserFake.logins.clear()
-    PerUserFake.kitsu_down = False
-    async with run_server_async(mcp) as url:
-        yield url
-    client_module._user_clients.clear()
-    lookups_module._user_lookups.clear()
-    config.get_settings.cache_clear()
 
 
 async def call(url: str, headers: dict[str, str], name: str, **args):

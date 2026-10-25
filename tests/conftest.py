@@ -77,3 +77,34 @@ def all_groups():
     from kitsu_mcp.server import groups
 
     groups.set_default_groups("all")
+
+
+@pytest.fixture
+async def server(monkeypatch):
+    """The real server over HTTP, with the per-user Kitsu clients faked (see tests/http_server.py)."""
+    from fastmcp.utilities.tests import run_server_async
+
+    from kitsu_mcp import config
+    from kitsu_mcp.kitsu import auth
+    from tests.http_server import REQUESTS, PerUserFake
+
+    monkeypatch.setenv("KITSU_HOST", "http://kitsu.test/api")
+    for var in ("KITSU_USER", "KITSU_PASSWORD"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.chdir("/")  # no .env
+    config.get_settings.cache_clear()
+    monkeypatch.setattr(client_module, "KitsuClient", PerUserFake)
+    client_module.set_client(None)
+    lookups_module.set_lookups(None)
+    client_module._user_clients.clear()
+    lookups_module._user_lookups.clear()
+    monkeypatch.setattr(client_module, "_server_client", None)
+    monkeypatch.setattr(client_module, "_logins", auth.LoginThrottle())
+    REQUESTS.clear()
+    PerUserFake.logins.clear()
+    PerUserFake.kitsu_down = False
+    async with run_server_async(mcp) as url:
+        yield url
+    client_module._user_clients.clear()
+    lookups_module._user_lookups.clear()
+    config.get_settings.cache_clear()

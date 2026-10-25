@@ -62,10 +62,10 @@ async def test_budget_follows_kitsus_month_costs(call):
     assert lines["Bob Leroy"]["cost"] == 4000
     assert result["total"] == 8500
     assert result["by_department"] == {"Animation": 4500, "Modeling": 4000}
-    first = await call("budget", project="Demo Short", budget="first pass")
+    first = await call("budget", project="Demo Short", version="first pass")
     assert first["revision"] == 1 and first["total"] == 0
     with pytest.raises(ToolError, match="Revised"):
-        await call("budget", project="Demo Short", budget="Final")
+        await call("budget", project="Demo Short", version="Final")
     with pytest.raises(ToolError, match="no budget"):
         await call("budget", project="Closed Show")
 

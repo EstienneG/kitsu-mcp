@@ -90,6 +90,8 @@ def test_kitsu_package_does_not_depend_on_server_or_tools():
     forbidden = ("kitsu_mcp.server", "kitsu_mcp.tools")
     for path in (Path(__file__).parents[1] / "src" / "kitsu_mcp" / "kitsu").glob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.ImportFrom) and node.level:
+                raise AssertionError(f"{path.name}: use absolute imports in kitsu/ (found a relative one)")
             if isinstance(node, ast.Import):
                 modules = [alias.name for alias in node.names]
             elif isinstance(node, ast.ImportFrom) and node.module:
@@ -99,3 +101,11 @@ def test_kitsu_package_does_not_depend_on_server_or_tools():
                 continue
             for module in modules:
                 assert not (module + ".").startswith(tuple(f + "." for f in forbidden)), (path.name, module)
+
+
+def test_readme_lists_every_tool_group():
+    """The group map in server/app.py is what agents read; the README's table must cover the same groups."""
+    from kitsu_mcp.server.app import GROUPS
+
+    table = (Path(__file__).parents[1] / "README.md").read_text().split("| Group | Tools |", 1)[1].split("\n\n", 1)[0]
+    assert set(re.findall(r"^\| `([a-z]+)`", table, flags=re.M)) == set(GROUPS)
