@@ -4,7 +4,8 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from kitsu_mcp.kitsu.lookups import Lookups
-from tests.fakes import TT_ANIM, TT_COMP, FakeClient
+from tests.fake_data import TT_ANIM, TT_COMP
+from tests.fakes import FakeClient
 
 
 def test_department_lookup_resolves_names_and_ids():

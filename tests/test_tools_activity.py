@@ -1,7 +1,7 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from tests.fakes import ALICE, BOB
+from tests.fake_data import ALICE, BOB
 
 
 async def test_project_activity_lists_changes_newest_first(call):
