@@ -68,6 +68,26 @@ async def test_add_comment_with_status(call, fake, writable):
     assert writes(fake)[0][2]["task_status_id"] == ST_DONE
 
 
+async def test_add_comment_with_checklist(call, fake, writable):
+    result = await call("add_comment", task_id="t-hero-mod", text="", checklist=["reduce glow", " ", "fix flicker"])
+    assert writes(fake)[0][2]["checklist"] == [
+        {"text": "reduce glow", "checked": False, "frame": -1, "revision": -1},
+        {"text": "fix flicker", "checked": False, "frame": -1, "revision": -1},
+    ]
+    task = await call("get_task", task_id="t-hero-mod")
+    assert task["comments"][0]["checklist"] == [
+        {"text": "reduce glow", "checked": False},
+        {"text": "fix flicker", "checked": False},
+    ]
+    assert result["ok"] is True
+
+
+async def test_reply_rejects_checklist(call, fake, writable):
+    with pytest.raises(ToolError, match="checklist"):
+        await call("add_comment", task_id="t-hero-mod", reply_to="c-2", text="Hi", checklist=["x"])
+    assert writes(fake) == []
+
+
 async def test_add_empty_comment_rejected(call, fake, writable):
     with pytest.raises(ToolError, match="empty"):
         await call("add_comment", task_id="t-hero-mod", text="  ")

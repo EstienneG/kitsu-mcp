@@ -5,6 +5,11 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
+### Added
+- `add_comment` takes `checklist`: Kitsu checklist items (the comment's checkboxes), posted unchecked. A
+  comment can be only a checklist.
+- `get_task` comments carry their checklist items and whether each is checked.
+
 ## 0.5.1 — 2026-10-25
 
 ### Changed

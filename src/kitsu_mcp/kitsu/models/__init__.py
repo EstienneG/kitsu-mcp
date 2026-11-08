@@ -59,6 +59,7 @@ from kitsu_mcp.kitsu.models.review import (
 )
 from kitsu_mcp.kitsu.models.tasks import (
     AssigneeGroup,
+    ChecklistItem,
     Comment,
     Reply,
     StatusChange,
@@ -90,6 +91,7 @@ __all__ = [
     "BudgetLine",
     "CastAsset",
     "CastIn",
+    "ChecklistItem",
     "Comment",
     "CustomField",
     "EntityDetail",

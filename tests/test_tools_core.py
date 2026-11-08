@@ -64,6 +64,7 @@ async def test_get_task_with_comments(call):
             "author": "Alice Martin",
             "status": "wfa",
             "text": "Ready for review",
+            "checklist": [],
             "preview_ids": ["pf-hero"],
             "replies": [],
             "acknowledged_by": [],

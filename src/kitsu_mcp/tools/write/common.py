@@ -126,9 +126,11 @@ def warn_unless_lead(plan: Plan, action: str, user: dict | None = None) -> None:
         plan.warnings.append(f"Kitsu may refuse: your role ({role}) usually cannot {action}.")
 
 
-def plan_task_comment(tool_name: str, task_id: str, text: str, status: str | None) -> tuple[Plan, dict, str, str]:
-    """A comment, with an optional status change. Kitsu requires a status on every comment, so it defaults to
-    the current one. Returns the plan, the task, and the previous and new status short names."""
+def plan_task_comment(
+    tool_name: str, task_id: str, text: str, status: str | None, checklist: list[str] | None = None
+) -> tuple[Plan, dict, str, str]:
+    """A comment, with an optional status change and checklist. Kitsu requires a status on every comment, so it
+    defaults to the current one. Returns the plan, the task, and the previous and new status short names."""
     task_id = object_id(task_id, "task", "search_tasks")
     lookups = get_lookups()
     task = fetch_task_full(task_id)
@@ -137,7 +139,11 @@ def plan_task_comment(tool_name: str, task_id: str, text: str, status: str | Non
     previous = task["task_status"]["short_name"]
     new = record.get("short_name") or status_id
     plan = Plan(tool_name, would="")
-    plan.request("POST", f"actions/tasks/{task_id}/comment", {"task_status_id": status_id, "comment": text})
+    payload: dict[str, Any] = {"task_status_id": status_id, "comment": text}
+    if checklist:
+        # Same shape as the items Kitsu's comment box creates (frame/revision -1: not tied to a frame).
+        payload["checklist"] = [{"text": item, "checked": False, "frame": -1, "revision": -1} for item in checklist]
+    plan.request("POST", f"actions/tasks/{task_id}/comment", payload)
     plan.before, plan.after = {"status": previous}, {"status": new}
     if new != previous:
         role = current_user().get("role")

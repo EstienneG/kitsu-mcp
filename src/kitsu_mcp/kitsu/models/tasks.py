@@ -23,12 +23,18 @@ class Reply(BaseModel):
     text: str | None
 
 
+class ChecklistItem(BaseModel):
+    text: str | None
+    checked: bool = False
+
+
 class Comment(BaseModel):
     id: str | None = None
     date: str | None
     author: str | None
     status: str | None
     text: str | None
+    checklist: list[ChecklistItem] = Field(default_factory=list)
     preview_ids: list[str] = Field(default_factory=list)
     replies: list[Reply] = Field(default_factory=list)
     acknowledged_by: list[str] = Field(default_factory=list, description="People who acknowledged the comment")

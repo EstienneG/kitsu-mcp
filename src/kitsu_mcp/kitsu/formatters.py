@@ -2,7 +2,7 @@
 
 from kitsu_mcp.kitsu import links
 from kitsu_mcp.kitsu.lookups import Lookups
-from kitsu_mcp.kitsu.models import Comment, Reply, TaskDetail, TaskSummary
+from kitsu_mcp.kitsu.models import ChecklistItem, Comment, Reply, TaskDetail, TaskSummary
 
 
 def day(value: str | None) -> str | None:
@@ -37,6 +37,11 @@ def comment(raw: dict, lookups: Lookups | None = None) -> Comment:
         author=_author(raw),
         status=(raw.get("task_status") or {}).get("short_name"),
         text=raw.get("text"),
+        checklist=[
+            ChecklistItem(text=item.get("text"), checked=bool(item.get("checked")))
+            for item in raw.get("checklist") or []
+            if isinstance(item, dict)
+        ],
         preview_ids=[p["id"] for p in raw.get("previews") or [] if isinstance(p, dict) and "id" in p],
         replies=[
             Reply(date=r.get("created_at") or r.get("date"), author=_author(r), text=r.get("text"))

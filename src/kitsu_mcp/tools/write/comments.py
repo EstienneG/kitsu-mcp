@@ -24,23 +24,28 @@ def add_comment(
     text: str,
     status: str | None = None,
     reply_to: str | None = None,
+    checklist: list[str] | None = None,
     dry_run: bool = False,
 ) -> WriteResult | DryRunResult:
     """Post a comment on a task as the logged-in user, optionally changing its status (short name).
 
+    checklist: Kitsu checklist items (the comment's checkboxes), one string each, posted unchecked.
     reply_to: a comment ID (from get_task or my_notifications) to reply to it instead; a reply never
     changes the status, so it does not take one.
     dry_run=True: check everything with reads only and return the plan instead of posting: `would`, the
     exact `requests`, `before`/`after` and `warnings`; verdict "would_fail" gives the `reason` the real call
     would be refused (e.g. an archived status). Show it to the user before writing.
     """
-    if not text.strip():
+    checklist = [item.strip() for item in checklist or [] if item.strip()]
+    if not text.strip() and not checklist:
         raise ToolError("Comment text is empty; use set_task_status to change the status without a comment")
     if reply_to is not None:
         if status is not None:
             raise ToolError("A reply cannot change the status: leave status out, or post a comment instead")
+        if checklist:
+            raise ToolError("A reply cannot carry a checklist: post a comment instead")
         return _reply(task_id, reply_to, text, dry_run)
-    plan, task, previous, new = plan_task_comment("add_comment", task_id, text, status)
+    plan, task, previous, new = plan_task_comment("add_comment", task_id, text, status, checklist)
     changed = new != previous
     status_change = f" and change its status from {previous} to {new}" if changed else ""
     plan.would = f"Comment on {task_label(task)}{status_change}"

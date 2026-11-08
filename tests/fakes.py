@@ -94,6 +94,7 @@ class FakeClient:
                 "id": f"c-{len(self.calls)}",
                 "created_at": "2026-10-15T12:00:00",
                 "text": data["comment"],
+                "checklist": data.get("checklist", []),
                 "person": author,
                 "person_id": author["id"],
                 "task_status": status,
