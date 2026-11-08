@@ -5,6 +5,8 @@ change behaviour (called out under **Changed**).
 
 ## Unreleased
 
+## 0.6.0 — 2026-11-08
+
 ### Added
 - `add_comment` takes `checklist`: Kitsu checklist items (the comment's checkboxes), posted unchecked. A
   comment can be only a checklist.

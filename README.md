@@ -132,7 +132,7 @@ permissions. Once it runs, people add it as a connector: see
     docker run -p 8000:8000 -e KITSU_HOST=https://your-studio.cg-wire.com/api -e KITSU_BEHIND_TLS=true \
       ghcr.io/estienneg/kitsu-mcp:latest
 
-(or build it yourself with `docker build -t kitsu-mcp .`). Pin a version tag such as `:0.5.1` in production.
+(or build it yourself with `docker build -t kitsu-mcp .`). Pin a version tag such as `:0.6.0` in production.
 
 To try it locally without a proxy, run `KITSU_HOST=... uvx --from 'kitsu-mcp[video]' kitsu-mcp --http`, which
 listens on 127.0.0.1:8000.
@@ -225,7 +225,7 @@ defaults (core and write tools listed, write tools disabled).
 | `structure` (opt-in) | `manage_project` (create, update, close, reopen, delete), `manage_episode`, `manage_sequence`, `manage_shot` (create, update, delete, restore), `manage_asset`, `manage_concept`, `manage_edit` (create, update, delete), `manage_task` (create tasks of a type on many entities, delete a task), `manage_scene` (create, rename, link shots, instance assets) |
 | `production` (opt-in) | `task_action` (start a task, submit it for review), `publish_preview` (a file as the task's next revision, with a status; stdio only), `batch_tasks` (status, assign, unassign, priority or delete up to 100 tasks), `manage_comment` (edit, delete, delete a reply), `set_casting` (add, remove or replace the assets cast in a shot or episode) |
 | `admin` (opt-in) | `manage_project_team`, `manage_project_settings` (task types, statuses, asset types and status automations a production uses), `manage_custom_field` (create, update, delete a metadata column), `manage_schedule` (task type dates, milestones), `manage_budget` (budget versions and salary lines), `manage_person` (accounts, departments, invitations), `manage_day_off` |
-| `write` (opt-in) | `add_comment` (or a reply to a comment), `acknowledge_comment`, `set_task_status`, `assign_task` (or unassign), `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview), `manage_playlist` (rename, remove an entry, change an entry's preview, delete), `manage_my_notifications` (mark read, subscribe to a task), `manage_time` (set or delete a day's time) |
+| `write` (opt-in) | `add_comment` (with checklist items, or a reply to a comment), `acknowledge_comment`, `set_task_status`, `assign_task` (or unassign), `update_task_schedule`, `log_time`, `create_playlist`, `add_to_playlist` (shots/assets with their latest preview), `manage_playlist` (rename, remove an entry, change an entry's preview, delete), `manage_my_notifications` (mark read, subscribe to a task), `manage_time` (set or delete a day's time) |
 
 The 12 core tools cost a model about 2,700 tokens of context; every group listed, about 17,000.
 

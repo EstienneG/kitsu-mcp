@@ -82,6 +82,13 @@ async def test_add_comment_with_checklist(call, fake, writable):
     assert result["ok"] is True
 
 
+async def test_add_comment_checklist_dry_run(call, fake, writable):
+    plan = await call("add_comment", task_id="t-hero-mod", text="Notes", checklist=["a", "b"], dry_run=True)
+    assert writes(fake) == []
+    assert plan["would"] == "Comment on Hero / Modeling with 2 checklist items"
+    assert [i["text"] for i in plan["requests"][0]["payload"]["checklist"]] == ["a", "b"]
+
+
 async def test_reply_rejects_checklist(call, fake, writable):
     with pytest.raises(ToolError, match="checklist"):
         await call("add_comment", task_id="t-hero-mod", reply_to="c-2", text="Hi", checklist=["x"])

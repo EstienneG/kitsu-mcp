@@ -48,7 +48,8 @@ def add_comment(
     plan, task, previous, new = plan_task_comment("add_comment", task_id, text, status, checklist)
     changed = new != previous
     status_change = f" and change its status from {previous} to {new}" if changed else ""
-    plan.would = f"Comment on {task_label(task)}{status_change}"
+    items = f" with {len(checklist)} checklist item{'s' if len(checklist) > 1 else ''}" if checklist else ""
+    plan.would = f"Comment on {task_label(task)}{items}{status_change}"
     plan.message = f"Comment posted{f'; status set to {new}' if changed else ''}."
     return send_or_preview(plan, task["id"], dry_run)
 

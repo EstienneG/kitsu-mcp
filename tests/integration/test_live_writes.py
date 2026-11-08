@@ -155,6 +155,13 @@ async def test_task_lifecycle(call, kitsu, tmp_path):
         await call("batch_tasks", action="priority", task_ids=tasks, priority=2)
         assert all(kitsu.get(f"data/tasks/{t}")["priority"] == 2 for t in tasks)
 
+        await call("add_comment", task_id=tasks[1], text="Notes", checklist=["reduce glow", "fix flicker"])
+        notes = (await call("get_task", task_id=tasks[1]))["comments"][0]
+        assert notes["checklist"] == [
+            {"text": "reduce glow", "checked": False},
+            {"text": "fix flicker", "checked": False},
+        ]
+
         comment = next(c for c in kitsu.get(f"data/tasks/{tasks[0]}/comments") if c.get("previews"))
         await call("manage_comment", action="edit", task_id=tasks[0], comment_id=comment["id"], text="v1 fixed")
         await call("manage_comment", action="delete", task_id=tasks[0], comment_id=comment["id"], confirm=True)
